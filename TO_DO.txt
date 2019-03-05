@@ -1,0 +1,44 @@
+
+
+
+--------------- TO DO LIST -------------------
+
+---- MLE constant variance  
+
+Gradient boosted tree
+  LightGBM
+  XGboosted 
+
+
+
+---- heteroskedasticity
+
+
+-- transition
+no dependency on hiddens
+markov for statistic version
+moving for neural network version 
+
+
+cnn + lstm
+dual lk
+
+lstm + att lk 
+
+temporal mixture lk
+
+
+
+---- bayesian
+
+Bayesian regression
+mc-dropout
+   
+Random forest 
+   http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
+
+
+
+
+
+
