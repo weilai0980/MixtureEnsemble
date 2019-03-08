@@ -52,7 +52,8 @@ def linear(x,
            
         #l2
         regularizer = tf.reduce_sum(tf.square(w_v))
-        
+           
+           # [B]
     return tf.squeeze(h), regularizer
 
 def bilinear(x, 
@@ -79,13 +80,16 @@ def bilinear(x,
         else:
             h = tf.matmul(tmph, w_l)
             
+           # [B] 
     return tf.squeeze(h), tf.reduce_sum(tf.square(w_t)) + tf.reduce_sum(tf.square(w_v)) 
 
 # ---- Mixture linear ----
 
 class mixture_linear():
     
-    def __init__(self, session, loss_type):
+    def __init__(self, 
+                 session, 
+                 loss_type):
         
         # build the network graph 
         self.lr = 0.0
@@ -101,17 +105,17 @@ class mixture_linear():
         
 
     def network_ini(self, 
-                 session, 
-                 lr, 
-                 l2, 
-                 dim_x_list,
-                 steps_x_list, 
-                 bool_log, 
-                 bool_bilinear,
-                 loss_type, 
-                 distr_type, 
-                 bool_regu_positive_mean,
-                 bool_regu_gate):
+                    session, 
+                    lr, 
+                    l2, 
+                    dim_x_list,
+                    steps_x_list, 
+                    bool_log, 
+                    bool_bilinear,
+                    loss_type, 
+                    distr_type, 
+                    bool_regu_positive_mean,
+                    bool_regu_gate):
         
         '''
         Args:
@@ -224,7 +228,7 @@ class mixture_linear():
                                                   'gate' + str(i), 
                                                   True)
                 
-            # [C B 1]
+            # [C B]
             mean_list.append(tmp_mean)
             var_list.append(tf.square(tmp_var))
             logit_list.append(tmp_logit)
@@ -277,8 +281,15 @@ class mixture_linear():
             
         # ---- negative log likelihood 
         
-        # nllk: negative log likelihood
-            
+        # Dictionary
+        #   nllk: negative log likelihood
+        #   hetero: heteroskedasticity
+        #   inv: inversed
+        #   const: constant
+        #   indi: individual
+        #   py: predicted y
+
+        
         # lk    
         # [B C]
         tmpllk_indi_hetero = tf.exp(-0.5*tf.square(self.y - mean_stack)/(var_stack + 1e-5))/(2.0*np.pi*(var_stack + 1e-5))**0.5
