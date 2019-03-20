@@ -42,7 +42,7 @@ def linear(x,
         w = tf.Variable(name = 'w', 
                         tf.random_normal([dim_x, 1], stddev = math.sqrt(1.0/float(dim_x))))
         
-        b = tf.Variable(name = 'b', 
+        b = tf.Variable(name = 'b',
                         tf.zeros([1,]))
         
         if bool_bias == True:
@@ -61,7 +61,8 @@ def bilinear(x,
              scope,
              bool_bias):
     
-    # shape of x: [b, t, v]
+    # shape of x: [b, l, r]
+    # shape_x: [l, r]
     with tf.variable_scope(scope):
         
         w_l = tf.Variable(name = 'w_left', 
@@ -91,6 +92,15 @@ class mixture_linear():
                  session, 
                  loss_type):
         
+        '''
+        Args:
+        
+        session: tensorflow session
+        
+        loss_type: string, type of loss functions, {mse, lk, lk_inv}
+        
+        '''
+        
         # build the network graph 
         self.lr = 0.0
         self.l2 = 0.0
@@ -105,22 +115,18 @@ class mixture_linear():
         
 
     def network_ini(self, 
-                    session, 
                     lr, 
                     l2, 
                     dim_x_list,
                     steps_x_list, 
                     bool_log, 
                     bool_bilinear,
-                    loss_type, 
                     distr_type, 
                     bool_regu_positive_mean,
                     bool_regu_gate):
         
         '''
         Args:
-        
-        session: tensorflow session
         
         lr: float, learning rate
         
@@ -134,7 +140,7 @@ class mixture_linear():
         
         bool_bilinear: if bilinear function is used on the components in X
         
-        loss_type: string, type of loss functions, {mse, lk, lk_inv}
+        
         
         distr_type: string, type of the distribution of the target variable
         
@@ -158,7 +164,7 @@ class mixture_linear():
         
         self.epsilon = 1e-3
         
-        self.sess = session
+        #self.sess = session
         
         self.bool_log = bool_log
         self.loss_type = loss_type
@@ -357,14 +363,14 @@ class mixture_linear():
     #   initialize loss and optimization operations for training
     def train_ini(self):
         
+        self.sq_error = tf.reduce_sum(tf.square(self.y - self.py))
+        
         # loss, nllk, py_mean, py_std
         
         # loss
         if self.loss_type == 'mse':
             
-            self.mse = tf.reduce_mean(tf.square(self.y - self.py))
-            
-            self.loss = self.mse + self.regularization
+            self.loss = tf.reduce_mean(tf.square(self.y - self.py)) + self.regularization
             self.nllk = self.nllk_const
             
         elif self.loss_type == 'lk_inv':
@@ -384,6 +390,7 @@ class mixture_linear():
         self.py_mean = self.py
         self.py_std = tf.sqrt(self.py_var)
         
+        
         self.train = tf.train.AdamOptimizer(learning_rate = self.lr)
         self.optimizer =  self.train.minimize(self.loss)
         
@@ -401,11 +408,10 @@ class mixture_linear():
         data_dict[self.y] = y
         data_dict[self.keep_prob] = keep_prob
         
-        
-        _, c = self.sess.run([self.optimizer, self.loss],
-                             feed_dict = data_dict)
+        _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
+                                                feed_dict = data_dict)
                              
-        return c
+        return tmp_loss, tmp_sq_err
     
     
     #   error metric
@@ -418,7 +424,7 @@ class mixture_linear():
         self.mae  = tf.reduce_mean(tf.abs(self.y - self.py))
         
         # MAPE
-        # based on groundtruth y
+        # based on ground-truth y
         mask = tf.greater(tf.abs(self.y), 1e-5)
         
         y_mask = tf.boolean_mask(self.y, mask)

@@ -3,6 +3,27 @@
 
 --------------- TO DO LIST -------------------
 
+---- TRAINING HYPER-PARA:
+
+  loss: homoscedasticity-mse, heteroscedastic-lk_inv
+  train mode: bayesian, map, EM 
+
+
+---- baseline
+
+subsample in gradient boosted tree 
+
+
+---- survey
+
+Predictive Uncertainty Estimation via Prior Networks
+
+Uncertainty-Aware Learning from Demonstration Using Mixture Density Networks with Sampling-Free Variance Modeling
+
+Uncertainty-Aware Attention for Reliable Interpretation and Prediction
+
+
+
 ---- MLE constant variance  
 
 Gradient boosted tree
@@ -10,14 +31,20 @@ Gradient boosted tree
   XGboosted 
 
 
-
 ---- heteroskedasticity
 
 
+EM training
+
+statistic mixture 
+
 -- transition
-no dependency on hiddens
-markov for statistic version
-moving for neural network version 
+
+  no dependency on hiddens
+  markov for statistic version
+  moving averaging for neural network version 
+
+neural mixture
 
 
 cnn + lstm
@@ -28,8 +55,10 @@ lstm + att lk
 temporal mixture lk
 
 
-
 ---- bayesian
+
+Bayesian linear mixture 
+
 
 Bayesian regression
 mc-dropout

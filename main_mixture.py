@@ -50,10 +50,45 @@ para_distr_type = 'gaussian'
 para_pos_regu = True
 para_gate_type = 'softmax'
 
+# epoch sample
+para_val_epoch_num = int(0.05 * para_n_epoch)
+para_test_epoch_num = 1
 
-# ---- training and evalution methods ----
+
+# ---- training and evalution ----
     
-def train_validate(xtr, ytr, xval, yval, lr, l2, epoch):   
+def train_validate(xtr, 
+                   ytr, 
+                   xval, 
+                   yval, 
+                   lr, 
+                   l2, 
+                   dim_x, 
+                   steps_x):
+    
+    '''
+    Args:
+    
+    xtr: [num_src, N, T, D]
+         N: number of data samples
+         T: number of steps
+         D: dimension at each time step
+        
+    ytr: [N 1]
+        
+    l2: float, l2 regularization
+    
+    lr: float, learning rate
+    
+    dim_x: list of integer, corresponding to D, [num_src]
+    
+    steps_x: list of integer, corresponding to T, [num_src]
+        
+    '''
+    
+    # clear the graph in the current session 
+    tf.reset_default_graph()
+    sess = tf.InteractiveSession()
     
     # stabilize the network by fixing the random seed
     np.random.seed(1)
@@ -63,48 +98,52 @@ def train_validate(xtr, ytr, xval, yval, lr, l2, epoch):
         
         if method == 'linear':
             
-            clf = mixture_linear(sess, 
-                                 lr, 
-                                 l2, 
-                                 para_order_x, 
-                                 para_order_steps, 
-                                 para_y_log, 
-                                 para_bool_bilinear,
-                                 para_loss_type, 
-                                 para_distr_type, 
-                                 para_pos_regu, 
-                                 para_gate_type)
+            model = (session = sess, 
+                     loss_type = para_loss_type)
             
         else:
             print "     [ERROR] Model type"
             
+            
         # initialize the network
-        # reset the model
-        clf.train_ini()
-        clf.evaluate_ini()
+        model.network_ini(lr, 
+                          l2, 
+                          dim_x_list = dim_x,
+                          steps_x_list = steps_x, 
+                          bool_log = para_y_log, 
+                          bool_bilinear = para_bool_bilinear,
+                          distr_type = para_distr_type, 
+                          bool_regu_positive_mean = para_pos_regu,
+                          bool_regu_gate = para_gate_type )
+        model.train_ini()
+        model.inference_ini()
         
         # set up training batch parameters
-        total_cnt   = np.shape(xtrain)[0]
-        total_batch = int(total_cnt/para_batch_size)
-        total_idx   = range(total_cnt)
+        total_cnt = np.shape(xtrain)[0]
+        total_batch_num = int(total_cnt/para_batch_size)
+        total_idx = range(total_cnt)
         
         # log training and validation errors over epoches
-        tmp_err_epoch = []
+        epoch_error = []
         
-        #  begin training epochs
-        for epoch in range(para_epoch_linear):
+        st_time = time.time()
+        
+        #  begin training on epochs
+        for epoch in range(para_epoch):
             
             # shuffle traning instances each epoch
             np.random.shuffle(total_idx)
             
             # loop over all batches
-            tmpc = 0.0
-            for i in range(total_batch):
-                
-                batch_idx = total_idx[ i*para_batch_size: (i+1)*para_batch_size ] 
+            epoch_loss = 0.0
+            epoch_sq_err = 0.0
             
-                batch_auto    =  xtr_auto[ batch_idx ]
-                batch_x =  xtr_x[ batch_idx ]
+            for i in range(total_batch_num):
+                
+                # batch data
+                batch_idx = total_idx[i*para_batch_size: (i+1)*para_batch_size] 
+                
+                batch_x = [xtr[tmp_src][batch_idx] for tmp_src in len(xtr)]
                 
                 # log transformation on the target
                 if para_y_log == True:
@@ -112,30 +151,61 @@ def train_validate(xtr, ytr, xval, yval, lr, l2, epoch):
                     
                 else:
                     batch_y = ytrain[batch_idx]
+                    
+                # update on the batch data
+                tmp_loss, tmp_sq_err = model.train_batch(batch_x, batch_y, para_keep_prob)
+                
+                epoch_loss += tmp_loss
+                epoch_sq_err += tmp_sq_err
+                
+            tmp_rmse, tmp_mae, tmp_mape, tmp_nllk = model.inference(xval, yval, para_keep_prob) 
             
-                tmpc = tmpc + float(clf.train_batch( batch_auto, batch_x, batch_y, para_keep_prob ))
-            
-            tmp_rmse, tmp_mae, tmp_mape, tmp_nllk = clf.inference(xts_auto, xts_x, ytest, para_keep_prob) 
             
             # record for re-training the model afterwards
-            epoch_error.append([epoch, tmp_train_rmse, tmp_rmse, tmp_mae, tmp_mape, tmp_nllk])
             
-            # training rmse, training regularization, testing rmse, testing regularization
-            print "loss on epoch ", epoch, " : ", 1.0*tmpc/total_batch, tmp_train_rmse, tmp_test_rmse
+            tmp_train_rmse = sqrt(1.0*tmp_sq_err/total_cnt)
+            
+            epoch_error.append([epoch,
+                                1.0*epoch_loss/total_batch_num
+                                tmp_train_rmse, 
+                                tmp_rmse, 
+                                tmp_mae, 
+                                tmp_mape, 
+                                tmp_nllk])
+            
+            print("\n --- At epoch %d : \n  %s "%(epoch, str(epoch_error[-1][1:])))
             
         print "Optimization Finished!"
         
         # reset the model
-        clf.model_reset()
+        #model.model_reset()
         #clf.train_ini()
     
-    # clear the graph in the current session 
-    tf.reset_default_graph()
-    sess = tf.InteractiveSession()
-
-    return min(tmp_err_epoch, key = lambda x:x[-1]), [tmp_test_rmse, tmp_test_mae, tmp_test_mape]
+    ed_time = time.time()
     
+    # the epoch with the lowest valdiation RMSE
+    return sorted(epoch_error, key = lambda x:x[3]), 1.0*(ed_time - st_time)/para_n_epoch
+ 
 
+def hyper_para_selection(hpara_log, 
+                         val_epoch_num, 
+                         test_epoch_num):
+    
+    # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nllk]] ]
+    
+    hp_err = []
+    
+    for hp_epoch_err in error_log:
+        
+        hp_err.append([hp_epoch_err[0], mean([k[3] for k in hp_epoch_err[:val_epoch_num]])])
+        
+    sorted_hp = sorted(hp_err, key = lambda x:x[1])
+    
+    
+    return sorted_hp[0][0][0], sorted_hp[0][0][1], [k[1][0] for k in sorted_hp][:test_epoch_num]
+
+   
+'''
 def preprocess_feature_mixture(xtrain, xtest):
     
     # split training and testing data into three feature groups      
@@ -154,8 +224,38 @@ def preprocess_feature_mixture(xtrain, xtest):
     xtr_exter = conti_normalization_train_dta( xtr_feature )
     
     return np.asarray(xtr), np.asarray(xtr_exter), np.asarray(xts), np.asarray(xts_exter)
+'''
+
+
+def log_train(path):
     
+    with open(path, "a") as text_file:
+        text_file.write("\n ------ \n Statistic mixture %s \n"%(train_mode))
+        text_file.write("loss type: %s \n"%(para_loss_type))
+        text_file.write("target distribution type: %s \n"%(para_distr_type))
+        text_file.write("bi-linear: %s \n"%(para_bool_bilinear))
+        text_file.write("regularization positive: %s \n"%(para_pos_regu))
+        
+        text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
+        text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
+        
+        text_file.write("\n\n")
+        
+                                                                                     
+def log_val(path, hpara_tuple, error_tuple):
     
+    with open(path, "a") as text_file:
+        text_file.write("\n  best hyper-parameters: %s \n"%(hpara_tuple))
+        text_file.write("\n  validation performance: %s \n"%(error_tuple))
+        
+        
+def log_test(path, error_tuple):
+    
+    with open(path, "a") as text_file:
+        text_file.write("\n  test performance: %s \n"%(error_tuple))
+    
+
+
 # ---- main process ----  
 
 if __name__ == '__main__':
@@ -165,23 +265,13 @@ if __name__ == '__main__':
     np.random.seed(1)
     tf.set_random_seed(1)
     
-    # ---- prepare the log
+    # ---- log
     
     path_log_error = "../bt_results/res/rolling/log_error_mix.txt"
     path_log_epoch  = "../bt_results/res/rolling/log_epoch_mix.txt"
     
     
-    with open(log_error, "a") as text_file:
-        
-        text_file.write("\n %s Mixture %s  %s %s %s %s %s \n\n"%(roll_title if train_mode == 'roll' else incre_title,
-                                                                 method,
-                                                                     para_loss_type, 
-                                                                     para_distr_type, 
-                                                                     'bi-linear' if para_bool_bilinear == True else 'linear', 
-                                                                     'pos_regu' if para_pos_regu == True else 'no_pos_regu'))
-    
-    
-    # ---- prepare the data
+    # ---- data
     
     # load raw feature and target data
     features_minu = np.load("../dataset/bitcoin/training_data/feature_minu.dat" )
@@ -197,24 +287,20 @@ if __name__ == '__main__':
     # set up the training and evaluation interval 
     interval_num = int(len(y)/interval_len)
     
-    
-    
-    # ---- the main loop
-    
+
     # reset the graph
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
         
     # log for predictions in each interval
-    pred_file = "../bt_results/res/rolling/" + str(i-1) + "_" + str(para_step_ahead) + '_'
+    path_pred = "../bt_results/res/rolling/" + str(i-1) + "_" + str(para_step_ahead) + '_'
         
             
     tmp_x = x[ : i*interval_len]
     tmp_y = y[ : i*interval_len]
     para_train_split_ratio = 1.0*(len(tmp_x) - interval_len)/len(tmp_x)
             
-        
-    # training, validation+testing split 
+    # training, validation + testing split 
     if para_bool_bilinear == True:
         
         xtrain, ytrain, xtest, ytest = training_testing_mixture_rnn(tmp_x, tmp_y, para_train_split_ratio)
@@ -252,6 +338,7 @@ if __name__ == '__main__':
     print np.shape(xval), np.shape(xval_exter), np.shape(yval)
     print np.shape(xts), np.shape(xts_exter), np.shape(yts)
         
+        
     # parameter set-up
     para_order_auto = para_order_hour
         
@@ -270,59 +357,59 @@ if __name__ == '__main__':
     else:
         print ' [ERROR]  bi-linear '
         
-        
-    # -- training and validation phase
     
-    para_log = []
-        
+    # ---- training and validation
+    
+    hpara_log = []
+    
+    # hp: hyper-parameter
     for para_lr in [0.001, 0.005, 0.01, 0.05]:
         for para_l2 in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
             
-            # [tmp_epoch, tmp_val_rmse, tmp_val_mae, tmp_val_mape, tmp_val_nllk]]
-            epoch_error_log, epoch_time = train_validate_mixture(xtr, 
-                                                                 ytr,
-                                                                             xval,
-                                                                             yval,
-                                                                             para_lr,
-                                                                             para_l2,
-                                                                             0)
+            # best validation performance
+            
+            # [epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nllk]
+            hp_epoch_error, hp_epoch_time = train_validate(xtr, 
+                                                           ytr,
+                                                           xval,
+                                                           yval,
+                                                           lr = para_lr,
+                                                           l2 = para_l2,
+                                                           dim_x,
+                                                           steps_x)
                 
-            para_log.append([[para_lr, para_l2], epoch_error_log])
+            hpara_log.append([[para_lr, para_l2], hp_epoch_error])
             
-            print 'Current parameter set-up: \n', para_log[-1], '\n'
+            print 'Current parameter set-up: \n', hpara_log[-1], '\n'
             
-        
-    # -- testing phase
-        
-    # best global hyper-parameter
-    final_para = min(para_log, key = lambda x:x[1][1])
-        
-    best_lr = final_para[0]
-    best_l2 = final_para[1]
-    best_epoch = final_para[2]
-        
-    print ' ---- Best parameters : ', final_para, '\n'
-        
-    result_tuple = [final_para[3], final_para[4]]
     
+    # ---- re-train
+    
+    best_lr, best_l2, epoch_sample = hyper_para_selection(hpara_log, 
+                                                          val_epoch_num, 
+                                                          test_epoch_num)
+    
+    
+    print ' ---- Best parameters: ', best_lr, best_l2, epoch_sample, '\n'
+        
 
-    test_error = train_validate(xtr, 
-                                        ytr,
-                                        xts, 
-                                        yts,
-                                        best_lr,
-                                        best_l2,
-                                        best_epoch)
-    result_tuple.append(test_error)
-        
-    print ' ---- Training, validation and testing performance: ', final_para, test_error, '\n'
-        
-        
-    # -- log overall errors
+    epoch_error, _ = train_validate(xtr, 
+                                    ytr,
+                                    xts, 
+                                    yts,
+                                    lr = best_lr,
+                                    l2 = best_l2,
+                                    dim_x,
+                                    steps_x)    
+                                    
     
-    with open(log_error, "a") as text_file:
         
-        text_file.write("Interval %d : %s, %s \n" %(i-1, str(final_para[:2]), str(result_tuple))).
-            
+    print ' ---- Re-training performance: ', epoch_error, '\n'
+    
+    
+    
+    # ---- testing
+        
+        
             
             
