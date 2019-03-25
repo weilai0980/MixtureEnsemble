@@ -23,9 +23,18 @@ from mixture import *
 
 # ---- hyper-parameters from command line
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', '-m', help = "model", type = str, default = 'statis')
+ 
+args = parser.parse_args()
+print(args) 
 
 # ---- hyper-parameters from config ----
 
+
+import json
 with open('config.json') as f:
     para_dict = json.load(f)
     print(para_dict) 
@@ -34,6 +43,8 @@ para_dim_x = []
 para_steps_x = []
 para_step_ahead = 0
 
+# loss type
+# optimization: em, map, bayes
 
 # ---- hyper-parameters set-up ----
 
@@ -43,12 +54,14 @@ para_pred_exp = False
 para_bool_bilinear = True
 
 para_batch_size = 32
-para_epoch = 300
+para_n_epoch = 100
 
 para_distr_type = 'gaussian'
 
-para_pos_regu = True
-para_gate_type = 'softmax'
+para_regu_positive = False
+para_regu_gate =  False
+
+#para_gate_type = 'softmax'
 
 # epoch sample
 para_val_epoch_num = int(0.05 * para_n_epoch)
@@ -96,15 +109,9 @@ def train_validate(xtr,
     
     with tf.Session() as sess:
         
-        if method == 'linear':
-            
-            model = (session = sess, 
-                     loss_type = para_loss_type)
-            
-        else:
-            print "     [ERROR] Model type"
-            
-            
+        model = mixture_statistic(session = sess, 
+                                  loss_type = para_loss_type)
+        
         # initialize the network
         model.network_ini(lr, 
                           l2, 
@@ -113,8 +120,8 @@ def train_validate(xtr,
                           bool_log = para_y_log, 
                           bool_bilinear = para_bool_bilinear,
                           distr_type = para_distr_type, 
-                          bool_regu_positive_mean = para_pos_regu,
-                          bool_regu_gate = para_gate_type )
+                          bool_regu_positive_mean = para_regu_positive,
+                          bool_regu_gate = para_regu_gate)
         model.train_ini()
         model.inference_ini()
         
@@ -153,12 +160,12 @@ def train_validate(xtr,
                     batch_y = ytrain[batch_idx]
                     
                 # update on the batch data
-                tmp_loss, tmp_sq_err = model.train_batch(batch_x, batch_y, para_keep_prob)
+                tmp_loss, tmp_sq_err = model.train_batch(batch_x, batch_y)
                 
                 epoch_loss += tmp_loss
                 epoch_sq_err += tmp_sq_err
                 
-            tmp_rmse, tmp_mae, tmp_mape, tmp_nllk = model.inference(xval, yval, para_keep_prob) 
+            tmp_rmse, tmp_mae, tmp_mape, tmp_nllk, _, _ = model.inference(xval, yval, bool_indi_eval = False) 
             
             
             # record for re-training the model afterwards
@@ -166,7 +173,7 @@ def train_validate(xtr,
             tmp_train_rmse = sqrt(1.0*tmp_sq_err/total_cnt)
             
             epoch_error.append([epoch,
-                                1.0*epoch_loss/total_batch_num
+                                1.0*epoch_loss/total_batch_num,
                                 tmp_train_rmse, 
                                 tmp_rmse, 
                                 tmp_mae, 
@@ -195,36 +202,13 @@ def hyper_para_selection(hpara_log,
     
     hp_err = []
     
-    for hp_epoch_err in error_log:
+    for hp_epoch_err in hpara_log:
         
-        hp_err.append([hp_epoch_err[0], mean([k[3] for k in hp_epoch_err[:val_epoch_num]])])
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], mean([k[1][3] for k in hp_epoch_err[:val_epoch_num]])])
         
-    sorted_hp = sorted(hp_err, key = lambda x:x[1])
+    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
-    
-    return sorted_hp[0][0][0], sorted_hp[0][0][1], [k[1][0] for k in sorted_hp][:test_epoch_num]
-
-   
-'''
-def preprocess_feature_mixture(xtrain, xtest):
-    
-    # split training and testing data into three feature groups      
-    xtr_vol =   np.asarray( [j[0] for j in xtrain] )
-    xtr_feature = np.asarray( [j[1] for j in xtrain] )
-
-    xts_vol =   np.asarray( [j[0] for j in xtest] )
-    xts_feature = np.asarray( [j[1] for j in xtest] )
-
-    # !! IMPORTANT: feature normalization
-
-    xts = conti_normalization_test_dta(  xts_vol, xtr_vol )
-    xtr = conti_normalization_train_dta( xtr_vol )
-
-    xts_exter = conti_normalization_test_dta(  xts_feature, xtr_feature )
-    xtr_exter = conti_normalization_train_dta( xtr_feature )
-    
-    return np.asarray(xtr), np.asarray(xtr_exter), np.asarray(xts), np.asarray(xts_exter)
-'''
+    return sorted_hp[0][0][0], sorted_hp[0][0][1], [k[0] for k in sorted_hp[0][1]][:test_epoch_num]
 
 
 def log_train(path):
@@ -234,7 +218,7 @@ def log_train(path):
         text_file.write("loss type: %s \n"%(para_loss_type))
         text_file.write("target distribution type: %s \n"%(para_distr_type))
         text_file.write("bi-linear: %s \n"%(para_bool_bilinear))
-        text_file.write("regularization positive: %s \n"%(para_pos_regu))
+        text_file.write("regularization positive: %s \n"%(para_regu_positive))
         
         text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
         text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
@@ -269,116 +253,39 @@ if __name__ == '__main__':
     
     path_log_error = "../bt_results/res/rolling/log_error_mix.txt"
     path_log_epoch  = "../bt_results/res/rolling/log_epoch_mix.txt"
-    
+    path_data = "../dataset/bitcoin/double_trx/"
     
     # ---- data
     
-    # load raw feature and target data
-    features_minu = np.load("../dataset/bitcoin/training_data/feature_minu.dat" )
-    rvol_hour = np.load("../dataset/bitcoin/training_data/return_vol_hour.dat" )
-    all_loc_hour = np.load("../dataset/bitcoin/loc_hour.dat" )
-    print '--- Start the ' + train_mode + ' training: \n', np.shape(features_minu), np.shape(rvol_hour)
+    import pickle
+    tr_dta = pickle.load(open(path_data + 'train.p', "rb"))
+    val_dta = pickle.load(open(path_data + 'val.p', "rb"))
+    ts_dta = pickle.load(open(path_data + 'test.p', "rb"))
     
-    # prepare the set of pairs of features and targets
-    x, y, var_explain = prepare_feature_target(features_minu, rvol_hour, all_loc_hour, \
-                                               para_order_minu, para_order_hour, \
-                                               bool_feature_selection, para_step_ahead, False)
     
-    # set up the training and evaluation interval 
-    interval_num = int(len(y)/interval_len)
-    
-
-    # reset the graph
-    tf.reset_default_graph()
-    sess = tf.InteractiveSession()
-        
-    # log for predictions in each interval
-    path_pred = "../bt_results/res/rolling/" + str(i-1) + "_" + str(para_step_ahead) + '_'
-        
-            
-    tmp_x = x[ : i*interval_len]
-    tmp_y = y[ : i*interval_len]
-    para_train_split_ratio = 1.0*(len(tmp_x) - interval_len)/len(tmp_x)
-            
-    # training, validation + testing split 
-    if para_bool_bilinear == True:
-        
-        xtrain, ytrain, xtest, ytest = training_testing_mixture_rnn(tmp_x, tmp_y, para_train_split_ratio)
-    
-    else:
-        
-        xtrain, ytrain, xtest, ytest = training_testing_mixture_mlp(tmp_x, tmp_y, para_train_split_ratio)
-            
-        
-    # feature split, normalization READY
-    xtr, xtr_exter, xtest, xtest_exter = preprocess_feature_mixture(xtrain, xtest)
-        
-    # build validation and testing data 
-    tmp_idx = range(len(xtest))
-    tmp_val_idx = []
-    tmp_ts_idx = []
-        
-    # even sampling the validation and testing data
-    for j in tmp_idx:
-        if j%2 == 0:
-            tmp_val_idx.append(j)
-        else:
-            tmp_ts_idx.append(j)
-        
-    xval = xtest[tmp_val_idx]
-    xval_exter = xtest_exter[tmp_val_idx]
-    yval = np.asarray(ytest)[tmp_val_idx]
-        
-    xts = xtest[tmp_ts_idx]
-    xts_exter = xtest_exter[tmp_ts_idx]
-    yts = np.asarray(ytest)[tmp_ts_idx]
-        
-    print 'shape of training, validation and testing data: \n'                            
-    print np.shape(xtr), np.shape(xtr_exter), np.shape(ytrain)
-    print np.shape(xval), np.shape(xval_exter), np.shape(yval)
-    print np.shape(xts), np.shape(xts_exter), np.shape(yts)
-        
-        
-    # parameter set-up
-    para_order_auto = para_order_hour
-        
-    if para_bool_bilinear == True:
-        
-        para_order_x = len(xtr_exter[0][0])
-        para_order_steps = len(xtr_exter[0])
-        print '     !! Time-first order !! '
-
-    elif para_bool_bilinear == False:
-        
-        para_order_x = len(xtr_exter[0])
-        para_order_steps = 0
-        print '     !! Flattened features !! '
-        
-    else:
-        print ' [ERROR]  bi-linear '
-        
+    '''
     
     # ---- training and validation
     
     hpara_log = []
     
     # hp: hyper-parameter
-    for para_lr in [0.001, 0.005, 0.01, 0.05]:
-        for para_l2 in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
+    for tmp_lr in [0.001, 0.005, 0.01, 0.05]:
+        for tmp_l2 in [0.00001, 0.0001, 0.001, 0.01, 0.1]:
             
             # best validation performance
             
-            # [epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nllk]
+            # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nllk]]
             hp_epoch_error, hp_epoch_time = train_validate(xtr, 
                                                            ytr,
                                                            xval,
                                                            yval,
-                                                           lr = para_lr,
-                                                           l2 = para_l2,
-                                                           dim_x,
-                                                           steps_x)
+                                                           lr = tmp_lr,
+                                                           l2 = tmp_l2,
+                                                           dim_x = para_dim_x,
+                                                           steps_x = para_steps_x)
                 
-            hpara_log.append([[para_lr, para_l2], hp_epoch_error])
+            hpara_log.append([[tmp_lr, tmp_l2], hp_epoch_error])
             
             print 'Current parameter set-up: \n', hpara_log[-1], '\n'
             
@@ -395,15 +302,14 @@ if __name__ == '__main__':
 
     epoch_error, _ = train_validate(xtr, 
                                     ytr,
-                                    xts, 
-                                    yts,
+                                    xval, 
+                                    yval,
                                     lr = best_lr,
                                     l2 = best_l2,
-                                    dim_x,
-                                    steps_x)    
+                                    dim_x = para_dim_x,
+                                    steps_x = para_steps_x)    
                                     
     
-        
     print ' ---- Re-training performance: ', epoch_error, '\n'
     
     
@@ -411,5 +317,5 @@ if __name__ == '__main__':
     # ---- testing
         
         
-            
+    '''        
             

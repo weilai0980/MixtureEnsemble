@@ -24,7 +24,6 @@ from edward.models import Categorical, Dirichlet, Empirical, InverseGamma, Multi
 
 # local packages
 from utils_libs import *
-#from ts_mv_rnn_basics import *
 
 # reproducibility by fixing the random seed
 # np.random.seed(1)
@@ -39,10 +38,10 @@ def linear(x,
     
     with tf.variable_scope(scope):
         
-        w = tf.Variable(name = 'w', 
+        w = tf.get_variable('w', 
                         tf.random_normal([dim_x, 1], stddev = math.sqrt(1.0/float(dim_x))))
         
-        b = tf.Variable(name = 'b',
+        b = tf.get_variable('b',
                         tf.zeros([1,]))
         
         if bool_bias == True:
@@ -86,7 +85,7 @@ def bilinear(x,
 
 # ---- Mixture linear ----
 
-class mixture_linear():
+class mixture_statistic():
     
     def __init__(self, 
                  session, 
@@ -172,7 +171,6 @@ class mixture_linear():
         
         # initialize placeholders
         self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
-        self.keep_prob = tf.placeholder(tf.float32, name = 'keep_prob')
         
         # ph: placeholder 
         x_ph_list = []
@@ -375,12 +373,12 @@ class mixture_linear():
             
         elif self.loss_type == 'lk_inv':
             
-            self.loss = self.nllk_hetero_inv + self.regularization + self.l2*regu_var
+            self.loss = self.nllk_hetero_inv + self.regularization + 0.1*self.l2*regu_var
             self.nllk = self.nllk_hetero_inv
             
         elif self.loss_type == 'lk':
             
-            self.loss = self.nllk_hetero + self.regularization + self.l2*regu_var
+            self.loss = self.nllk_hetero + self.regularization + 0.1*self.l2*regu_var
             self.nllk = self.nllk_hetero
             
         else:
@@ -399,14 +397,13 @@ class mixture_linear():
         
         
     #   training on batch of data
-    def train_batch(self, x_list, y, keep_prob ):
+    def train_batch(self, x_list, y):
         
         data_dict = {}
         for idx, i in enumerate(self.x_ph_list):
             data_dict[i] = x_list[idx]
         
         data_dict[self.y] = y
-        data_dict[self.keep_prob] = keep_prob
         
         _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
                                                 feed_dict = data_dict)
@@ -434,7 +431,7 @@ class mixture_linear():
         
     
     #   infer givn testing data
-    def inference(self, x_list, y, keep_prob, bool_indi_eval):
+    def inference(self, x_list, y, bool_indi_eval):
         
         # rmse, mae, mape, nllk, py_mean, py_std
         
@@ -443,7 +440,6 @@ class mixture_linear():
             data_dict[i] = x_list[idx]
         
         data_dict[self.y] = y
-        data_dict[self.keep_prob] = keep_prob 
         
         rmse, mae, mape, nllk = self.sess.run([self.rmse, self.mae, self.mape, self.nllk], feed_dict = data_dict)
         
