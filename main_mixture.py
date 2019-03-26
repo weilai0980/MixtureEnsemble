@@ -167,9 +167,6 @@ def train_validate(xtr,
                 
             tmp_rmse, tmp_mae, tmp_mape, tmp_nllk, _, _ = model.inference(xval, yval, bool_indi_eval = False) 
             
-            
-            # record for re-training the model afterwards
-            
             tmp_train_rmse = sqrt(1.0*tmp_sq_err/total_cnt)
             
             epoch_error.append([epoch,
@@ -182,7 +179,7 @@ def train_validate(xtr,
             
             print("\n --- At epoch %d : \n  %s "%(epoch, str(epoch_error[-1][1:])))
             
-        print "Optimization Finished!"
+        print("Optimization Finished!")
         
         # reset the model
         #model.model_reset()
@@ -238,7 +235,20 @@ def log_test(path, error_tuple):
     with open(path, "a") as text_file:
         text_file.write("\n  test performance: %s \n"%(error_tuple))
     
+def data_reshape(data):
+    
+    # data: [yi, ti, [xi_src1, xi_src2, ...]]
+    src_num = len(data[0][2])
 
+    tmpx = []
+    for src_idx in range(src_num):
+        tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
+        print(np.shape(tmpx[-1]))
+    
+    tmpy = np.asarray([tmp[0] for tmp in data])
+    
+    # output shape: y [N 1], x [S N T D]
+    return tmpx, tmpy
 
 # ---- main process ----  
 
@@ -258,9 +268,20 @@ if __name__ == '__main__':
     # ---- data
     
     import pickle
-    tr_dta = pickle.load(open(path_data + 'train.p', "rb"))
-    val_dta = pickle.load(open(path_data + 'val.p', "rb"))
-    ts_dta = pickle.load(open(path_data + 'test.p', "rb"))
+    tr_dta = pickle.load(open(path_data + 'train.p', "rb"), encoding='latin1')
+    val_dta = pickle.load(open(path_data + 'val.p', "rb"), encoding='latin1')
+    ts_dta = pickle.load(open(path_data + 'test.p', "rb"), encoding='latin1')
+    
+    # output from the reshape 
+    # y [N 1], x [S N T D]    
+    
+    tr_x, tr_y = data_reshape(tr_dta)
+    val_x, val_y = data_reshape(val_dta)
+    ts_x, ts_y = data_reshape(ts_dta)
+    
+    print(len(tr_x[0]), len(tr_y))
+    print(len(val_x[0]), len(val_y))
+    print(len(ts_x[0]), len(ts_y))
     
     
     '''

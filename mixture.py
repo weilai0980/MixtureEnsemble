@@ -19,8 +19,8 @@ import hashlib
 import numbers
 
 # library for bayesian inference
-import edward as ed
-from edward.models import Categorical, Dirichlet, Empirical, InverseGamma, MultivariateNormalDiag, Normal, ParamMixture, Beta, Bernoulli, Mixture
+#import edward as ed
+#from edward.models import Categorical, Dirichlet, Empirical, InverseGamma, MultivariateNormalDiag, Normal, ParamMixture, Beta, Bernoulli, Mixture
 
 # local packages
 from utils_libs import *
@@ -382,7 +382,7 @@ class mixture_statistic():
             self.nllk = self.nllk_hetero
             
         else:
-            print '[ERROR] loss type'
+            print('[ERROR] loss type')
         
         # [B]
         self.py_mean = self.py
