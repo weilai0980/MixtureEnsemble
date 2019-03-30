@@ -1,7 +1,10 @@
+--------------- FINISHED -------------------
+
+statistic mixture 
 
 
 
---------------- TO DO LIST -------------------
+--------------- TO DO -------------------
 
 ---- TRAINING HYPER-PARA:
 
@@ -26,17 +29,17 @@ Uncertainty-Aware Attention for Reliable Interpretation and Prediction
 
 ---- MLE constant variance  
 
-Gradient boosted tree
+  Gradient boosted tree
   LightGBM
   XGboosted 
-
+  
 
 ---- heteroskedasticity
 
 
 EM training
 
-statistic mixture 
+
 
 -- transition
 
@@ -46,7 +49,6 @@ statistic mixture
 
 neural mixture
 
-
 cnn + lstm
 dual lk
 
@@ -55,7 +57,15 @@ lstm + att lk
 temporal mixture lk
 
 
+
+
+
 ---- bayesian
+
+SG-VI 
+SG-LD
+SG-MCMC
+
 
 Bayesian linear mixture 
 
