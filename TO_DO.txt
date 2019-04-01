@@ -6,18 +6,23 @@ statistic mixture
 
 --------------- TO DO -------------------
 
----- TRAINING HYPER-PARA:
+
+----- TRAINING HYPER-PARA:
 
   loss: homoscedasticity-mse, heteroscedastic-lk_inv
   train mode: bayesian, map, EM 
 
 
----- baseline
+----- DATA
+data inspection
 
-subsample in gradient boosted tree 
+
+----- baseline
+
+sub-sample in gradient boosted tree 
 
 
----- survey
+----- survey
 
 Predictive Uncertainty Estimation via Prior Networks
 
@@ -26,58 +31,58 @@ Uncertainty-Aware Learning from Demonstration Using Mixture Density Networks wit
 Uncertainty-Aware Attention for Reliable Interpretation and Prediction
 
 
+----- constant variance MSE  
 
----- MLE constant variance  
+-- ml on single source
+-- ml on multi source 
+   
+   cut the data on one time step
+   
+   Gradient boosted tree
+   LightGBM
+   Random forest
+   
+   XGboosted
+   
+----- heteroskedasticity
 
-  Gradient boosted tree
-  LightGBM
-  XGboosted 
-  
+server config 
 
----- heteroskedasticity
-
-
-EM training
-
-
-
--- transition
+hidden transition
 
   no dependency on hiddens
   markov for statistic version
   moving averaging for neural network version 
 
+EM training
+
+Regularization:
+  gate logit central regularization
+  dropout on bilinear transformation 
+  output wrapper positive
+
+
 neural mixture
 
-cnn + lstm
-dual lk
+  cnn + lstm
+  dual lk
 
-lstm + att lk 
-
-temporal mixture lk
-
+  lstm + att lk 
+  temporal mixture lk
 
 
+----- bayesian
 
-
----- bayesian
-
+concrete dropout
 SG-VI 
 SG-LD
 SG-MCMC
 
-
 Bayesian linear mixture 
-
 
 Bayesian regression
 mc-dropout
    
 Random forest 
    http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
-
-
-
-
-
 

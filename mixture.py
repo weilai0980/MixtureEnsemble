@@ -137,6 +137,16 @@ class mixture_statistic():
         bool_regu_gate: if regularization the gate functions
         
         '''
+
+        # Dictionary of abbreviation
+        #   nllk: negative log likelihood
+        #   hetero: heteroskedasticity
+        #   inv: inversed
+        #   const: constant
+        #   indi: individual
+        #   py: predicted y
+        #   compt: component
+        
         
         # bool_hidden_depen
         
@@ -245,7 +255,7 @@ class mixture_statistic():
         # regu_mean_pos = tf.reduce_sum( tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x) )
         
         self.regularization = l2*regu_mean
-        
+        self.regu_var = regu_var 
         
         # activation and hinge regularization 
         if bool_regu_positive_mean == True:
@@ -257,13 +267,7 @@ class mixture_statistic():
             
         # ---- negative log likelihood 
         
-        # Dictionary
-        #   nllk: negative log likelihood
-        #   hetero: heteroskedasticity
-        #   inv: inversed
-        #   const: constant
-        #   indi: individual
-        #   py: predicted y
+
 
         
         # lk    
@@ -350,12 +354,12 @@ class mixture_statistic():
         
         elif self.loss_type == 'lk_inv':
             
-            self.loss = self.nllk_hetero_inv + self.regularization + 0.1*self.l2*regu_var
+            self.loss = self.nllk_hetero_inv + self.regularization + 0.1*self.l2*self.regu_var
             self.nllk = self.nllk_hetero_inv
             
         elif self.loss_type == 'lk':
             
-            self.loss = self.nllk_hetero + self.regularization + 0.1*self.l2*regu_var
+            self.loss = self.nllk_hetero + self.regularization + 0.1*self.l2*self.regu_var
             self.nllk = self.nllk_hetero
             
         else:
@@ -384,7 +388,7 @@ class mixture_statistic():
         return tmp_loss, tmp_sq_err
     
     
-    #   error metric
+    #   evaluation metric
     def inference_ini(self):
         
         # RMSE

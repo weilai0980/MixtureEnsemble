@@ -46,7 +46,7 @@ para_steps_x = []
 para_step_ahead = 0
 
 
-# ----- log
+# ----- log paths
 path_data = "../dataset/bitcoin/double_trx/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
@@ -64,19 +64,23 @@ para_y_log = False
 para_bool_bilinear = True
 
 para_batch_size = 64
-para_n_epoch = 10
+para_n_epoch = 90
 
 para_distr_type = 'gaussian'
-para_loss_type = 'mse'
+para_loss_type = 'lk'
 
 para_regu_positive = False
-para_regu_gate =  False
+para_regu_gate =  True
 
-#para_gate_type = 'softmax'
+para_bool_target_seperate = False
 
 # epoch sample
 para_val_epoch_num = max(1, int(0.05 * para_n_epoch))
 para_test_epoch_num = 1
+
+
+para_lr_range = [0.005,]
+para_l2_range = [0.000001, 0.00001, 0.0001, 0.001, 0.01, ]
 
 
 # ----- training and evalution
@@ -225,6 +229,7 @@ def train_validate(xtr,
     # the epoch with the lowest valdiation RMSE
     return sorted(epoch_error, key = lambda x:x[3]),\
            1.0*(ed_time - st_time)/para_n_epoch
+    
 
 def hyper_para_selection(hpara_log, 
                          val_epoch_num, 
@@ -300,7 +305,7 @@ def log_train(path):
     
     with open(path, "a") as text_file:
         
-        text_file.write("\n ------ \n Statistic mixture : \n")
+        text_file.write("\n\n ------ Statistic mixture : \n")
         text_file.write("loss type: %s \n"%(para_loss_type))
         text_file.write("target distribution type: %s \n"%(para_distr_type))
         text_file.write("bi-linear: %s \n"%(para_bool_bilinear))
@@ -310,30 +315,60 @@ def log_train(path):
         text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
         text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
         
+        text_file.write("batch size : %s \n"%(para_batch_size))
+        text_file.write("number of epochs : %s \n"%(para_n_epoch))
+        
+        text_file.write("timesteps of each data source : %s \n"%(para_steps_x))
+        text_file.write("feature dimensionality of each data source : %s \n"%(para_dim_x))
+        
+        text_file.write("target variablet as a seperated data source : %s \n"%(para_bool_target_seperate))
+        
+        
+        
         text_file.write("\n\n")
         
-                                                                                     
+def log_val_hyper_para(path, hpara, hpara_error, train_time):
+    
+    with open(path_log_error, "a") as text_env:
+        text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
+    
+        
 def log_val(path, hpara_tuple, error_tuple):
     
     with open(path, "a") as text_file:
-        text_file.write("\n  best hyper-parameters: %s \n"%(hpara_tuple))
-        text_file.write("\n  validation performance: %s \n"%(error_tuple))
+        text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
+        text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
         
         
 def log_test(path, error_tuple):
     
     with open(path, "a") as text_file:
-        text_file.write("\n  test performance: %s \n"%(error_tuple))
+        text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
     
-def data_reshape(data):
+def data_reshape(data, bool_target_seperate):
     
     # data: [yi, ti, [xi_src1, xi_src2, ...]]
     src_num = len(data[0][2])
-
+    
     tmpx = []
-    for src_idx in range(src_num):
-        tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
+    
+    if bool_target_seperate == True:
+        
+        tmpx.append(np.asarray([tmp[2][0][:, 1:] for tmp in data]))
         print(np.shape(tmpx[-1]))
+    
+        tmpx.append(np.asarray([tmp[2][0][:, 0:1] for tmp in data]))
+        print(np.shape(tmpx[-1]))
+        
+        for src_idx in range(1, src_num):
+            tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
+            print(np.shape(tmpx[-1]))
+    
+    else:
+        
+        for src_idx in range(src_num):
+            tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
+            print(np.shape(tmpx[-1]))
     
     tmpy = np.asarray([tmp[0] for tmp in data])
     
@@ -361,9 +396,14 @@ if __name__ == '__main__':
     # output from the reshape 
     # y [N 1], x [S N T D]    
     
-    tr_x, tr_y = data_reshape(tr_dta)
-    val_x, val_y = data_reshape(val_dta)
-    ts_x, ts_y = data_reshape(ts_dta)
+    tr_x, tr_y = data_reshape(tr_dta, 
+                              bool_target_seperate = para_bool_target_seperate)
+    
+    val_x, val_y = data_reshape(val_dta,
+                                bool_target_seperate = para_bool_target_seperate)
+    
+    ts_x, ts_y = data_reshape(ts_dta,
+                              bool_target_seperate = para_bool_target_seperate)
     
     print(len(tr_x[0]), len(tr_y))
     print(len(val_x[0]), len(val_y))
@@ -379,13 +419,13 @@ if __name__ == '__main__':
     
     # ----- training and validation
     
-    #log_train(path_log_error)
-    
+    log_train(path_log_error)
+                           
     hpara_log = []
     
     # hp: hyper-parameter
-    for tmp_lr in [0.001,]:
-        for tmp_l2 in [0.001, 0.01]:
+    for tmp_lr in para_lr_range:
+        for tmp_l2 in para_l2_range:
             
             # best validation performance
             
@@ -408,6 +448,14 @@ if __name__ == '__main__':
             
             print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
             print('\n Training time: \n', 1.0*hp_epoch_time/para_n_epoch, '\n')
+                           
+            
+                           
+            log_val_hyper_para(path_log_error, 
+                               hpara = hpara_log[-1][0], 
+                               hpara_error = hpara_log[-1][1][0],
+                               train_time = 1.0*hp_epoch_time/para_n_epoch)
+                           
             
     
     # ----- re-train
@@ -417,7 +465,7 @@ if __name__ == '__main__':
                                                                         test_epoch_num = para_test_epoch_num)
     
     
-    print(' ---- Best hyper-parameters: ', best_lr, best_l2, epoch_sample, best_val_err, '\n')
+    print('\n----- Best hyper-parameters: ', best_lr, best_l2, epoch_sample, best_val_err, '\n')
         
 
     epoch_error, _ = train_validate(tr_x, 
@@ -432,20 +480,28 @@ if __name__ == '__main__':
                                     retrain_bool = True,
                                     retrain_best_val_err = best_val_err)
     
-    print(' ---- Re-training performance: ', epoch_error[0], '\n')
+    print('\n----- Re-training performance: ', epoch_error[0], '\n')
     
+    
+    log_val(path = path_log_error, 
+            hpara_tuple = [best_lr, best_l2, epoch_sample, best_val_err], 
+            error_tuple = epoch_error[0])
     
     # ----- testing
     
-    print('\n\n----- testing ------ \n')
+    print('\n----- testing ------ \n')
     
     rmse, mae, mape, nnllk, py_mean, py_unc, py_gate = test_nn(epoch_set = epoch_sample, 
-                                                      xts = ts_x, 
-                                                      yts = ts_y, 
-                                                      file_path = path_model, 
-                                                      bool_instance_eval = False,
-                                                      loss_type = para_loss_type,
-                                                      num_compt = len(para_dim_x))
+                                                               xts = ts_x, 
+                                                               yts = ts_y, 
+                                                               file_path = path_model, 
+                                                               bool_instance_eval = False,
+                                                               loss_type = para_loss_type,
+                                                               num_compt = len(para_dim_x))
     
-    print('\n\n testing errors: ', rmse, mae, mape, nnllk, '\n\n')
+    print('\n testing errors: ', rmse, mae, mape, nnllk, '\n\n')
+    
+    log_test(path = path_log_error, 
+             error_tuple = [rmse, mae, mape, nnllk])
+                           
     
