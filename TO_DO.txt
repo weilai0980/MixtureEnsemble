@@ -2,7 +2,7 @@
 
 statistic mixture 
 
-
+gate logit central regularization
 
 --------------- TO DO -------------------
 
@@ -20,6 +20,8 @@ data inspection
 ----- baseline
 
 sub-sample in gradient boosted tree 
+
+further check of ARCH series 
 
 
 ----- survey
@@ -48,18 +50,17 @@ Uncertainty-Aware Attention for Reliable Interpretation and Prediction
 
 server config 
 
-hidden transition
-
+*hidden transition
   no dependency on hiddens
   markov for statistic version
   moving averaging for neural network version 
 
-EM training
-
-Regularization:
-  gate logit central regularization
+*Regularization:
   dropout on bilinear transformation 
   output wrapper positive
+
+*EM training
+ ELBO
 
 
 neural mixture

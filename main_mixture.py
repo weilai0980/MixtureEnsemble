@@ -54,9 +54,6 @@ path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
 path_model = "../results/mixture/"
 
 
-# loss type
-# optimization: em, map, bayes
-
 # ----- hyper-parameters set-up
 
 para_y_log = False
@@ -70,18 +67,19 @@ para_distr_type = 'gaussian'
 para_loss_type = 'lk'
 
 para_regu_positive = False
-para_regu_gate =  True
+para_regu_gate = True
+para_regu_global_gate = False
 
 para_bool_target_seperate = False
+para_latent_dependence = "weight"
 
 # epoch sample
 para_val_epoch_num = max(1, int(0.05 * para_n_epoch))
 para_test_epoch_num = 1
 
-
 para_lr_range = [0.005,]
-para_l2_range = [0.000001, 0.00001, 0.0001, 0.001, 0.01, ]
-
+para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.1]
+#1e-7, 0.000001, 0.00001, 0.0001, 0.001,
 
 # ----- training and evalution
     
@@ -140,7 +138,10 @@ def train_validate(xtr,
                           bool_bilinear = para_bool_bilinear,
                           distr_type = para_distr_type, 
                           bool_regu_positive_mean = para_regu_positive,
-                          bool_regu_gate = para_regu_gate)
+                          bool_regu_gate = para_regu_gate, 
+                          bool_regu_global_gate = para_regu_global_gate, 
+                          latent_dependence = para_latent_dependence)
+        
         model.train_ini()
         model.inference_ini()
         
@@ -311,6 +312,7 @@ def log_train(path):
         text_file.write("bi-linear: %s \n"%(para_bool_bilinear))
         text_file.write("regularization on positive means: %s \n"%(para_regu_positive))
         text_file.write("regularization on mixture gates: %s \n"%(para_regu_gate))
+        text_file.write("regularization by global gate: %s \n"%(para_regu_global_gate))
         
         text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
         text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
@@ -321,7 +323,9 @@ def log_train(path):
         text_file.write("timesteps of each data source : %s \n"%(para_steps_x))
         text_file.write("feature dimensionality of each data source : %s \n"%(para_dim_x))
         
-        text_file.write("target variablet as a seperated data source : %s \n"%(para_bool_target_seperate))
+        text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
+        text_file.write("latent variable temporal dependence : %s \n"%(para_latent_dependence))
+        
         
         
         
@@ -376,6 +380,25 @@ def data_reshape(data, bool_target_seperate):
     return tmpx, np.expand_dims(tmpy, -1)
 
 
+def aggregate_target_delta_mins(data, delta = 5):
+    
+    # shape of data: [y, timestamp, [[T D], [T D], ...]]
+    
+    vol_min_delta = [tmp_inst[0] for tmp_inst in data]
+    
+    for i in range(0, len(vol_min_delta) - delta):
+        
+        vol_min_delta[i] = sum(vol_min_delta[i:i + delta])
+
+    tmp_data = []
+    
+    # drop the last delta instancs due to the sum() above
+    for i in range(0, len(data) - delta):
+        tmp_data.append([vol_min_delta[i], data[i][1] , data[i][2]])
+        
+    return tmp_data    
+        
+
 # ----- main process  
 
 if __name__ == '__main__':
@@ -392,6 +415,15 @@ if __name__ == '__main__':
     tr_dta = pickle.load(open(path_data + 'train.p', "rb"), encoding='latin1')
     val_dta = pickle.load(open(path_data + 'val.p', "rb"), encoding='latin1')
     ts_dta = pickle.load(open(path_data + 'test.p', "rb"), encoding='latin1')
+    
+    print(len(tr_dta), len(val_dta), len(ts_dta))
+    
+    '''
+    # -- 5 minu. 
+    tr_dta = aggregate_target_delta_mins(tr_dta, delta = 5)
+    val_dta = aggregate_target_delta_mins(val_dta, delta = 5)
+    ts_dta = aggregate_target_delta_mins(ts_dta, delta = 5)
+    '''
     
     # output from the reshape 
     # y [N 1], x [S N T D]    

@@ -14,7 +14,7 @@ from utils_libs import *
 # np.random.seed(1)
 # tf.set_random_seed(1)
 
-# ---- utilities functions ----
+# ----- utilities functions -----
 
 def linear(x, 
            dim_x, 
@@ -34,20 +34,19 @@ def linear(x,
         else:
             h = tf.matmul(x, w)
            
-        #l2
-        regularizer = tf.reduce_sum(tf.square(w))
-           
-           # [B]
-    return tf.squeeze(h), regularizer
+           # [B]          l2: regularization
+    return tf.squeeze(h), tf.reduce_sum(tf.square(w))
+
 
 def bilinear(x, 
              shape_x, 
              scope,
-             bool_bias):
+             bool_bias,
+             bool_scope_reuse):
     
     # shape of x: [b, l, r]
     # shape_x: [l, r]
-    with tf.variable_scope(scope):
+    with tf.variable_scope(scope, reuse = bool_scope_reuse):
         
         w_l = tf.get_variable('w_left', 
                               [shape_x[0], 1],
@@ -71,7 +70,7 @@ def bilinear(x,
     return tf.squeeze(h), tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r)) 
 
 
-# ---- Mixture linear ----
+# ----- Mixture linear -----
 
 class mixture_statistic():
     
@@ -112,7 +111,9 @@ class mixture_statistic():
                     bool_bilinear,
                     distr_type, 
                     bool_regu_positive_mean,
-                    bool_regu_gate):
+                    bool_regu_gate,
+                    bool_regu_global_gate,
+                    latent_dependence):
         
         '''
         Args:
@@ -150,11 +151,11 @@ class mixture_statistic():
         
         # bool_hidden_depen
         
-        # ---- fix the random seed to reproduce the results
+        # ----- fix the random seed to reproduce the results
         np.random.seed(1)
         tf.set_random_seed(1)
         
-        # ---- ini
+        # ----- ini
         
         # build the network graph 
         self.lr = lr
@@ -166,18 +167,34 @@ class mixture_statistic():
         # initialize placeholders
         self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
         
-        # ph: placeholder 
+        # ph: placeholder
+        # shape: [C B T D]
         self.x_ph_list = []
         
         for i in range(self.num_compt):
             self.x_ph_list.append(tf.placeholder(tf.float32, [None, steps_x_list[i], dim_x_list[i]], name = 'x' + str(i)))
-            
         
-        # ---- prediction of individual models
+        
+        # for regularization
+        # [1 C]
+        self.global_logits = tf.get_variable('global_logits', 
+                                             [1, self.num_compt],
+                                             initializer = tf.contrib.layers.xavier_initializer())
+        
+        
+        # [C B T-1 D]
+        pre_x = [tf.slice(self.x_ph_list[i], [0, 0, 0], [-1, steps_x_list[i]-1, -1]) for i in range(self.num_compt)]
+        # [C B T-1 D]
+        curr_x = [tf.slice(self.x_ph_list[i], begin = [0, 1, 0], size = [-1, steps_x_list[i]-1, -1]) for i in range(self.num_compt)]
+        
+        # ----- models on individual component
         
         mean_list = []
         var_list = []
+        
         logit_list = []
+        pre_logit_list = []
+        curr_logit_list = []
         
         regu_mean = 0.0
         regu_var = 0.0
@@ -191,18 +208,38 @@ class mixture_statistic():
                 tmp_mean, tmp_regu_mean = bilinear(self.x_ph_list[i], 
                                                    [steps_x_list[i], dim_x_list[i]], 
                                                    'mean' + str(i), 
-                                                   bool_bias = True)
+                                                   bool_bias = True,
+                                                   bool_scope_reuse = False)
                 
                 tmp_var, tmp_regu_var = bilinear(self.x_ph_list[i], 
                                                  [steps_x_list[i], dim_x_list[i]], 
                                                  'var' + str(i), 
-                                                 bool_bias = True)
+                                                 bool_bias = True,
+                                                 bool_scope_reuse = False)
                 
-                tmp_logit, tmp_regu_gate = bilinear(self.x_ph_list[i],
-                                                    [steps_x_list[i], dim_x_list[i]], 
-                                                    'gate' + str(i),
-                                                    bool_bias = True)
-            
+                if latent_dependence != "none":
+                    
+                    #[B]
+                    tmp_pre_logit, tmp_regu_gate = bilinear(pre_x[i],
+                                                            [steps_x_list[i]-1, dim_x_list[i]], 
+                                                            'gate' + str(i),
+                                                            bool_bias = True,
+                                                            bool_scope_reuse = False)
+                    #[B]
+                    tmp_curr_logit, _ = bilinear(curr_x[i],
+                                                 [steps_x_list[i]-1, dim_x_list[i]], 
+                                                 'gate' + str(i),
+                                                 bool_bias = True, 
+                                                 bool_scope_reuse = True)
+                    
+                    
+                else:
+                    tmp_logit, tmp_regu_gate = bilinear(self.x_ph_list[i],
+                                                        [steps_x_list[i], dim_x_list[i]], 
+                                                        'gate' + str(i),
+                                                        bool_bias = True,
+                                                        bool_scope_reuse = False)
+                
             
             else:
                 
@@ -226,24 +263,66 @@ class mixture_statistic():
             # [C B]
             mean_list.append(tmp_mean)
             var_list.append(tf.square(tmp_var))
-            logit_list.append(tmp_logit)
             
+            if latent_dependence != "none":
+                
+                # [C B]
+                pre_logit_list.append(tmp_pre_logit)
+                curr_logit_list.append(tmp_curr_logit)
+                
+            else:    
+                logit_list.append(tmp_logit)
+                
             regu_mean += tmp_regu_mean
             regu_var += tmp_regu_var
             regu_gate += tmp_regu_gate
-            
-        # concatenate individual means and variance
+        
+        
+        # -- individual means and variance
         # [B C]
         mean_stack = tf.stack(mean_list, axis = 1)
         var_stack = tf.stack(var_list, 1)
         inv_var_stack = tf.stack(var_list, 1)
+        
+        # -- gates
+        if latent_dependence == "constant":
             
-        # [B C]
-        self.logit = tf.stack(logit_list, 1)
-        self.gates = tf.nn.softmax(self.logit, axis = -1)
+            # [B C]
+            pre_logit = tf.stack(pre_logit_list, 1)
+            curr_logit = tf.stack(curr_logit_list, 1)
+            
+            w_logit = tf.get_variable('w_logit', [], initializer = tf.contrib.layers.xavier_initializer())
+            
+            logit_weight = tf.sigmoid(tf.square(w_logit)*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True))
+            
+            self.logits = logit_weight*curr_logit + (1.0 - logit_weight)*pre_logit
+            
+        elif latent_dependence == "weight":
+            
+            # [B C]
+            pre_logit = tf.stack(pre_logit_list, 1)
+            curr_logit = tf.stack(curr_logit_list, 1)
+            
+            w_logit = tf.get_variable('w_logit', [self.num_compt, 1], initializer = tf.contrib.layers.xavier_initializer())
+            
+            logit_weight = tf.sigmoid(tf.matmul(curr_logit - pre_logit, w_logit))
+            
+            self.logits = logit_weight*curr_logit + (1.0 - logit_weight)*pre_logit
         
         
-        # ---- regularization
+        elif latent_dependence == "none":
+            
+            # [B C]
+            self.logits = tf.stack(logit_list, 1)
+        
+        self.gates = tf.nn.softmax(self.logits, axis = -1)
+        
+        
+        # ----- regularization
+        
+        self.regularization = 0
+        self.regu_var = regu_var 
+        self.regu_mean = regu_mean         
         
         # temporal coherence, diversity 
         # gate smoothness 
@@ -252,24 +331,29 @@ class mixture_statistic():
         # mean diversity
         
         # ? mean non-negative ? 
-        # regu_mean_pos = tf.reduce_sum( tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x) )
+        # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
         
-        self.regularization = l2*regu_mean
-        self.regu_var = regu_var 
         
-        # activation and hinge regularization 
+        # -- non-negative hinge regularization 
         if bool_regu_positive_mean == True:
-            self.regularization += 0.1*l2*regu_mean_pos
-            
+            self.regularization += regu_mean_pos
+        
+        # -- weights in gates    
         if bool_regu_gate == True:
-            self.regularization += 0.1*l2*regu_gate
-            
-            
-        # ---- negative log likelihood 
+            self.regularization += regu_gate
         
-
-
         
+        # -- logits, implicitly on weights of gate functions
+        
+        if bool_regu_global_gate == True:
+            #                                        [B C]        [1 C]
+            logits_diff_sq = tf.reduce_sum(tf.square(self.logits - self.global_logits), 1)
+            regu_global_logits = tf.reduce_sum(logits_diff_sq) + tf.nn.l2_loss(self.global_logits)
+            
+            self.regularization += regu_global_logits
+        
+        # ----- negative log likelihood 
+                
         # lk    
         # [B C]
         tmpllk_indi_hetero = tf.exp(-0.5*tf.square(self.y - mean_stack)/(var_stack + 1e-5))/(2.0*np.pi*(var_stack + 1e-5))**0.5
@@ -291,8 +375,18 @@ class mixture_statistic():
         llk_const = tf.multiply(tmpllk_indi_const, self.gates) 
         self.nllk_const = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(llk_const, axis = -1) + 1e-5))
         
+        # ELBO
+        # evidence lower bound optimization
+        # based on lk_inv
         
-        # ---- prediction 
+        # [B C]
+        tmpllk_indi_hetero_inv = tf.exp(-0.5*tf.square(self.y - mean_stack)*inv_var_stack)*(0.5/np.pi*inv_var_stack)**0.5
+            
+        llk_hetero_inv = tf.multiply(tmpllk_indi_hetero_inv, self.gates) 
+        self.nllk_hetero_inv = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(llk_hetero_inv, axis = -1) + 1e-5))
+        
+        
+        # ----- prediction 
         
         if distr_type == 'gaussian':
             
@@ -349,17 +443,17 @@ class mixture_statistic():
         # loss, nllk
         if self.loss_type == 'mse':
             
-            self.loss = tf.reduce_mean(tf.square(self.y - self.py)) + self.regularization
+            self.loss = tf.reduce_mean(tf.square(self.y - self.py)) + 0.1*self.l2*self.regularization + self.l2*self.regu_mean
             self.nllk = self.nllk_const
         
         elif self.loss_type == 'lk_inv':
             
-            self.loss = self.nllk_hetero_inv + self.regularization + 0.1*self.l2*self.regu_var
+            self.loss = self.nllk_hetero_inv + 0.1*self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
             self.nllk = self.nllk_hetero_inv
             
         elif self.loss_type == 'lk':
             
-            self.loss = self.nllk_hetero + self.regularization + 0.1*self.l2*self.regu_var
+            self.loss = self.nllk_hetero + 0.1*self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
             self.nllk = self.nllk_hetero
             
         else:
@@ -377,10 +471,18 @@ class mixture_statistic():
     def train_batch(self, x_list, y):
         
         data_dict = {}
+        
+        '''
         for idx, i in enumerate(self.x_ph_list):
             data_dict[i] = x_list[idx]
+        '''    
+            
+        for idx in range(self.num_compt):
+            data_dict["x" + str(idx) + ":0"] = x_list[idx]
         
-        data_dict[self.y] = y
+        data_dict['y:0'] = y
+        
+        #data_dict[self.y] = y
         
         _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
                                                 feed_dict = data_dict)
@@ -406,11 +508,12 @@ class mixture_statistic():
         
         self.mape = tf.reduce_mean(tf.abs((y_mask - y_hat_mask)/(y_mask + 1e-10)))
         
-        # nnllk: normalized negative log likelihood by the number of data samples
+        # NNLLK 
+        # nnllk - normalized negative log likelihood by the number of data samples
         self.nnllk = self.nllk / tf.to_float(tf.shape(self.x_ph_list[0])[0])
         
         
-        # for pre-trained models
+        # for restored models
         tf.add_to_collection("rmse", self.rmse)
         tf.add_to_collection("mae", self.mae)
         tf.add_to_collection("mape", self.mape)
