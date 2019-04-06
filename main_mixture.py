@@ -64,21 +64,24 @@ para_batch_size = 64
 para_n_epoch = 90
 
 para_distr_type = 'gaussian'
-para_loss_type = 'lk'
+para_loss_type = 'pre_mix_inv'
 
 para_regu_positive = False
-para_regu_gate = True
+para_regu_gate = False
 para_regu_global_gate = False
 
 para_bool_target_seperate = False
 para_latent_dependence = "weight"
 
+para_validation_metric = 'rmse'
+para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
+
 # epoch sample
-para_val_epoch_num = max(1, int(0.05 * para_n_epoch))
+para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
 
-para_lr_range = [0.005,]
-para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.1]
+para_lr_range = [0.005, ]
+para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
 #1e-7, 0.000001, 0.00001, 0.0001, 0.001,
 
 # ----- training and evalution
@@ -234,7 +237,8 @@ def train_validate(xtr,
 
 def hyper_para_selection(hpara_log, 
                          val_epoch_num, 
-                         test_epoch_num):
+                         test_epoch_num,
+                         metric_idx):
     
     # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
     
@@ -242,7 +246,7 @@ def hyper_para_selection(hpara_log,
     
     for hp_epoch_err in hpara_log:
         
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[3] for k in hp_epoch_err[1][:val_epoch_num]])])
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_epoch_num]])])
     
     #print(hp_err)
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
@@ -307,12 +311,12 @@ def log_train(path):
     with open(path, "a") as text_file:
         
         text_file.write("\n\n ------ Statistic mixture : \n")
-        text_file.write("loss type: %s \n"%(para_loss_type))
-        text_file.write("target distribution type: %s \n"%(para_distr_type))
-        text_file.write("bi-linear: %s \n"%(para_bool_bilinear))
-        text_file.write("regularization on positive means: %s \n"%(para_regu_positive))
-        text_file.write("regularization on mixture gates: %s \n"%(para_regu_gate))
-        text_file.write("regularization by global gate: %s \n"%(para_regu_global_gate))
+        text_file.write("loss type : %s \n"%(para_loss_type))
+        text_file.write("target distribution type : %s \n"%(para_distr_type))
+        text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
+        text_file.write("regularization on positive means : %s \n"%(para_regu_positive))
+        text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
+        text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
         
         text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
         text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
@@ -324,10 +328,7 @@ def log_train(path):
         text_file.write("feature dimensionality of each data source : %s \n"%(para_dim_x))
         
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
-        text_file.write("latent variable temporal dependence : %s \n"%(para_latent_dependence))
-        
-        
-        
+        text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
         
         text_file.write("\n\n")
         
@@ -494,8 +495,8 @@ if __name__ == '__main__':
     
     best_lr, best_l2, epoch_sample, best_val_err = hyper_para_selection(hpara_log, 
                                                                         val_epoch_num = para_val_epoch_num, 
-                                                                        test_epoch_num = para_test_epoch_num)
-    
+                                                                        test_epoch_num = para_test_epoch_num,
+                                                                        metric_idx = para_metric_map[para_validation_metric])
     
     print('\n----- Best hyper-parameters: ', best_lr, best_l2, epoch_sample, best_val_err, '\n')
         

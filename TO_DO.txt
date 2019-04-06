@@ -4,6 +4,16 @@ statistic mixture
 
 gate logit central regularization
 
+no dependency on hiddens
+markov for statistic version
+
+ELBO
+  
+validation metric
+cut the data on one time step
+
+
+
 --------------- TO DO -------------------
 
 
@@ -38,8 +48,6 @@ Uncertainty-Aware Attention for Reliable Interpretation and Prediction
 -- ml on single source
 -- ml on multi source 
    
-   cut the data on one time step
-   
    Gradient boosted tree
    LightGBM
    Random forest
@@ -51,8 +59,6 @@ Uncertainty-Aware Attention for Reliable Interpretation and Prediction
 server config 
 
 *hidden transition
-  no dependency on hiddens
-  markov for statistic version
   moving averaging for neural network version 
 
 *Regularization:
@@ -60,7 +66,7 @@ server config
   output wrapper positive
 
 *EM training
- ELBO
+*inference 
 
 
 neural mixture

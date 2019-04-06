@@ -14,15 +14,6 @@ from scipy import *
 import itertools
 import random
 
-# machine leanring packages
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import precision_recall_fscore_support as score
-from sklearn.decomposition import NMF
-from sklearn.externals import joblib
-from sklearn.decomposition import *
-
 import datetime
 import requests
 
