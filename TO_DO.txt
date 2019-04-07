@@ -12,6 +12,7 @@ ELBO
 validation metric
 cut the data on one time step
 
+Bayesian regression
 
 
 --------------- TO DO -------------------
@@ -72,10 +73,9 @@ server config
 neural mixture
 
   cnn + lstm
-  dual lk
+  dual rnn
 
-  lstm + att lk 
-  temporal mixture lk
+  lstm + att lk
 
 
 ----- bayesian
@@ -85,9 +85,6 @@ SG-VI
 SG-LD
 SG-MCMC
 
-Bayesian linear mixture 
-
-Bayesian regression
 mc-dropout
    
 Random forest 

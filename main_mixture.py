@@ -19,7 +19,6 @@ import json
 from utils_libs import *
 from mixture import *
 
-
 # ----- hyper-parameters from command line
 
 import argparse
@@ -31,6 +30,7 @@ args = parser.parse_args()
 print(args) 
 
 method_str = args.model
+
 
 # ----- hyper-parameters from config
 
@@ -64,14 +64,16 @@ para_batch_size = 64
 para_n_epoch = 90
 
 para_distr_type = 'gaussian'
-para_loss_type = 'pre_mix_inv'
+para_loss_type = 'lk'
 
 para_regu_positive = False
 para_regu_gate = False
 para_regu_global_gate = False
 
 para_bool_target_seperate = False
-para_latent_dependence = "weight"
+
+para_latent_dependence = "independent"
+para_latent_prob_type = "none"
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -143,7 +145,9 @@ def train_validate(xtr,
                           bool_regu_positive_mean = para_regu_positive,
                           bool_regu_gate = para_regu_gate, 
                           bool_regu_global_gate = para_regu_global_gate, 
-                          latent_dependence = para_latent_dependence)
+                          latent_dependence = para_latent_dependence,
+                          latent_prob_type = para_latent_prob_type)
+
         
         model.train_ini()
         model.inference_ini()
@@ -193,7 +197,6 @@ def train_validate(xtr,
                 epoch_sq_err += tmp_sq_err
             
             
-            
             # -- epoch-wise evaluation
             
             # nnllk: normalized negative log likelihood
@@ -221,7 +224,6 @@ def train_validate(xtr,
                 saver.save(sess, path_model + method_str + '_' + str(epoch))
                 print("\n    [MODEL SAVED] \n")
             
-            
         print("Optimization Finished!")
         
         # reset the model
@@ -248,12 +250,10 @@ def hyper_para_selection(hpara_log,
         
         hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_epoch_num]])])
     
-    #print(hp_err)
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
     # -- print out for checking
     print([(i[0], i[-1]) for i in sorted_hp])
-    
     
     # best hp1, best hp2, epoch_sample, best validation error
     return sorted_hp[0][0][0],\
@@ -314,6 +314,7 @@ def log_train(path):
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("target distribution type : %s \n"%(para_distr_type))
         text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
+        
         text_file.write("regularization on positive means : %s \n"%(para_regu_positive))
         text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
         text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
@@ -329,6 +330,10 @@ def log_train(path):
         
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
         text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
+        text_file.write("latent dependence probability type : %s \n"%(para_latent_prob_type))
+        text_file.write("latent dependence as a regularization : %s \n"%(True if para_latent_prob_type != "none" else False))
+        
+        text_file.write("validation metric : %s \n"%(para_validation_metric))
         
         text_file.write("\n\n")
         
@@ -349,6 +354,7 @@ def log_test(path, error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
+        
     
 def data_reshape(data, bool_target_seperate):
     
@@ -404,11 +410,9 @@ def aggregate_target_delta_mins(data, delta = 5):
 
 if __name__ == '__main__':
     
-    
     # fix random seed
     np.random.seed(1)
     tf.set_random_seed(1)
-    
     
     # ----- data
     
@@ -442,14 +446,14 @@ if __name__ == '__main__':
     print(len(val_x[0]), len(val_y))
     print(len(ts_x[0]), len(ts_y))
     
-    
+    # steps and dimensionality of each source
     for tmp_src in range(len(tr_x)):
         tmp_shape = np.shape(tr_x[tmp_src][0])
         
         para_steps_x.append(tmp_shape[0])
         para_dim_x.append(tmp_shape[1])
+        
 
-    
     # ----- training and validation
     
     log_train(path_log_error)
@@ -475,8 +479,6 @@ if __name__ == '__main__':
                                                            retrain_bool = False, 
                                                            retrain_best_val_err = 0.0)
             
-            
-                
             hpara_log.append([[tmp_lr, tmp_l2], hp_epoch_error])
             
             print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
@@ -489,7 +491,6 @@ if __name__ == '__main__':
                                hpara_error = hpara_log[-1][1][0],
                                train_time = 1.0*hp_epoch_time/para_n_epoch)
                            
-            
     
     # ----- re-train
     
