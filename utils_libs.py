@@ -15,6 +15,6 @@ import itertools
 import random
 
 import datetime
-import requests
+#import requests
 
 import glob, os

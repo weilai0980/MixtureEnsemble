@@ -4,16 +4,15 @@ import sys
 import os
 
 import numpy as np
-
-import tensorflow as tf
-from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
-from tensorflow.contrib import rnn
-
 import random
 from random import shuffle
 
 import time
 import json
+
+import tensorflow as tf
+from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
+from tensorflow.contrib import rnn
 
 # local packages 
 from utils_libs import *
@@ -25,7 +24,8 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model', '-m', help = "model", type = str, default = 'statistic')
- 
+parser.add_argument('--latent_prob_type', '-t', help = "latent_prob_type", type = str, default = "none")
+   
 args = parser.parse_args()
 print(args) 
 
@@ -47,7 +47,7 @@ para_step_ahead = 0
 
 
 # ----- log paths
-path_data = "../dataset/bitcoin/double_trx/"
+path_data = "../dataset/bitcoin/double_trx_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
@@ -73,7 +73,8 @@ para_regu_global_gate = False
 para_bool_target_seperate = False
 
 para_latent_dependence = "independent"
-para_latent_prob_type = "none"
+para_latent_prob_type = args.latent_prob_type
+#"none"
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -84,7 +85,6 @@ para_test_epoch_num = 1
 
 para_lr_range = [0.005, ]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
-#1e-7, 0.000001, 0.00001, 0.0001, 0.001,
 
 # ----- training and evalution
     

@@ -238,7 +238,7 @@ class mixture_statistic():
                     
                     #[B]
                     tmp_pre_logit, _ = bilinear(pre_x[i],
-                                                [steps_x_list[i] - 1, dim_x_list[i]],
+                                                [steps_x_list[i]-1, dim_x_list[i]],
                                                 'gate' + str(i),
                                                 bool_bias = True,
                                                 bool_scope_reuse = True)
@@ -400,7 +400,7 @@ class mixture_statistic():
             
             # regu? 
             
-            # [B 1]                        [B C]                    [C 1]
+            # [B 1]                            [B C]                    [C 1]
             latent_prob_logits = tf.matmul(curr_logit - pre_logit, w_logit)
             
             # [B 1]                                                            
@@ -451,7 +451,11 @@ class mixture_statistic():
         
         # -- latent_dependence
         
-        if latent_dependence == "independent":
+        if latent_dependence == "markov":
+            
+            gate_logits = latent_prob*curr_logit + (1.0 - latent_prob)*pre_logit
+            
+        elif latent_dependence == "independent":
             
             # [B C]
             pre_logit = tf.stack(pre_logit_list, 1)
@@ -465,11 +469,6 @@ class mixture_statistic():
             
             # [B C]
             gate_logits = tf.stack(logit_list, 1)
-            
-        elif latent_dependence == "markov":
-            
-            # ??
-            gate_logits = (1.0 - latent_prob)*curr_logit + latent_prob*pre_logit    
             
         
         self.gates = tf.nn.softmax(gate_logits, axis = -1)
@@ -553,6 +552,7 @@ class mixture_statistic():
         self.regu_var = regu_var 
         self.regu_mean = regu_mean         
         
+        # temporal coherence, diversity 
         # gate smoothness 
         # gate diversity
         
@@ -570,17 +570,15 @@ class mixture_statistic():
         if latent_prob_type != "none":
             
             # [B 1]
-            # ! numertical stable version of log(sigmoid())
-            self.regularization += (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
-                                                  + tf.maximum(0.0, -1.0*latent_prob_logits))) 
+            self.regularization += tf.reduce_sum(tf.log(1.0 + tf.exp(-1*tf.abs(latent_prob_logits))))
             
+        
         # -- weights in gates    
         if bool_regu_gate == True:
             self.regularization += regu_gate
         
         
-        # -- global logits
-        # implicitly regularization on weights of gate functions
+        # -- logits, implicitly on weights of gate functions
         
         if bool_regu_global_gate == True:
             #                                        [B C]        [1 C]
@@ -640,7 +638,6 @@ class mixture_statistic():
         
         # variance inverse
         # [B]
-        # self.py_var is inversed
         tmp_nllk_mix_inv = 0.5*tf.square(self.y - self.py_mean)*self.py_var - 0.5*tf.log(self.py_var + 1e-5)\
                            + 0.5*tf.log(2*np.pi)
             
@@ -669,7 +666,7 @@ class mixture_statistic():
         elif self.loss_type == 'lk':
             
             # ?
-            self.loss = self.nllk_hetero + 0.1*self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
+            self.loss = self.nllk_hetero + self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
             self.nllk = self.nllk_hetero
         
         
