@@ -1,15 +1,16 @@
 #!/bin/bash
 
-python3 main_mixture.py -t "constant"
+python3 main_mixture.py -t "none" -d "none" -g 6
 
-python3 main_mixture.py -t "scalar"
+python3 main_mixture.py -t "none" -d "independent" -g 6
 
-python3 main_mixture.py -t "vector_diff"
+python3 main_mixture.py -t "constant_diff_sq" -d "markov" -g 6
 
-python3 main_mixture.py -t "vector_dense"
+python3 main_mixture.py -t "scalar_diff_sq" -d "markov" -g 6
 
+python3 main_mixture.py -t "vector_diff_sq" -d "markov" -g 6
 
-
+python3 main_mixture.py -t "pos_neg_diff_sq" -d "markov" -g 6
 
 
 

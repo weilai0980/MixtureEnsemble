@@ -1,9 +1,7 @@
 #!/usr/bin/python
 
 import numpy as np
-
 import tensorflow as tf
-from tensorflow.contrib import rnn
 
 # local packages
 from utils_libs import *
@@ -27,7 +25,9 @@ def linear(x,
                             [dim_x, 1],
                             initializer = tf.contrib.layers.xavier_initializer())
         
-        b = tf.Variable(tf.zeros([1,])) 
+        b = tf.get_variable("b", 
+                            shape = [1,], 
+                            initializer = tf.zeros_initializer())
         
         if bool_bias == True:
             h = tf.matmul(x, w) + b
@@ -57,7 +57,9 @@ def bilinear(x,
                               [shape_x[1], 1],
                               initializer = tf.contrib.layers.xavier_initializer())
         
-        b = tf.Variable(tf.zeros([1,]))
+        b = tf.get_variable("b", 
+                            shape = [1,], 
+                            initializer = tf.zeros_initializer())
         
         tmph = tf.tensordot(x, w_r, 1)
         tmph = tf.squeeze(tmph, [2])
@@ -78,7 +80,7 @@ class mixture_statistic():
     def __init__(self, 
                  session, 
                  loss_type,
-                 num_compt):
+                 num_src):
         
         '''
         Args:
@@ -100,7 +102,7 @@ class mixture_statistic():
         self.distr_type = ''
         
         # number of components or sources in X
-        self.num_compt = num_compt
+        self.num_src = num_src
         
 
     def network_ini(self, 
@@ -114,8 +116,10 @@ class mixture_statistic():
                     bool_regu_positive_mean,
                     bool_regu_gate,
                     bool_regu_global_gate,
+                    bool_regu_latent_dependence,
                     latent_dependence,
-                    latent_prob_type):
+                    latent_prob_type,
+                    var_type):
         
         '''
         Arguments:
@@ -144,7 +148,7 @@ class mixture_statistic():
         
         latent_prob_type: string, probability calculation of latent logits, "none", "scalar", "vector", "matrix"
                     
-                    
+        var_type: square or exponential            
         
         '''
 
@@ -155,7 +159,7 @@ class mixture_statistic():
         #   const: constant
         #   indi: individual
         #   py: predicted y
-        #   compt: component
+        #   src: source
         
         
         # ----- fix the random seed to reproduce the results
@@ -173,27 +177,28 @@ class mixture_statistic():
         self.distr_type = distr_type
         
         # initialize placeholders
+        
         self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
         
         # ph: placeholder
         # shape: [C B T D]
         self.x_ph_list = []
         
-        for i in range(self.num_compt):
+        for i in range(self.num_src):
             self.x_ph_list.append(tf.placeholder(tf.float32, [None, steps_x_list[i], dim_x_list[i]], name = 'x' + str(i)))
         
         
         # for regularization
         # [1 C]
         self.global_logits = tf.get_variable('global_logits', 
-                                             [1, self.num_compt],
+                                             [1, self.num_src],
                                              initializer = tf.contrib.layers.xavier_initializer())
         
         
         # [C B T-1 D]
-        pre_x = [tf.slice(self.x_ph_list[i], [0, 0, 0], [-1, steps_x_list[i]-1, -1]) for i in range(self.num_compt)]
+        pre_x = [tf.slice(self.x_ph_list[i], [0, 0, 0], [-1, steps_x_list[i]-1, -1]) for i in range(self.num_src)]
         # [C B T-1 D]
-        curr_x = [tf.slice(self.x_ph_list[i], [0, 1, 0], size = [-1, steps_x_list[i]-1, -1]) for i in range(self.num_compt)]
+        curr_x = [tf.slice(self.x_ph_list[i], [0, 1, 0], [-1, steps_x_list[i]-1, -1]) for i in range(self.num_src)]
         
         
         # ----- individual models
@@ -209,7 +214,7 @@ class mixture_statistic():
         regu_var = 0.0
         regu_gate = 0.0
         
-        for i in range(self.num_compt):
+        for i in range(self.num_src):
             
             if bool_bilinear == True:
                 
@@ -242,7 +247,6 @@ class mixture_statistic():
                                                 'gate' + str(i),
                                                 bool_bias = True,
                                                 bool_scope_reuse = True)
-                    
                     
                     
                 else:
@@ -329,9 +333,15 @@ class mixture_statistic():
             
             # [C B]
             mean_list.append(tmp_mean)
-            # square
-            var_list.append(tf.square(tmp_var))
             
+            if var_type == "square":
+                # square
+                var_list.append(tf.square(tmp_var))
+            
+            elif var_type == "exp":
+                var_list.append(tf.exp(tmp_var))
+                
+                
             if latent_dependence != "none" :
                 
                 # [C B]
@@ -357,101 +367,137 @@ class mixture_statistic():
         
         # -- probability of latent logits
         
-        if latent_dependence != "none" and latent_prob_type == "constant":
+        if latent_dependence == "markov":
             
-            # [B C]
-            pre_logit = tf.stack(pre_logit_list, 1)
-            curr_logit = tf.stack(curr_logit_list, 1)
-            
-            # ?
-            latent_prob_logits = -1.0*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
-            
-            # [B 1]
-            latent_prob = tf.sigmoid(latent_prob_logits)
+            # [B S]
+            pre_logit = tf.transpose(tmp_pre_logit, [1, 0])
+            curr_logit = tf.transpose(tmp_curr_logit, [1, 0])
+             
         
-        elif latent_dependence != "none" and latent_prob_type == "scalar":
+            if latent_prob_type == "constant_diff_sq":
+                
+                # ?
+                latent_prob_logits = tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
             
-            # [B C]
-            pre_logit = tf.stack(pre_logit_list, 1)
-            curr_logit = tf.stack(curr_logit_list, 1)
+                # [B 1]
+                #latent_prob = tf.sigmoid(latent_prob_logits)
+                
+                regu_latent_dependence = 0.0
+        
+            elif latent_prob_type == "scalar_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [],
+                                          initializer = tf.contrib.layers.xavier_initializer())
             
-            # ?
-            # [1]
-            w_logit = tf.get_variable('w_logit',
-                                      [],
-                                      initializer = tf.contrib.layers.xavier_initializer())
+                latent_prob_logits = w_logit*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
             
-            latent_prob_logits = -1.0*tf.square(w_logit)*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
+                # [B 1]
+                #latent_prob = tf.sigmoid(latent_prob_logits)
+                
+                regu_latent_dependence = tf.square(w_logit) 
             
-            # [B 1]
-            latent_prob = tf.sigmoid(latent_prob_logits)
+            elif latent_prob_type == "vector_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [self.num_src, 1],
+                                          initializer = tf.contrib.layers.xavier_initializer())
             
+                # regu?
             
-        elif latent_dependence != "none" and latent_prob_type == "vector_diff":
+                latent_prob_logits = tf.matmul(tf.square(curr_logit - pre_logit), w_logit)
             
-            # [B C]
-            pre_logit = tf.stack(pre_logit_list, 1)
-            curr_logit = tf.stack(curr_logit_list, 1)
-            
-            # [C 1]
-            w_logit = tf.get_variable('w_logit',
-                                      [self.num_compt, 1], 
-                                      initializer = tf.contrib.layers.xavier_initializer())
-            
-            # regu? 
-            
-            # [B 1]                        [B C]                    [C 1]
-            latent_prob_logits = tf.matmul(curr_logit - pre_logit, w_logit)
-            
-            # [B 1]                                                            
-            latent_prob = tf.sigmoid(latent_prob_logits)
-            
-        elif latent_dependence != "none" and latent_prob_type == "vector_dense":
-            
-            # [B C]
-            pre_logit = tf.stack(pre_logit_list, 1)
-            curr_logit = tf.stack(curr_logit_list, 1)
-            
-            # [C 1]
-            w_logit = tf.get_variable('w_logit',
-                                      [self.num_compt*2, 1], 
-                                      initializer = tf.contrib.layers.xavier_initializer())
-            
-            # regu? 
-            
-            # [B 1]                            [B 2C]                    [2C 1]
-            latent_prob_logits = tf.matmul(tf.concat([curr_logit, pre_logit], 1), w_logit)
-            
-            # [B 1]                                                            
-            latent_prob = tf.sigmoid(latent_prob_logits)
+                # [B 1]
+                #latent_prob = tf.sigmoid(latent_prob_logits)
+                
+                
+                regu_latent_dependence = tf.square(w_logit) 
             
             
-        elif latent_dependence != "none" and latent_prob_type == "matrix":
+            '''
             
-            # [B C]
-            pre_logit = tf.stack(pre_logit_list, 1)
-            curr_logit = tf.stack(curr_logit_list, 1)
+            elif latent_prob_type == "pos_scalar_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [],
+                                          initializer = tf.contrib.layers.xavier_initializer())
             
-            # [C C]
-            w_logit = tf.get_variable('w_logit',
-                                      [self.num_compt, self.num_compt],
-                                      initializer = tf.contrib.layers.xavier_initializer())
+                latent_prob_logits = 1.0*tf.square(w_logit)*tf.reduce_sum(tf.square(curr_logit-pre_logit), 1, keep_dims = True)
             
-            # [B C]                             [B C]                  [C C]                                      
-            latent_prob_logits = tf.matmul(curr_logit - pre_logit, w_logit)
+                # [B 1]
+                latent_prob = tf.sigmoid(latent_prob_logits)
             
-            # [B 1]                                                            
-            latent_prob = tf.sigmoid(latent_prob_logits)
+            
+            elif latent_prob_type == "neg_scalar_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [],
+                                          initializer = tf.contrib.layers.xavier_initializer())
+            
+                latent_prob_logits = -1.0*tf.square(w_logit)*tf.reduce_sum(tf.square(curr_logit-pre_logit),1,keep_dims = True)
+            
+                # [B 1]
+                latent_prob = tf.sigmoid(latent_prob_logits) 
+            
+            
+            elif latent_prob_type == "vector_diff":
+            
+                # [C 1]
+                w_logit = tf.get_variable('w_logit',
+                                          [self.num_src, 1], 
+                                          initializer = tf.contrib.layers.xavier_initializer())
+            
+                # regu? 
+            
+                # [B 1]                        [B C]                    [C 1]
+                latent_prob_logits = tf.matmul(curr_logit - pre_logit, w_logit)
+            
+                # [B 1]                                                            
+                latent_prob = tf.sigmoid(latent_prob_logits)
+            
+            elif latent_prob_type == "vector_dense":
+            
+                # [C 1]
+                w_logit = tf.get_variable('w_logit',
+                                          [self.num_src*2, 1], 
+                                          initializer = tf.contrib.layers.xavier_initializer())
+            
+                # regu? 
+            
+                # [B 1]                            [B 2C]                    [2C 1]
+                latent_prob_logits = tf.matmul(tf.concat([curr_logit, pre_logit], 1), w_logit)
+            
+                # [B 1]                                                            
+                latent_prob = tf.sigmoid(latent_prob_logits)
+            
+            
+            elif latent_prob_type == "matrix":
+            
+                # [C C]
+                w_logit = tf.get_variable('w_logit',
+                                          [self.num_src, self.num_src],
+                                          initializer = tf.contrib.layers.xavier_initializer())
+            
+                # [B C]                             [B C]                  [C C]                                      
+                latent_prob_logits = tf.matmul(curr_logit - pre_logit, w_logit)
+            
+                # [B 1]                                                            
+                latent_prob = tf.sigmoid(latent_prob_logits)
         
         
-        elif latent_prob_type == "none":
+            elif latent_prob_type == "none":
             
-            latent_prob = 0.0
+                latent_prob = 0.0
+        '''
         
         
         # -- latent_dependence
         
-        if latent_dependence == "independent":
+        if latent_dependence == "independent" or latent_dependence == "markov":
             
             # [B C]
             pre_logit = tf.stack(pre_logit_list, 1)
@@ -465,14 +511,19 @@ class mixture_statistic():
             
             # [B C]
             gate_logits = tf.stack(logit_list, 1)
-            
+        
+        '''
         elif latent_dependence == "markov":
             
             # ??
             gate_logits = (1.0 - latent_prob)*curr_logit + latent_prob*pre_logit    
             
+        '''
         
         self.gates = tf.nn.softmax(gate_logits, axis = -1)
+        
+        
+        
         
         
         # ----- prediction 
@@ -482,7 +533,7 @@ class mixture_statistic():
             # -- mean
             
             # component mean
-            self.py_mean_compt = mean_stack
+            self.py_mean_src = mean_stack
             
             # mixed mean
             # [B 1]                      [B C]      [B C]
@@ -494,7 +545,7 @@ class mixture_statistic():
             if self.loss_type == 'lk':
                 
                 # component variance
-                self.py_var_compt = var_stack
+                self.py_var_src = var_stack
                 
                 sq_mean_stack = var_stack + tf.square(mean_stack)
                 # [B]                                   [B C]          [B C]
@@ -506,7 +557,7 @@ class mixture_statistic():
             elif self.loss_type == 'lk_inv' or self.loss_type == 'elbo':
                 
                 # component variance
-                self.py_var_compt = 1.0/(inv_var_stack + 1e-5)
+                self.py_var_src = 1.0/(inv_var_stack + 1e-5)
                 
                 sq_mean_stack = 1.0/(inv_var_stack + 1e-5) + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
@@ -517,7 +568,7 @@ class mixture_statistic():
             elif self.loss_type == 'mse':
                 
                 # component variance
-                self.py_var_compt = 1.0
+                self.py_var_src = 1.0
                 
                 sq_mean_stack = 1.0 + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
@@ -553,28 +604,35 @@ class mixture_statistic():
         self.regu_var = regu_var 
         self.regu_mean = regu_mean         
         
-        # gate smoothness 
-        # gate diversity
-        
-        # mean diversity
-        
         # ? mean non-negative ? 
         # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
         
         
         # -- non-negative hinge regularization 
+        
         if bool_regu_positive_mean == True:
             self.regularization += regu_mean_pos
         
+        
         # -- gate smoothing
+        
         if latent_prob_type != "none":
             
             # [B 1]
             # ! numertical stable version of log(sigmoid())
-            self.regularization += (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
-                                                  + tf.maximum(0.0, -1.0*latent_prob_logits))) 
+            self.latent_depend_regu = (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
+                                                     + tf.maximum(0.0, -1.0*latent_prob_logits))) 
             
-        # -- weights in gates    
+        else:
+            self.latent_depend_regu = 0.0
+            
+        # -- latent dependence
+        
+        if bool_regu_latent_dependence == True:
+            self.regularization += regu_latent_dependence
+            
+        # -- weights in gates
+        
         if bool_regu_gate == True:
             self.regularization += regu_gate
         
@@ -629,7 +687,7 @@ class mixture_statistic():
         
         # -- pre_mix
         
-        self.nllk_gate = -1.0*tf.reduce_sum(tf.log(latent_prob))
+        #self.nllk_gate = -1.0*tf.reduce_sum(tf.log(latent_prob))
         
         # variance
         # [B]
@@ -669,7 +727,9 @@ class mixture_statistic():
         elif self.loss_type == 'lk':
             
             # ?
-            self.loss = self.nllk_hetero + 0.1*self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
+            self.loss = self.nllk_hetero + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)\
+                        + self.latent_depend_regu
+                
             self.nllk = self.nllk_hetero
         
         
@@ -691,7 +751,7 @@ class mixture_statistic():
         elif self.loss_type == 'pre_mix_inv':
             
             # ?
-            self.loss = self.nllk_mix_inv + self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
+            self.loss = self.nllk_mix_inv + 0.1*self.l2*(self.regularization + self.regu_var) + self.l2*self.regu_mean
                         #self.nllk_gate + \
             
             self.nllk = self.nllk_mix_inv
@@ -701,19 +761,19 @@ class mixture_statistic():
         
         
         self.train = tf.train.AdamOptimizer(learning_rate = self.lr)
-        self.optimizer =  self.train.minimize(self.loss)
+        self.optimizer = self.train.minimize(self.loss)
         
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
         
         
     #   training on batch of data
-    def train_batch(self, 
-                    x_list, 
+    def train_batch(self,
+                    x_list,
                     y):
         
         data_dict = {}
-        for idx in range(self.num_compt):
+        for idx in range(self.num_src):
             data_dict["x" + str(idx) + ":0"] = x_list[idx]
         
         data_dict['y:0'] = y
@@ -758,9 +818,9 @@ class mixture_statistic():
         
     
     #   infer givn testing data
-    def inference(self, 
-                  x_list, 
-                  y, 
+    def inference(self,
+                  x_list,
+                  y,
                   bool_indi_eval):
         
         # x_list: shape [S N T D] 
@@ -769,7 +829,7 @@ class mixture_statistic():
         # rmse, mae, mape, nnllk, py_mean, py_std
         
         data_dict = {}
-        for idx in range(self.num_compt):
+        for idx in range(self.num_src):
             data_dict["x" + str(idx) + ":0"] = x_list[idx]
         
         data_dict['y:0'] = y
@@ -780,7 +840,7 @@ class mixture_statistic():
                                                 tf.get_collection('nnllk')[0]], 
                                                 feed_dict = data_dict)
         
-        # test
+        # test: for the observing during the training
         py_gate = self.sess.run([tf.get_collection('py_gate')[0]], 
                              feed_dict = data_dict)
         
@@ -797,20 +857,20 @@ class mixture_statistic():
     
     
     # collect the optimized variable values
-    def collect_coeff_values(self, 
+    def collect_coeff_values(self,
                              vari_keyword):
         
-        return [tf_var.name for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)],
-    [tf_var.eval() for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)]
+        return [tf_var.name for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)],\
+               [tf_var.eval() for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)]
     
     
     # restore the model from the files
-    def pre_train_restore_model(self, 
-                                path_meta, 
+    def pre_train_restore_model(self,
+                                path_meta,
                                 path_data):
         
         saver = tf.train.import_meta_graph(path_meta, 
-                                           clear_devices=True)
+                                           clear_devices = True)
         saver.restore(self.sess, 
                       path_data)
         

@@ -14,6 +14,14 @@ cut the data on one time step
 
 Bayesian regression
 
+server config 
+
+smoothing or adaptive 
+
+*speedup version 
+
+regularization on the latent dependence
+variance squared function 
 
 --------------- TO DO -------------------
 
@@ -26,6 +34,8 @@ Bayesian regression
 
 ----- DATA
 data inspection
+
+correlated variable elimination
 
 
 ----- baseline
@@ -55,38 +65,70 @@ Uncertainty-Aware Attention for Reliable Interpretation and Prediction
    
    XGboosted
    
+
+----- experiment plan
+
+l2 hyper-para on latent smooth 
+ 
+ yes
+ 
+    same scale l2
+    
+       gate regu or not 
+  
+    lower scale l2
+    
+       gate regu or not 
+ 
+ no
+    same scale l2
+    
+       gate regu or not 
+  
+    lower scale l2
+    
+       gate regu or not 
+
+
 ----- heteroskedasticity
 
-server config 
-
-*hidden transition
-  moving averaging for neural network version 
-
-*Regularization:
+hidden transition
+  moving averaging for neural network version
+   
+Regularization:
   dropout on bilinear transformation 
-  output wrapper positive
+
+output wrapper positive
 
 *EM training
 *inference 
 
+Logging: 
+  py_pikcle
+  epoch_log
 
 neural mixture
 
-  cnn + lstm
-  dual rnn
-
-  lstm + att lk
 
 
 ----- bayesian
 
 concrete dropout
-SG-VI 
+
+SG-VI: mc-dropout
 SG-LD
 SG-MCMC
-
-mc-dropout
    
 Random forest 
    http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
 
+
+----- baselines
+
+  lstm + att
+  cnn + lstm
+  dual rnn
+  
+  
+  
+  
