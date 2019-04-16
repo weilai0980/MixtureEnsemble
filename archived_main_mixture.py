@@ -16,7 +16,8 @@ from tensorflow.contrib import rnn
 
 # local packages 
 from utils_libs import *
-from mixture_speedup import *
+from mixture import *
+
 
 # ----- hyper-parameters from command line
 
@@ -53,14 +54,13 @@ with open('config.json') as f:
     print(para_dict) 
 '''
 
+para_dim_x = []
+para_steps_x = []
 para_step_ahead = 0
 
 
 # ----- log paths
-
 path_data = "../dataset/bitcoin/double_trx_ob_10/"
-
-#"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
@@ -80,16 +80,16 @@ para_distr_type = 'gaussian'
 para_loss_type = 'lk'
 para_var_type = "square" # square, exp
 
-
 para_regu_positive = False
 para_regu_gate = False
 para_regu_global_gate = False
-para_regu_latent_dependence = True
+para_regu_latent_dependence = False
 
 para_bool_target_seperate = False
 
 para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
+#"none"
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -98,9 +98,8 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
 
-para_lr_range = [0.001, ]
+para_lr_range = [0.005, ]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
-
 
 # ----- training and evalution
     
@@ -131,10 +130,10 @@ def train_validate(xtr,
     
     lr: float, learning rate
     
-    dim_x: integer, corresponding to D
+    dim_x: list of integer, corresponding to D, [num_src]
     
-    steps_x: integer, corresponding to T
-       
+    steps_x: list of integer, corresponding to T, [num_src]
+        
     '''
     
     # clear the graph in the current session 
@@ -143,7 +142,6 @@ def train_validate(xtr,
     # stabilize the network by fixing the random seed
     np.random.seed(1)
     tf.set_random_seed(1)
-    
     
     with tf.device('/device:GPU:0'):
         
@@ -165,19 +163,20 @@ def train_validate(xtr,
                                   num_src = np.shape(xtr)[0])
         
         # -- initialize the network
-        model.network_ini(lr, 
-                          l2, 
-                          dim_x = dim_x,
-                          steps_x = steps_x, 
-                          bool_log = para_y_log, 
+        model.network_ini(lr,
+                          l2,
+                          dim_x_list = dim_x,
+                          steps_x_list = steps_x,
+                          bool_log = para_y_log,
                           bool_bilinear = para_bool_bilinear,
-                          distr_type = para_distr_type, 
+                          distr_type = para_distr_type,
                           bool_regu_positive_mean = para_regu_positive,
-                          bool_regu_gate = para_regu_gate, 
-                          bool_regu_global_gate = para_regu_global_gate, 
+                          bool_regu_gate = para_regu_gate,
+                          bool_regu_global_gate = para_regu_global_gate,
                           bool_regu_latent_dependence = para_regu_latent_dependence,
                           latent_dependence = para_latent_dependence,
-                          latent_prob_type = para_latent_prob_type)
+                          latent_prob_type = para_latent_prob_type, 
+                          var_type = para_var_type)
 
         model.train_ini()
         model.inference_ini()
@@ -315,7 +314,7 @@ def test_nn(epoch_set,
             config = tf.ConfigProto()
             config.allow_soft_placement = True
             config.gpu_options.allow_growth = True
-        
+            
             sess = tf.Session(config = config)
         
             model = mixture_statistic(session = sess, 
@@ -420,25 +419,24 @@ def data_padding_x(x, num_src):
     
     num_samples = len(x[0])
     
-    max_dim_t =  max([np.shape(x[i][0])[0] for i in range(num_src)])
-    max_dim_d =  max([np.shape(x[i][0])[1] for i in range(num_src)])
+    max_dim_t =  max([np.shape(x[i][0])[0] for i in num_src])
+    max_dim_d =  max([np.shape(x[i][0])[1] for i in num_src])
     
     target_shape = [num_samples, max_dim_t, max_dim_d]
     
     target_x = []
     
-    for tmp_src in range(num_src):
+    for tmp_src in num_src:
         
         zero_mask = np.zeros(target_shape)
         
-        tmp_t = np.shape(x[tmp_src][0])[0]
-        tmp_d = np.shape(x[tmp_src][0])[1]
+        tmp_t = np.shape(x[i][0])[0]
+        tmp_d = np.shape(x[i][0])[1]
         
-        zero_mask[:, :tmp_t, :tmp_d] = x[tmp_src]
+        zero_mask[tmp_src][:, :tmp_t, :tmp_d] = x
         
         target_x.append(zero_mask)
-    
-    # [S N T D]
+        
     return target_x
     
 
@@ -475,23 +473,15 @@ if __name__ == '__main__':
     print("validation: ", len(val_x[0]), len(val_y))
     print("testing: ", len(ts_x[0]), len(ts_y))
     
-    tr_x = data_padding_x(tr_x, 
-                          num_src = len(tr_x))
-    
-    val_x = data_padding_x(val_x, 
-                           num_src = len(tr_x))
-    
-    ts_x = data_padding_x(ts_x, 
-                          num_src = len(tr_x))
-    
-    print(np.shape(tr_x), np.shape(val_x), np.shape(ts_x))
-    #print(tr_x[0][0], tr_x[1][0], tr_x[2][0])
     
     # -- steps and dimensionality of each source
     
-    para_steps_x = np.shape(tr_x)[2] 
-    para_dim_x = np.shape(tr_x)[3]
-    
+    for tmp_src in range(len(tr_x)):
+        tmp_shape = np.shape(tr_x[tmp_src][0])
+        
+        para_steps_x.append(tmp_shape[0])
+        para_dim_x.append(tmp_shape[1])
+        
         
     # ----- training and validation
     
@@ -523,7 +513,7 @@ if __name__ == '__main__':
             print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
             print('\n Training time: \n', hp_epoch_time, '\n')
                            
-            
+                           
             log_val_hyper_para(path_log_error, 
                                hpara = hpara_log[-1][0], 
                                hpara_error = hpara_log[-1][1][0],
@@ -561,7 +551,7 @@ if __name__ == '__main__':
     
     # ----- testing
     
-    print('\n----- testing ------ \n')
+    print('\n----- Testing ------ \n')
     
     rmse, mae, mape, nnllk, py_mean, py_unc, py_gate = test_nn(epoch_set = epoch_sample, 
                                                                xts = ts_x, 
@@ -575,4 +565,3 @@ if __name__ == '__main__':
     
     log_test(path = path_log_error, 
              error_tuple = [rmse, mae, mape, nnllk])
-                           

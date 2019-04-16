@@ -16,7 +16,6 @@ from tensorflow.contrib import rnn
 
 # local packages 
 from utils_libs import *
-from mixture import *
 
 
 # ----- hyper-parameters from command line
@@ -24,20 +23,27 @@ from mixture import *
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model', '-m', help = "model", type = str, default = 'statistic')
+#parser.add_argument('--model', '-m', help = "model", type = str, default = 'statistic')
 parser.add_argument('--latent_prob_type', '-t', help = "latent_prob_type", type = str, default = "none")
 # "none", "constant_diff_sq", "scalar_diff_sq", "vector_diff_sq"
-
 parser.add_argument('--latent_dependence', '-d', help = "latent_dependence", type = str, default = "none")
 # "none", "independent", "markov"
+parser.add_argument('--data_mode', '-m', help = "source specific data or with paddning", type = str, default = "src_padding")
+# "src_origin", "src_padding"
 
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
 
 args = parser.parse_args()
 print(args)
 
-method_str = args.model
+method_str = 'statistic'
 
+if args.data_mode == "src_origin":
+    from mixture import *
+
+elif args.data_mode == "src_padding": 
+    from mixture_padding import *
+    
 
 # ------ GPU set-up in multi-GPU environment
 
@@ -54,13 +60,14 @@ with open('config.json') as f:
     print(para_dict) 
 '''
 
-para_dim_x = []
-para_steps_x = []
 para_step_ahead = 0
 
 
 # ----- log paths
+
 path_data = "../dataset/bitcoin/double_trx_ob_10/"
+
+#"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
@@ -81,15 +88,15 @@ para_loss_type = 'lk'
 para_var_type = "square" # square, exp
 
 para_regu_positive = False
-para_regu_gate = False
-para_regu_global_gate = False
+para_regu_gate = False # -
+para_regu_global_gate = False  
 para_regu_latent_dependence = False
 
+para_bool_bias = False
 para_bool_target_seperate = False
 
 para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
-#"none"
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -98,8 +105,9 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
 
-para_lr_range = [0.005, ]
+para_lr_range = [0.001, ]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
+
 
 # ----- training and evalution
     
@@ -130,10 +138,10 @@ def train_validate(xtr,
     
     lr: float, learning rate
     
-    dim_x: list of integer, corresponding to D, [num_src]
+    dim_x: integer, corresponding to D
     
-    steps_x: list of integer, corresponding to T, [num_src]
-        
+    steps_x: integer, corresponding to T
+       
     '''
     
     # clear the graph in the current session 
@@ -142,6 +150,7 @@ def train_validate(xtr,
     # stabilize the network by fixing the random seed
     np.random.seed(1)
     tf.set_random_seed(1)
+    
     
     with tf.device('/device:GPU:0'):
         
@@ -160,23 +169,24 @@ def train_validate(xtr,
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
-                                  num_src = np.shape(xtr)[0])
+                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
         
         # -- initialize the network
-        model.network_ini(lr,
-                          l2,
-                          dim_x_list = dim_x,
-                          steps_x_list = steps_x,
-                          bool_log = para_y_log,
+        model.network_ini(lr, 
+                          l2, 
+                          dim_x = dim_x,
+                          steps_x = steps_x, 
+                          bool_log = para_y_log, 
                           bool_bilinear = para_bool_bilinear,
-                          distr_type = para_distr_type,
+                          distr_type = para_distr_type, 
                           bool_regu_positive_mean = para_regu_positive,
-                          bool_regu_gate = para_regu_gate,
-                          bool_regu_global_gate = para_regu_global_gate,
+                          bool_regu_gate = para_regu_gate, 
+                          bool_regu_global_gate = para_regu_global_gate, 
                           bool_regu_latent_dependence = para_regu_latent_dependence,
                           latent_dependence = para_latent_dependence,
-                          latent_prob_type = para_latent_prob_type, 
-                          var_type = para_var_type)
+                          latent_prob_type = para_latent_prob_type,
+                          var_type = para_var_type,
+                          bool_bias_pred = para_bool_bias)
 
         model.train_ini()
         model.inference_ini()
@@ -255,10 +265,7 @@ def train_validate(xtr,
             
         print("Optimization Finished!")
         
-        # reset the model
-        #model.model_reset()
-        #clf.train_ini()
-    
+        
         ed_time = time.time()
     
     # the epoch with the lowest valdiation RMSE
@@ -314,7 +321,7 @@ def test_nn(epoch_set,
             config = tf.ConfigProto()
             config.allow_soft_placement = True
             config.gpu_options.allow_growth = True
-            
+        
             sess = tf.Session(config = config)
         
             model = mixture_statistic(session = sess, 
@@ -335,6 +342,9 @@ def log_train(path):
     with open(path, "a") as text_file:
         
         text_file.write("\n\n ------ Statistic mixture : \n")
+        
+        text_file.write("data_mode : %s \n"%(args.data_mode))
+        
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("target distribution type : %s \n"%(para_distr_type))
         text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
@@ -361,6 +371,8 @@ def log_train(path):
         text_file.write("validation metric : %s \n"%(para_validation_metric))
         text_file.write("variance calculation type : %s \n"%(para_var_type))
         
+        text_file.write("adding bias terms : %s \n"%(para_bool_bias))
+        
         text_file.write("\n\n")
         
 def log_val_hyper_para(path, hpara, hpara_error, train_time):
@@ -386,7 +398,6 @@ def data_reshape(data, bool_target_seperate):
     
     # data: [yi, ti, [xi_src1, xi_src2, ...]]
     src_num = len(data[0][2])
-    
     tmpx = []
     
     if bool_target_seperate == True:
@@ -405,7 +416,7 @@ def data_reshape(data, bool_target_seperate):
         
         for src_idx in range(src_num):
             tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
-            print(np.shape(tmpx[-1]))
+            print("src " + str(src_idx) + " : ", np.shape(tmpx[-1]))
     
     tmpy = np.asarray([tmp[0] for tmp in data])
     
@@ -419,24 +430,25 @@ def data_padding_x(x, num_src):
     
     num_samples = len(x[0])
     
-    max_dim_t =  max([np.shape(x[i][0])[0] for i in num_src])
-    max_dim_d =  max([np.shape(x[i][0])[1] for i in num_src])
+    max_dim_t =  max([np.shape(x[i][0])[0] for i in range(num_src)])
+    max_dim_d =  max([np.shape(x[i][0])[1] for i in range(num_src)])
     
     target_shape = [num_samples, max_dim_t, max_dim_d]
     
     target_x = []
     
-    for tmp_src in num_src:
+    for tmp_src in range(num_src):
         
         zero_mask = np.zeros(target_shape)
         
-        tmp_t = np.shape(x[i][0])[0]
-        tmp_d = np.shape(x[i][0])[1]
+        tmp_t = np.shape(x[tmp_src][0])[0]
+        tmp_d = np.shape(x[tmp_src][0])[1]
         
-        zero_mask[tmp_src][:, :tmp_t, :tmp_d] = x
+        zero_mask[:, :tmp_t, :tmp_d] = x[tmp_src]
         
         target_x.append(zero_mask)
-        
+    
+    # [S N T D]
     return target_x
     
 
@@ -476,12 +488,38 @@ if __name__ == '__main__':
     
     # -- steps and dimensionality of each source
     
-    for tmp_src in range(len(tr_x)):
-        tmp_shape = np.shape(tr_x[tmp_src][0])
+    if args.data_mode == "src_origin":
         
-        para_steps_x.append(tmp_shape[0])
-        para_dim_x.append(tmp_shape[1])
+        para_steps_x = []
+        para_dim_x = []
         
+        for tmp_src in range(len(tr_x)):
+            
+            tmp_shape = np.shape(tr_x[tmp_src][0])
+        
+            para_steps_x.append(tmp_shape[0])
+            para_dim_x.append(tmp_shape[1])
+            
+            print("src " + str(tmp_src) + " shape: ", tmp_shape)
+            
+    
+    elif args.data_mode == "src_padding": 
+        
+        tr_x = data_padding_x(tr_x, 
+                              num_src = len(tr_x))
+    
+        val_x = data_padding_x(val_x, 
+                               num_src = len(tr_x))
+    
+        ts_x = data_padding_x(ts_x, 
+                              num_src = len(tr_x))
+    
+        print("Shapes after padding: ", np.shape(tr_x), np.shape(val_x), np.shape(ts_x))
+        #print(tr_x[0][0], tr_x[1][0], tr_x[2][0])
+        
+        para_steps_x = np.shape(tr_x)[2] 
+        para_dim_x = np.shape(tr_x)[3]
+    
         
     # ----- training and validation
     
@@ -513,7 +551,7 @@ if __name__ == '__main__':
             print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
             print('\n Training time: \n', hp_epoch_time, '\n')
                            
-                           
+            
             log_val_hyper_para(path_log_error, 
                                hpara = hpara_log[-1][0], 
                                hpara_error = hpara_log[-1][1][0],
@@ -565,3 +603,4 @@ if __name__ == '__main__':
     
     log_test(path = path_log_error, 
              error_tuple = [rmse, mae, mape, nnllk])
+                           

@@ -23,6 +23,11 @@ smoothing or adaptive
 regularization on the latent dependence
 variance squared function 
 
+lower_bound for pos_neg_diff_sq
+
+version merge and cross check 
+
+
 --------------- TO DO -------------------
 
 
@@ -80,7 +85,7 @@ l2 hyper-para on latent smooth
     
        gate regu or not 
  
- no
+ *no
     same scale l2
     
        gate regu or not 
@@ -96,18 +101,31 @@ hidden transition
   moving averaging for neural network version
    
 Regularization:
-  dropout on bilinear transformation 
-
+  dropout on bilinear transformation
+  l1 normalization
+  
 output wrapper positive
 
-*EM training
-*inference 
+EM training
+inference 
+
 
 Logging: 
   py_pikcle
   epoch_log
 
-neural mixture
+
+
+
+*constant terms 
+
+testing ensemble 
+
+performance optimizatin issue
+  l2 on latent dependence faster?
+
+Neural Mixture
+
 
 
 
