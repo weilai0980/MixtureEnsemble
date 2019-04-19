@@ -27,6 +27,14 @@ lower_bound for pos_neg_diff_sq
 
 version merge and cross check 
 
+*constant terms 
+  mean
+  variance
+
+*performance monitoring:
+  py_mean_src
+  py_var_src
+  
 
 --------------- TO DO -------------------
 
@@ -97,12 +105,18 @@ l2 hyper-para on latent smooth
 
 ----- heteroskedasticity
 
+
+Logging: 
+  py_pikcle
+  epoch_log
+
+  
 hidden transition
   moving averaging for neural network version
    
 Regularization:
   dropout on bilinear transformation
-  l1 normalization
+  l1
   
 output wrapper positive
 
@@ -110,22 +124,22 @@ EM training
 inference 
 
 
-Logging: 
-  py_pikcle
-  epoch_log
-
-
-
-
-*constant terms 
+*math operation check
+*testing output
+   py_mean
+   py_var
+   py_mean_src
+   py_var_src
+   
+bias term on gate function?
 
 testing ensemble 
 
 performance optimizatin issue
   l2 on latent dependence faster?
 
-Neural Mixture
 
+Neural Mixture
 
 
 
@@ -143,6 +157,8 @@ Random forest
 
 ----- baselines
 
+  regression, constant terms
+  
   lstm + att
   cnn + lstm
   dual rnn

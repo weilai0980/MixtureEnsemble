@@ -112,7 +112,8 @@ class mixture_statistic():
                     steps_x, 
                     bool_log, 
                     bool_bilinear,
-                    distr_type, 
+                    distr_type,
+                    distr_para, 
                     bool_regu_positive_mean,
                     bool_regu_gate,
                     bool_regu_global_gate,
@@ -138,6 +139,11 @@ class mixture_statistic():
         bool_bilinear: if bilinear function is used on the components in X
         
         distr_type: string, type of the distribution of the target variable
+        
+        distr_para: set of parameters of the associated distribution
+        
+                    "gaussian": []
+                    "t-distr": [nu]
         
         bool_regu_positive_mean: if regularization of positive mean 
         
@@ -374,9 +380,9 @@ class mixture_statistic():
         
         if latent_dependence == "markov":
             
-            # [B S]
-            pre_logit = tf.transpose(tmp_pre_logit, [1, 0])
-            curr_logit = tf.transpose(tmp_curr_logit, [1, 0])
+            # [S B] -> [B S]
+            pre_logit = tf.stack(pre_logit_list, [1, 0])
+            curr_logit = tf.stack(curr_logit_list, [1, 0])
         
             if latent_prob_type == "constant_diff_sq":
                 
@@ -608,9 +614,41 @@ class mixture_statistic():
             # [B]
             self.py_std = tf.sqrt(self.py_var)
             
+        
+        
+        elif distr_type == 't-distr':
             
-        else:
-            print('[ERROR] distribution type')
+            # -- mean
+            
+            # component mean
+            self.py_mean_src = mean_stack
+            
+            # mixed mean
+            # [B 1]                      [B S]      [B S]
+            self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
+            
+            # -- variance
+
+                
+                # component variance
+                self.py_var_src = distr_para[0] # "nu"
+                
+                sq_mean_stack = 1.0 + tf.square(mean_stack)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
+                
+                # [B]
+                self.py_var = mix_sq_mean - tf.square(self.py_mean)
+                
+                
+                
+            # -- standard deviation
+            # [B]
+            self.py_std = tf.sqrt(self.py_var)
+        
+        
+        
+        #else:
+        #    print('[ERROR] distribution type')
             
         
         # ----- regularization
