@@ -34,7 +34,14 @@ version merge and cross check
 *performance monitoring:
   py_mean_src
   py_var_src
-  
+
+
+--------------- POINT LEARNED -------------------
+
+bias term effect on generalization ability
+
+
+
 
 --------------- TO DO -------------------
 

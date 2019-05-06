@@ -159,7 +159,7 @@ class mixture_statistic():
         distr_para: set of parameters of the associated distribution
         
                     "gaussian": []
-                    "t-distr": [nu] >= 3
+                    "student_t": [nu] >= 3
         
         bool_regu_positive_mean: if regularization of positive mean 
         
@@ -176,7 +176,7 @@ class mixture_statistic():
         bool_bias_mean: only on mean and variance
         
         '''
-
+        
         # Dictionary of abbreviation
         #   nllk: negative log likelihood
         #   hetero: heteroskedasticity
@@ -466,10 +466,10 @@ class mixture_statistic():
                 self.py_var_src = var_stack
                 
                 sq_mean_stack = var_stack + tf.square(mean_stack)
-                # [B]                                   [B S]          [B S]
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
+                # [B 1]                                   [B S]          [B S]
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
                 
-                # [B]
+                # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
             
             elif self.loss_type == 'lk_inv' or self.loss_type == 'elbo':
@@ -478,9 +478,9 @@ class mixture_statistic():
                 self.py_var_src = 1.0/(inv_var_stack + 1e-5)
                 
                 sq_mean_stack = 1.0/(inv_var_stack + 1e-5) + tf.square(mean_stack)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
                 
-                # [B]
+                # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
             elif self.loss_type == 'mse':
@@ -489,9 +489,10 @@ class mixture_statistic():
                 self.py_var_src = 1.0
                 
                 sq_mean_stack = 1.0 + tf.square(mean_stack)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
+                # [B 1]
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
                 
-                # [B]
+                # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
             elif self.loss_type == 'simple_mix':
@@ -508,11 +509,11 @@ class mixture_statistic():
                 
                 
             # -- standard deviation
-            # [B]
+            # [B 1]
             self.py_std = tf.sqrt(self.py_var)
             
             
-        elif distr_type == 't-distr':
+        elif distr_type == 'student_t':
             
             # -- mean
             
@@ -533,9 +534,11 @@ class mixture_statistic():
                 self.py_var_src = var_stack*1.0*distr_para[0]/(distr_para[0]-2.0) # "nu"
                 
                 sq_mean_stack = var_stack*1.0*distr_para[0]/(distr_para[0]-2.0) + tf.square(mean_stack)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
                 
-                # [B]
+                # [B 1]                                   [B S]          [B S]
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1,  keepdims = True)
+                
+                # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
             
@@ -548,11 +551,11 @@ class mixture_statistic():
                 sq_mean_stack = self.py_var_src + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
                 
-                # [B]
+                # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
             # -- standard deviation
-            # [B]
+            # [B 1]
             self.py_std = tf.sqrt(self.py_var)
             
 
@@ -678,7 +681,7 @@ class mixture_statistic():
             
             # -- constant var
             
-            # for mse loss
+            # MSE loss
             # [B S]
             tmp_lk_const_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
             
@@ -686,7 +689,8 @@ class mixture_statistic():
             self.nllk_const = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_const, axis = -1) + 1e-5))
             '''
         
-        elif distr_type == 't-distr':
+        elif distr_type == 'student_t':
+            
             
             t_distr_constant = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5,distr_para[0]/2.0)+ 1e-5)
             
@@ -882,7 +886,7 @@ class mixture_statistic():
         
         # test: for the observing during the training
         # [B S]
-        py_gate, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
+        py_gate_src, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
                                 feed_dict = data_dict)
         
         if bool_py_eval == True:
@@ -890,7 +894,7 @@ class mixture_statistic():
             # [B 1]          [B S]
             py_mean, py_var, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
                                                          tf.get_collection('py_var')[0],
-                                                                               tf.get_collection('py_var_src')[0],
+                                                         tf.get_collection('py_var_src')[0],
                                                                                ],
                                                                                feed_dict = data_dict)
         else:
@@ -898,8 +902,9 @@ class mixture_statistic():
             py_var = None
             py_var_src = None
         
-        # rmse, mae, mape, nnllk, py tuple [],  monitory tuple [ ]
-        return rmse, mae, mape, nnllk, [py_mean, py_var, py_gate, py_mean_src, py_var_src], [py_gate, py_mean_src]
+        # rmse, mae, mape, nnllk, py tuple [],  monitoring tuple [ ]
+        # py_mean_src, py_var_src, py_gate_src
+        return rmse, mae, mape, nnllk, [py_mean, py_var], [py_gate_src, py_mean_src]
     
     
     # collect the optimized variable values

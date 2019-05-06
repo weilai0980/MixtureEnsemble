@@ -32,8 +32,8 @@ parser.add_argument('--data_mode', '-m', help = "source specific data or with pa
 # "src_raw", "src_padding"
 
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
-
 parser.add_argument('--target_distr', '-p', help = "target_probability_distribution", type = str, default = "gaussian")
+
 parser.add_argument('--loss_type', '-l', help = "loss_type", type = str, default = "lk")
 
 args = parser.parse_args()
@@ -84,13 +84,13 @@ para_y_log = False
 para_bool_bilinear = True
 
 para_batch_size = 64
-para_n_epoch = 70
+para_n_epoch = 50
 
 para_distr_type = args.target_distr
-# gaussian, t-distr
+# gaussian, student_t
 para_distr_para = [3]
 # gaussian: [] 
-# t-distr: [nu], nu>=3
+# student_t: [nu], nu>=3
 
 para_loss_type = args.loss_type
 para_var_type = "square" # square, exp
@@ -367,6 +367,9 @@ def log_train(path):
         text_file.write("\n\n ------ Statistic mixture : \n")
         
         text_file.write("data_mode : %s \n"%(args.data_mode))
+        text_file.write("data source timesteps : %s \n"%(para_steps_x))
+        text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
+        text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
         
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
@@ -385,9 +388,6 @@ def log_train(path):
         
         text_file.write("batch size : %s \n"%(para_batch_size))
         text_file.write("number of epochs : %s \n"%(para_n_epoch))
-        
-        text_file.write("each data source timesteps : %s \n"%(para_steps_x))
-        text_file.write("each data source feature dimensionality : %s \n"%(para_dim_x))
         
         text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
         text_file.write("latent dependence probability type : %s \n"%(para_latent_prob_type))
@@ -541,7 +541,7 @@ if __name__ == '__main__':
             
             print("src " + str(tmp_src) + " shape: ", tmp_shape)
             
-    
+        
     elif args.data_mode == "src_padding": 
         
         tr_x = data_padding_x(tr_x, 
@@ -641,10 +641,14 @@ if __name__ == '__main__':
                                                                loss_type = para_loss_type,
                                                                num_src = len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0])
     
+    
+    
     print('\n testing errors: ', rmse, mae, mape, nnllk, '\n\n')  
+    
     log_test(path = path_log_error, 
              error_tuple = [rmse, mae, mape, nnllk])
     
+    print("--------- test ----------------- ", np.shape(py_tuple[0]), np.shape(py_tuple[1]))
     
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
