@@ -34,60 +34,14 @@ version merge and cross check
 *performance monitoring:
   py_mean_src
   py_var_src
+  
+loss: homoscedasticity-mse, heteroscedastic-lk_inv
 
-
---------------- POINT LEARNED -------------------
-
-bias term effect on generalization ability
-
-
-
-
---------------- TO DO -------------------
-
-
------ TRAINING HYPER-PARA:
-
-  loss: homoscedasticity-mse, heteroscedastic-lk_inv
-  train mode: bayesian, map, EM 
-
-
------ DATA
-data inspection
-
-correlated variable elimination
-
-
------ baseline
-
-sub-sample in gradient boosted tree 
-
-further check of ARCH series 
-
-
------ survey
-
-Predictive Uncertainty Estimation via Prior Networks
-
-Uncertainty-Aware Learning from Demonstration Using Mixture Density Networks with Sampling-Free Variance Modeling
-
-Uncertainty-Aware Attention for Reliable Interpretation and Prediction
-
-
------ constant variance MSE  
-
--- ml on single source
--- ml on multi source 
-   
-   Gradient boosted tree
-   LightGBM
-   Random forest
-   
-   XGboosted
-   
-
------ experiment plan
-
+Logging: 
+  py_pikcle
+  epoch_log
+  
+  
 l2 hyper-para on latent smooth 
  
  yes
@@ -109,29 +63,7 @@ l2 hyper-para on latent smooth
     
        gate regu or not 
 
-
------ heteroskedasticity
-
-
-Logging: 
-  py_pikcle
-  epoch_log
-
   
-hidden transition
-  moving averaging for neural network version
-   
-Regularization:
-  dropout on bilinear transformation
-  l1
-  
-output wrapper positive
-
-EM training
-inference 
-
-
-*math operation check
 *testing output
    py_mean
    py_var
@@ -140,13 +72,86 @@ inference
    
 bias term on gate function?
 
-testing ensemble 
 
+Predictive Uncertainty Estimation via Prior Networks
+
+Uncertainty-Aware Learning from Demonstration Using Mixture Density Networks with Sampling-Free Variance Modeling
+
+Uncertainty-Aware Attention for Reliable Interpretation and Prediction
+
+
+dropout on bilinear transformation
 performance optimizatin issue
   l2 on latent dependence faster?
+  
+
+----- constant variance MSE  
+
+-- ml on single source
+-- ml on multi source 
+   
 
 
-Neural Mixture
+
+--------------- POINT LEARNED -------------------
+
+bias term effect on generalization ability
+
+
+
+
+--------------- TO DO -------------------
+
+---- Boosting
+
+---- Diagnostic 
+
+
+---- Tuning
+
+https://karpathy.github.io/2019/04/25/recipe/?utm_source=Deep+Learning+Weekly&utm_campaign=6049a04f13-EMAIL_CAMPAIGN_2019_04_24_03_18_COPY_01&utm_medium=email&utm_term=0_384567b42d-6049a04f13-72960733
+
+
+https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learning%20Weekly&utm_medium=email&utm_source=Revue%20newsletter
+
+
+----- TRAINING HYPER-PARA:
+
+  train mode: bayesian, map, mle, ELBO, EM 
+
+
+----- DATA
+data inspection
+
+correlated variable elimination
+
+
+----- survey
+
+
+----- experiment plan
+
+
+----- Statistic heteroskedasticity mixture
+
+*math operation check
+   
+Regularization:
+
+  *l1
+
+*testing ensemble
+
+
+EM training
+inference 
+output wrapper positive
+
+
+----- Neural heteroskedasticity mixture
+
+hidden transition
+  moving averaging for neural network version
 
 
 
@@ -154,9 +159,10 @@ Neural Mixture
 
 concrete dropout
 
-SG-VI: mc-dropout
-SG-LD
+mc-dropout
+SG-VI
 SG-MCMC
+  SG-LD
    
 Random forest 
    http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
@@ -169,6 +175,16 @@ Random forest
   lstm + att
   cnn + lstm
   dual rnn
+  
+  Gradient boosted tree
+  LightGBM
+  Random forest
+   
+  XGboosted
+  
+  sub-sample in gradient boosted tree 
+
+  further check of ARCH series 
   
   
   

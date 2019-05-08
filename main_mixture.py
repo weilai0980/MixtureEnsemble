@@ -77,6 +77,7 @@ path_model = "../results/mixture/"
 
 path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
 
+
 # ----- hyper-parameters set-up
 
 para_y_log = False
@@ -274,8 +275,11 @@ def train_validate(xtr,
             print("\n gates : \n", monitor_metric[0])
             print("\n py_mean_src : \n", monitor_metric[1])
             
-            # NULL value exception 
+            # NAN value exception 
             if np.isnan(epoch_loss) == True:
+                
+                print("\n --- NAN loss !! \n" )
+                
                 break
             
             # save the model w.r.t. the epoch in epoch_sample
@@ -402,28 +406,36 @@ def log_train(path):
         
         text_file.write("\n\n")
         
-def log_val_hyper_para(path, hpara, hpara_error, train_time):
+def log_val_hyper_para(path, 
+                       hpara, 
+                       hpara_error, 
+                       train_time):
     
     with open(path_log_error, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
-def log_val(path, hpara_tuple, error_tuple):
+def log_val(path, 
+            hpara_tuple, 
+            error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
         text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
         
-def log_test(path, error_tuple):
+def log_test(path, 
+             error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
         
-def log_exception(path, message):
+def log_exception(path, 
+                  message):
     
     with open(path, "a") as text_file:
         text_file.write("\n  NULL loss exception at: %s \n"%(str(message)))
         
-def null_loss_exception(epoch_errors, log_path):
+def null_loss_exception(epoch_errors, 
+                        log_path):
 # epoch_errors: [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]    
     
     for i in epoch_errors:
@@ -433,7 +445,8 @@ def null_loss_exception(epoch_errors, log_path):
     return
     
         
-def data_reshape(data, bool_target_seperate):
+def data_reshape(data, 
+                 bool_target_seperate):
     
     # data: [yi, ti, [xi_src1, xi_src2, ...]]
     src_num = len(data[0][2])
@@ -462,7 +475,8 @@ def data_reshape(data, bool_target_seperate):
     # output shape: x [S N T D],  y [N 1]
     return tmpx, np.expand_dims(tmpy, -1)
 
-def data_padding_x(x, num_src):
+def data_padding_x(x, 
+                   num_src):
     
     # shape of x: [S N T D]
     # T and D are different across sources

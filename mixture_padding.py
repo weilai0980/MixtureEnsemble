@@ -173,7 +173,13 @@ class mixture_statistic():
         
         var_type: square or exponential   
         
-        bool_bias_mean: only on mean and variance
+        bool_bias_mean: have bias in mean prediction
+        
+        bool_bias_var: have bias in variance prediction
+        
+        bool_bias_gate): : have bias in gate prediction
+        
+        
         
         '''
         
@@ -185,6 +191,7 @@ class mixture_statistic():
         #   indi: individual
         #   py: predicted y
         #   src: source
+        #   var: variance
         
         # ----- fix the random seed to reproduce the results
         
@@ -443,9 +450,9 @@ class mixture_statistic():
         
         # ----- mixture mean and variance  
         
-        # py: predicted y
         
         if distr_type == 'gaussian':
+            
             
             # -- mean
             
@@ -456,6 +463,7 @@ class mixture_statistic():
             # mixed mean
             # [B 1]                      [B S]        [B S]
             self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
+            
             
             # -- variance
             
@@ -505,7 +513,7 @@ class mixture_statistic():
                 
                 # mixed variance
                 # [B 1]                     [B S]         [B S]
-                self.py_var = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)\
+                self.py_var = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)
                 
                 
             # -- standard deviation
@@ -515,14 +523,16 @@ class mixture_statistic():
             
         elif distr_type == 'student_t':
             
+            
             # -- mean
             
             # component mean
             self.py_mean_src = mean_stack
             
             # mixed mean
-            # [B 1]                      [B S]      [B S]
+            # [B 1]                      [B S]       [B S]
             self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
+            
             
             # -- variance
             
@@ -549,11 +559,12 @@ class mixture_statistic():
                 self.py_var_src = 1.0*distr_para[0]/(distr_para[0]-2.0)/(inv_var_stack + 1e-5) # "nu"
                 
                 sq_mean_stack = self.py_var_src + tf.square(mean_stack)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), keepdims = True)
                 
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
-                
+            
+            
             # -- standard deviation
             # [B 1]
             self.py_std = tf.sqrt(self.py_var)
@@ -573,29 +584,7 @@ class mixture_statistic():
             # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
             self.regularization += regu_mean_pos
         
-        # -- gate smoothing
-        
-        if latent_prob_type != "none":
-            
-            if latent_prob_type == "pos_neg_diff_sq":
-                
-                # exact llk
-                # self.latent_depend_regu = -1.0*tf.reduce_sum(tf.log(latent_prob))
-                
-                # lower bound
-                self.latent_depend_regu = 0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*pos_logits))))\
-                                                                + \
-                                          0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
-            else:
-                
-                # ! numertical stable version of log(sigmoid())
-                # [B 1]
-                self.latent_depend_regu = (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
-                                           + tf.maximum(0.0, -1.0*latent_prob_logits))) 
-        else:
-            self.latent_depend_regu = 0.0
-        
-        # -- latent dependence
+        # -- latent dependence parameter
         
         if bool_regu_latent_dependence == True:
             self.regularization += regu_latent_dependence
@@ -622,6 +611,29 @@ class mixture_statistic():
             
             self.regularization += regu_global_logits
         
+        # -- gate smoothing
+        
+        if latent_prob_type != "none":
+            
+            if latent_prob_type == "pos_neg_diff_sq":
+                
+                # exact llk
+                self.latent_depend = -1.0*tf.reduce_sum(tf.log(latent_prob))
+                
+                # lower bound
+                #self.latent_depend = 0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*pos_logits))))\
+                #                                                + \
+                #                          0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
+            
+            else:
+                
+                # ! numertical stable version of log(sigmoid())
+                # avoid the overflow of exp(-x) in sigmoid, when -x is positive large 
+                # [B 1]
+                self.latent_depend = (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
+                                           + tf.maximum(0.0, -1.0*latent_prob_logits))) 
+        else:
+            self.latent_depend = 0.0
         
         # ----- negative log likelihood and loss function
                 
@@ -765,7 +777,7 @@ class mixture_statistic():
         elif self.loss_type == 'lk':
             
             self.loss = self.nllk_hetero + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)\
-                        + self.latent_depend_regu
+                        + self.latent_depend
             
             self.nllk = self.nllk_hetero
             
@@ -773,7 +785,7 @@ class mixture_statistic():
         elif self.loss_type == 'lk_inv':
             
             self.loss = self.nllk_hetero_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)\
-                        + self.latent_depend_regu
+                        + self.latent_depend
             
             self.nllk = self.nllk_hetero_inv
             
@@ -895,16 +907,15 @@ class mixture_statistic():
             py_mean, py_var, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
                                                          tf.get_collection('py_var')[0],
                                                          tf.get_collection('py_var_src')[0],
-                                                                               ],
-                                                                               feed_dict = data_dict)
+                                                         ],
+                                                         feed_dict = data_dict)
         else:
             py_mean = None
             py_var = None
             py_var_src = None
         
-        # rmse, mae, mape, nnllk, py tuple [],  monitoring tuple [ ]
-        # py_mean_src, py_var_src, py_gate_src
-        return rmse, mae, mape, nnllk, [py_mean, py_var], [py_gate_src, py_mean_src]
+        # rmse, mae, mape, nnllk, py tuple [],  monitoring tuple []
+        return rmse, mae, mape, nnllk, [py_mean, py_var, py_mean_src, py_var_src, py_gate_src], [py_gate_src, py_mean_src]
     
     
     # collect the optimized variable values
