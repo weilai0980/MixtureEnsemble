@@ -97,6 +97,7 @@ performance optimizatin issue
 
 bias term effect on generalization ability
 
+lk_inv is numerical stable
 
 
 
@@ -117,7 +118,7 @@ https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learn
 
 ----- TRAINING HYPER-PARA:
 
-  train mode: bayesian, map, mle, ELBO, EM 
+  train mode:  mse, mle, map, ELBO, EM, bayesian 
 
 
 ----- DATA
@@ -138,7 +139,14 @@ correlated variable elimination
    
 Regularization:
 
-  *l1
+  latent dependence
+  l1
+  fine-grained regularization hyper-para 
+
+Training:
+  learning rate decay
+  grid search / random search 
+  stop training on steps, instead of epoch 
 
 *testing ensemble
 

@@ -1,0 +1,127 @@
+'''
+        # ----- negative log likelihood and loss function
+                
+        # lk: likelihood
+        # llk: log likelihood
+        # nllk: negative log likelihood
+        
+        if distr_type == 'gaussian':
+            
+            # -- lk
+            # ??
+            # [B S]
+            lk_hetero_src = tf.exp(-0.5*tf.square(self.y-mean_stack)/(var_stack+1e-5))/(tf.sqrt(2.0*np.pi*var_stack)+1e-5)
+                                                                                                 
+            lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
+            self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
+            
+            
+            # -- lk_inv
+            
+            # [B S]
+            lk_hetero_src_inv = tf.exp(-0.5*tf.square(self.y-mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
+            
+            lk_hetero_inv = tf.multiply(lk_hetero_src_inv, self.gates) 
+            self.nllk_hetero_inv = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero_inv, axis = -1) + 1e-5))
+            
+            
+            # -- ELBO
+            
+            # evidence lower bound optimization
+            # based on lk_inv
+        
+            # [B 1] - [B S]
+            tmp_nllk_inv = 0.5*tf.square(self.y-mean_stack)*inv_var_stack- 0.5*tf.log(inv_var_stack+1e-5) + 0.5*tf.log(2*np.pi)
+        
+            self.nllk_elbo = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_inv, -1)) 
+            
+           
+           # -- lk_var_mix
+        
+            #self.nllk_gate = -1.0*tf.reduce_sum(tf.log(latent_prob))
+        
+            # variance
+            # [B]
+            tmp_nllk_var_mix = 0.5*tf.square(self.y - self.py_mean)/(self.py_var + 1e-5) + 0.5*tf.log(self.py_var + 1e-5)\
+                           + 0.5*tf.log(2*np.pi)
+            
+            self.nllk_mix = tf.reduce_sum(tmp_nllk_mix) 
+        
+            # variance inverse
+            # [B]
+            # self.py_var is inversed
+            tmp_nllk_var_mix_inv = 0.5*tf.square(self.y - self.py_mean)*self.py_var - 0.5*tf.log(self.py_var + 1e-5)\
+                               + 0.5*tf.log(2*np.pi)
+            
+            self.nllk_var_mix_inv = tf.reduce_sum(tmp_nllk_mix_inv) 
+            
+            # -- constant var
+            
+            # MSE loss
+            # [B S]
+            tmp_lk_const_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
+            
+            lk_const = tf.multiply(tmp_lk_const_src, self.gates) 
+            self.nllk_const = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_const, axis = -1) + 1e-5))
+            
+        
+        elif distr_type == 'student_t':
+            
+            
+            t_distr_constant = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5,distr_para[0]/2.0)+ 1e-5)
+            
+            # -- lk
+            # [B S]
+            # self.x: [S B T D]
+            
+            # [B S]
+            normalizer_hetero_src = t_distr_constant/(tf.sqrt(var_stack) + 1e-5)
+            #1.0/(tf.sqrt(distr_para[0]*var_stack)*sp.special.beta(0.5, distr_para[0]/2.0) + 1e-5)
+            
+            base_hetero_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/distr_para[0]/(var_stack + 1e-5)
+            
+            lk_hetero_src = normalizer_hetero_src*tf.keras.backend.pow(base_hetero_src, -(distr_para[0] + 1)/2)
+        
+            lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
+            self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
+            
+            
+            # -- lk_inv
+            
+            # [B S]
+            normalizer_hetero_src_inv = t_distr_constant*tf.sqrt(inv_var_stack)
+            
+            base_hetero_src_inv = 1.0 + 1.0*tf.square(self.y - mean_stack)/distr_para[0]*inv_var_stack
+            
+            lk_hetero_src_inv = normalizer_hetero_src_inv*tf.keras.backend.pow(base_hetero_src_inv, -(distr_para[0] + 1)/2)
+            
+            
+            lk_hetero_inv = tf.multiply(lk_hetero_src_inv, self.gates) 
+            self.nllk_hetero_inv = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero_inv, axis = -1) + 1e-5))
+            
+            
+            
+            # -- constant
+            # [B S]
+            # self.x: [S B T D]
+            
+            normalizer_src = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5, distr_para[0]/2.0) + 1e-5)
+            
+            base_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/distr_para[0]
+            
+            lk_constant_src = normalizer_src*tf.keras.backend.pow(base_src, -(distr_para[0] + 1)/2)
+        
+            lk_constant = tf.multiply(lk_constant_src, self.gates) 
+            self.nllk_constant = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_constant, axis = -1) + 1e-5))
+            
+            
+            # -- ELBO
+            # evidence lower bound optimization
+            # based on lk_inv
+        
+            # [B 1] - [B S]
+            tmp_nllk_inv = 0.5*tf.square(self.y - mean_stack)*inv_var_stack - 0.5*tf.log(inv_var_stack+1e-5) + 0.5*tf.log(2*np.pi)
+        
+            self.nllk_elbo = tf.reduce_sum(tf.reduce_sum(self.gates * tmp_nllk_inv, -1)) 
+        
+        '''
