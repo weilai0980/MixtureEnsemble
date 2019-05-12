@@ -1,6 +1,6 @@
 # bt
 
-"Bayesian Temporal Mixture Models"
+""
 
 ############################################
 
