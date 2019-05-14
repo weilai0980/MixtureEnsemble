@@ -281,7 +281,7 @@ class mixture_statistic():
                 tmp_logit, regu_gate = multi_src_bilinear(self.x,
                                                           [steps_x, dim_x],
                                                           'gate',
-                                                          bool_bias = True,
+                                                          bool_bias = bool_bias_gate,
                                                           bool_scope_reuse = False,
                                                           num_src = self.num_src)
                 
@@ -592,6 +592,8 @@ class mixture_statistic():
             
         elif distr_type == 'student_t':
             
+            # for negative log likelihood
+            t_distr_constant = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5,distr_para[0]/2.0)+ 1e-5)
             
             # -- mean
             
@@ -621,8 +623,6 @@ class mixture_statistic():
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
-                # negative log likelihood
-                t_distr_constant = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5,distr_para[0]/2.0)+ 1e-5)
             
                 # [B S]
                 # self.x: [S B T D]
@@ -721,7 +721,6 @@ class mixture_statistic():
         # -- non-negative hinge regularization 
         
         if bool_regu_positive_mean == True:
-            
             # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
             self.regularization += regu_mean_pos
         

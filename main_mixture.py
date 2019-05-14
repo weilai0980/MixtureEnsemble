@@ -67,7 +67,7 @@ para_step_ahead = 0
 
 # ----- data and log paths
 
-path_data = "../dataset/bitcoin/double_trx_ob_10/"
+path_data = "../dataset/bitcoin/double_trx_ob_tar15_len10/"
 #"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
@@ -89,7 +89,7 @@ para_n_epoch = 60
 
 para_distr_type = args.target_distr
 # gaussian, student_t
-para_distr_para = []
+para_distr_para = [3]
 # gaussian: [] 
 # student_t: [nu], nu>=3
 
@@ -121,7 +121,7 @@ para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
 
 para_lr_range = [0.001, ]
-para_batch_range = [64, 32, 80]
+para_batch_range = [64, 32, 16, 80]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 #[1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
 
@@ -468,34 +468,34 @@ def log_train_val_performance(path,
     with open(path_log_error, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
-def log_val_hper_para(path, 
+        
+def log_val_hyper_para(path, 
                       hpara_tuple, 
                       error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
         text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
-        
+     
+    
 def log_test_performance(path, 
              error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
-
         
-def log_exception(path, 
-                  message):
-    
-    with open(path, "a") as text_file:
-        text_file.write("\n  NULL loss exception at: %s \n"%(str(message)))
         
-def null_loss_exception(epoch_errors, 
+def log_null_loss_exception(epoch_errors, 
                         log_path):
-# epoch_errors: [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]    
     
+    # epoch_errors: [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]    
     for i in epoch_errors:
+        
         if np.isnan(i[1]) == True:
-            log_exception(log_path, i[0])
+            
+            with open(log_path, "a") as text_file:
+                text_file.write("\n  NULL loss exception at: %s \n"%(str(i[0])))
+            
             break
     return
     
@@ -559,7 +559,82 @@ def data_padding_x(x,
     # [S N T D]
     return target_x
     
+    
+    
+class hpara_grid_search(object):
+    
 
+    def __init__(self, hpara_range):
+        
+        self.n_hpara = len(hpara_range)
+        self.hpara_range = hpara_range
+        
+        self.ini_flag = True
+        
+        
+    def hpara_trial(self):
+        
+        tmp_idx = [0 for _ in range(self.n_hpara)]
+        
+        if self.ini_flag == True or trial_search(tmp_idx, cur_hpara, False) == True:
+            
+            self.ini_flag = False
+            
+            return [hpara_range[tmp_idx[i]] for i in range(self.n_hpara)]
+        
+        else:
+            return None
+        
+    
+    def trial_search(idx, cur_hpara, bool_restart):
+        
+        if cur_hpara >= self.n_hpara:
+            return False
+        
+        if bool_restart == True:
+            
+            self.idx[cur_hpara] = 0
+            trial_search(idx, cur_hpara + 1, True)
+            
+            return True
+        
+        else:
+            
+            if trial_search(self.idx, cur_hpara + 1, False) == False:
+                
+                if self.idx[cur_hpara] + 1 < len(self.hpara_range[cur_hpara]):
+                    
+                    self.idx[cur_hpara] += 1
+                    trial_search(self.idx, cur_hpara + 1, True)
+                    
+                    return True
+                
+                else:
+                    return False
+            else:
+                return True
+    
+'''
+class hpara_random_search(object):
+
+
+    def __init__(self, name, balance=0.0):
+        """Return a Customer object whose name is *name* and starting
+        balance is *balance*."""
+        self.name = name
+        self.balance = balance
+
+    def withdraw(self, amount):
+        """Return the balance remaining after withdrawing *amount*
+        dollars."""
+        if amount > self.balance:
+            raise RuntimeError('Amount greater than available balance.')
+        self.balance -= amount
+        return self.balance
+'''
+    
+    
+    
 # ----- main process  
 
 if __name__ == '__main__':
@@ -666,8 +741,8 @@ if __name__ == '__main__':
                                           train_time = hp_epoch_time)
                 
                 # null loss exception
-                null_loss_exception(hp_epoch_error, 
-                                     path_log_error)
+                log_null_loss_exception(hp_epoch_error, 
+                                        path_log_error)
     
     # ----- re-train
     
@@ -695,13 +770,13 @@ if __name__ == '__main__':
     
     print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
     
-    log_val_hper_para(path = path_log_error, 
+    log_val_hyper_para(path = path_log_error, 
                       hpara_tuple = [best_hpara, epoch_sample, best_val_err], 
                       error_tuple = epoch_error[0])
     
     # ----- testing
     
-    print('\n----- testing ------ \n')
+    print('\n ----- testing performance: \n')
     
     rmse, mae, mape, nnllk, py_tuple, _ = test_nn(epoch_set = epoch_sample, 
                                                   xts = ts_x, 
@@ -716,7 +791,7 @@ if __name__ == '__main__':
     
     print('\n testing errors: ', rmse, mae, mape, nnllk, '\n\n') 
 
-    print("--------- test ----------------- ", np.shape(py_tuple[0]), np.shape(py_tuple[1]))
+    print("\n ------ test ------ \n", np.shape(py_tuple[0]), np.shape(py_tuple[1]))
     
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))

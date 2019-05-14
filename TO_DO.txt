@@ -95,7 +95,7 @@ performance optimizatin issue
 
 --------------- POINT LEARNED -------------------
 
-bias term effect on generalization ability
+bias term effect on generalization ability. It is related to the marginal mean of the target. 
 
 lk_inv is numerical stable
 
@@ -144,11 +144,17 @@ Regularization:
   fine-grained regularization hyper-para 
 
 Training:
-  learning rate decay
-  grid search / random search 
+  
+  ** learning rate decay
+  ** grid search / random search 
   stop training on steps, instead of epoch 
 
-*testing ensemble
+** SG-MCMC:
+   early stop for posterior sampling
+  
+testing ensemble
+
+bias terms for different data sources 
 
 
 EM training
@@ -169,6 +175,8 @@ concrete dropout
 
 mc-dropout
 SG-VI
+
+
 SG-MCMC
   SG-LD
    
