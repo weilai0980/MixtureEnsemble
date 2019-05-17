@@ -16,6 +16,7 @@ from tensorflow.contrib import rnn
 
 # local packages 
 from utils_libs import *
+from utils_training import *
 
 
 # ----- hyper-parameters from command line
@@ -65,9 +66,10 @@ with open('config.json') as f:
 
 para_step_ahead = 0
 
+
 # ----- data and log paths
 
-path_data = "../dataset/bitcoin/double_trx_ob_tar15_len10/"
+path_data = "../dataset/bitcoin/double_trx_ob_tar5_len10/"
 #"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
@@ -97,6 +99,9 @@ para_loss_type = args.loss_type
 para_var_type = "square" # square, exp
 
 para_optimizer = "adam" # RMSprop, adam
+para_optimizer_lr_decay = True
+para_optimizer_lr_decay_epoch = 10
+
 
 para_regu_positive = False
 para_regu_gate = False # -
@@ -104,9 +109,9 @@ para_regu_global_gate = False
 para_regu_latent_dependence = False
 para_regu_weight_on_latent = True
 
-para_bool_bias_in_mean = False
-para_bool_bias_in_var = False
-para_bool_bias_in_gate = False
+para_bool_bias_in_mean = True
+para_bool_bias_in_var = True
+para_bool_bias_in_gate = True
 
 para_bool_target_seperate = False
 
@@ -156,6 +161,7 @@ def train_validate(xtr,
     
     steps_x: integer, corresponding to T
     
+    
     - hyper-parameters (hp) :
     
        hp_l2: float, l2 regularization
@@ -189,7 +195,6 @@ def train_validate(xtr,
         np.random.seed(1)
         tf.set_random_seed(1)
         
-    #with tf.Session() as sess:
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
@@ -215,7 +220,11 @@ def train_validate(xtr,
                           bool_bias_mean = para_bool_bias_in_mean,
                           bool_bias_var = para_bool_bias_in_var,
                           bool_bias_gate = para_bool_bias_in_gate,
-                          optimization_method = para_optimizer)
+                          optimization_method = para_optimizer,
+                          optimization_lr_decay = para_optimizer_lr_decay, 
+                          optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size) 
+                         )
+        
 
         model.train_ini()
         model.inference_ini()
@@ -224,6 +233,7 @@ def train_validate(xtr,
         total_cnt = len(xtr[0])
         total_batch_num = int(total_cnt/hp_batch_size)
         total_idx = list(range(total_cnt))
+        
         
         # -- begin training on epochs
         
@@ -316,52 +326,6 @@ def train_validate(xtr,
            1.0*(ed_time - st_time)/(epoch + 1e-5)
     
 
-def hyper_para_selection(hpara_log, 
-                         val_epoch_num, 
-                         test_epoch_num,
-                         metric_idx):
-    
-    # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
-    
-    hp_err = []
-    
-    for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_epoch_num]])])
-    
-    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
-    
-    # -- print out for checking
-    print([(i[0], i[-1]) for i in sorted_hp])
-    
-    # best hp, epoch_sample, best validation error
-    return sorted_hp[0][0],\
-           [k[0] for k in sorted_hp[0][1]][:test_epoch_num],\
-           min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]])
-
-
-def mape(y, 
-         yhat):
-    
-    tmp_list = []
-    
-    for idx, val in enumerate(y):
-        
-        if abs(val) > 1e-5:
-            tmp_list.append(abs(1.0*(yhat[idx]-val)/val))
-    
-    return np.mean(tmp_list)
-
-def mae(y, 
-        yhat):
-    
-    return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
-    
-def rmse(y, 
-         yhat):
-    
-    return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
-
-            
 def test_nn(epoch_set, 
             xts, 
             yts, 
@@ -457,182 +421,11 @@ def log_train(path):
         text_file.write("adding bias terms in gates: %s \n"%(para_bool_bias_in_gate))
         
         text_file.write("optimization: %s \n"%(para_optimizer))
+        text_file.write("learning rate decay: %s \n"%(str(para_optimizer_lr_decay)))
+        text_file.write("learning rate decay epoch: %s \n"%(str(para_optimizer_lr_decay_epoch)))
         
         text_file.write("\n\n")
         
-def log_train_val_performance(path, 
-                              hpara, 
-                              hpara_error, 
-                              train_time):
-    
-    with open(path_log_error, "a") as text_env:
-        text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
-        
-        
-def log_val_hyper_para(path, 
-                      hpara_tuple, 
-                      error_tuple):
-    
-    with open(path, "a") as text_file:
-        text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
-        text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
-     
-    
-def log_test_performance(path, 
-             error_tuple):
-    
-    with open(path, "a") as text_file:
-        text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
-        
-        
-def log_null_loss_exception(epoch_errors, 
-                        log_path):
-    
-    # epoch_errors: [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]    
-    for i in epoch_errors:
-        
-        if np.isnan(i[1]) == True:
-            
-            with open(log_path, "a") as text_file:
-                text_file.write("\n  NULL loss exception at: %s \n"%(str(i[0])))
-            
-            break
-    return
-    
-        
-def data_reshape(data, 
-                 bool_target_seperate):
-    
-    # data: [yi, ti, [xi_src1, xi_src2, ...]]
-    src_num = len(data[0][2])
-    tmpx = []
-    
-    if bool_target_seperate == True:
-        
-        tmpx.append(np.asarray([tmp[2][0][:, 1:] for tmp in data]))
-        print(np.shape(tmpx[-1]))
-    
-        tmpx.append(np.asarray([tmp[2][0][:, 0:1] for tmp in data]))
-        print(np.shape(tmpx[-1]))
-        
-        for src_idx in range(1, src_num):
-            tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
-            print(np.shape(tmpx[-1]))
-    
-    else:
-        
-        for src_idx in range(src_num):
-            tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
-            print("src " + str(src_idx) + " : ", np.shape(tmpx[-1]))
-    
-    tmpy = np.asarray([tmp[0] for tmp in data])
-    
-    # output shape: x [S N T D],  y [N 1]
-    return tmpx, np.expand_dims(tmpy, -1)
-
-def data_padding_x(x, 
-                   num_src):
-    
-    # shape of x: [S N T D]
-    # T and D are different across sources
-    
-    num_samples = len(x[0])
-    
-    max_dim_t =  max([np.shape(x[i][0])[0] for i in range(num_src)])
-    max_dim_d =  max([np.shape(x[i][0])[1] for i in range(num_src)])
-    
-    target_shape = [num_samples, max_dim_t, max_dim_d]
-    
-    target_x = []
-    
-    for tmp_src in range(num_src):
-        
-        zero_mask = np.zeros(target_shape)
-        
-        tmp_t = np.shape(x[tmp_src][0])[0]
-        tmp_d = np.shape(x[tmp_src][0])[1]
-        
-        zero_mask[:, :tmp_t, :tmp_d] = x[tmp_src]
-        
-        target_x.append(zero_mask)
-    
-    # [S N T D]
-    return target_x
-    
-    
-    
-class hpara_grid_search(object):
-    
-
-    def __init__(self, hpara_range):
-        
-        self.n_hpara = len(hpara_range)
-        self.hpara_range = hpara_range
-        
-        self.ini_flag = True
-        
-        
-    def hpara_trial(self):
-        
-        tmp_idx = [0 for _ in range(self.n_hpara)]
-        
-        if self.ini_flag == True or trial_search(tmp_idx, cur_hpara, False) == True:
-            
-            self.ini_flag = False
-            
-            return [hpara_range[tmp_idx[i]] for i in range(self.n_hpara)]
-        
-        else:
-            return None
-        
-    
-    def trial_search(idx, cur_hpara, bool_restart):
-        
-        if cur_hpara >= self.n_hpara:
-            return False
-        
-        if bool_restart == True:
-            
-            self.idx[cur_hpara] = 0
-            trial_search(idx, cur_hpara + 1, True)
-            
-            return True
-        
-        else:
-            
-            if trial_search(self.idx, cur_hpara + 1, False) == False:
-                
-                if self.idx[cur_hpara] + 1 < len(self.hpara_range[cur_hpara]):
-                    
-                    self.idx[cur_hpara] += 1
-                    trial_search(self.idx, cur_hpara + 1, True)
-                    
-                    return True
-                
-                else:
-                    return False
-            else:
-                return True
-    
-'''
-class hpara_random_search(object):
-
-
-    def __init__(self, name, balance=0.0):
-        """Return a Customer object whose name is *name* and starting
-        balance is *balance*."""
-        self.name = name
-        self.balance = balance
-
-    def withdraw(self, amount):
-        """Return the balance remaining after withdrawing *amount*
-        dollars."""
-        if amount > self.balance:
-            raise RuntimeError('Amount greater than available balance.')
-        self.balance -= amount
-        return self.balance
-'''
-    
     
     
 # ----- main process  
@@ -646,9 +439,9 @@ if __name__ == '__main__':
     # ----- data
     
     import pickle
-    tr_dta = pickle.load(open(path_data + 'train.p', "rb"), encoding='latin1')
-    val_dta = pickle.load(open(path_data + 'val.p', "rb"), encoding='latin1')
-    ts_dta = pickle.load(open(path_data + 'test.p', "rb"), encoding='latin1')
+    tr_dta = pickle.load(open(path_data + 'train.p', "rb"), encoding = 'latin1')
+    val_dta = pickle.load(open(path_data + 'val.p', "rb"), encoding = 'latin1')
+    ts_dta = pickle.load(open(path_data + 'test.p', "rb"), encoding = 'latin1')
     
     print(len(tr_dta), len(val_dta), len(ts_dta))
     
@@ -784,7 +577,7 @@ if __name__ == '__main__':
                                                   file_path = path_model, 
                                                   bool_instance_eval = True,
                                                   loss_type = para_loss_type,
-                                                  num_src = len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0])
+                                                  num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = [rmse, mae, mape, nnllk])

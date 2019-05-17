@@ -7,83 +7,11 @@ from tensorflow.contrib import rnn
 
 # local packages
 from utils_libs import *
+from utils_linear_units import *
 
 # reproducibility by fixing the random seed
 # np.random.seed(1)
 # tf.set_random_seed(1)
-
-
-# ----- utilities functions -----
-
-def multi_src_linear(x, 
-                     dim_x, 
-                     scope, 
-                     bool_bias,
-                     bool_scope_reuse, 
-                     num_src):
-    
-    # x: [S, B, T*D]
-    # dim_x: T*D
-    with tf.variable_scope(scope, 
-                           reuse = bool_scope_reuse):
-        
-        w = tf.get_variable('w', 
-                            shape = [num_src, 1, dim_x],
-                            initializer = tf.contrib.layers.xavier_initializer())
-        
-        b = tf.get_variable("b", 
-                            shape = [num_src, 1], 
-                            initializer = tf.zeros_initializer())
-        
-        if bool_bias == True:
-            
-            # [S, B, T*D] * [S 1 T*D] -> [S B]
-            h = tf.reduce_sum(x * w, -1) + b
-            
-        else:
-            h = tf.reduce_sum(x * w, -1)
-        
-           # [S B]          l2: regularization
-    return h, tf.reduce_sum(tf.square(w))
-
-
-def multi_src_bilinear(x, 
-                       shape_x, 
-                       scope,
-                       bool_bias,
-                       bool_scope_reuse,
-                       num_src):
-    
-    # x: [S, B, T, D]
-    # shape_x: [T, D]
-    with tf.variable_scope(scope, 
-                           reuse = bool_scope_reuse):
-        # [S  1  T  1]
-        w_l = tf.get_variable('w_left', 
-                              [num_src, 1, shape_x[0], 1],
-                              initializer = tf.contrib.layers.xavier_initializer())
-        # [S 1 D]
-        w_r = tf.get_variable('w_right', 
-                              [num_src, 1, shape_x[1]],
-                              initializer = tf.contrib.layers.xavier_initializer())
-        # [S 1]
-        b = tf.get_variable("b", 
-                            shape = [num_src, 1], 
-                            initializer = tf.zeros_initializer())
-        
-        # [S B T D] * [S 1 T 1] -> [S B D]
-        tmp_h = tf.reduce_sum(x * w_l, 2)
-        
-        if bool_bias == True:
-            
-            # [S B D]*[S 1 D] - > [S B]
-            h = tf.reduce_sum(tmp_h * w_r, 2) + b
-            
-        else:
-            h = tf.reduce_sum(tmp_h * w_r, 2)
-            
-           # [S B] 
-    return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r)) 
 
 
 # ----- Mixture statistic -----
@@ -101,7 +29,7 @@ class mixture_statistic():
         
         session: tensorflow session
         
-        loss_type: string, type of loss functions, {mse, lk, lk_inv}
+        loss_type: string, type of loss functions, {mse, lk, lk_inv, elbo, ...}
         
         '''
         
@@ -139,7 +67,11 @@ class mixture_statistic():
                     bool_bias_mean,
                     bool_bias_var,
                     bool_bias_gate,
-                    optimization_method):
+                    optimization_method,
+                    optimization_lr_decay,
+                    optimization_lr_decay_steps):
+        
+
         
         '''
         Arguments:
@@ -217,8 +149,10 @@ class mixture_statistic():
         self.x = tf.placeholder(tf.float32, [self.num_src, None, steps_x, dim_x], name = 'x')
         
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
-        self.optimization_method = optimization_method
         
+        self.optimization_method =   optimization_method
+        self.optimization_lr_decay = optimization_lr_decay
+        self.optimization_lr_decay_steps = optimization_lr_decay_steps 
         
         # ----- individual models
         
@@ -841,15 +775,35 @@ class mixture_statistic():
             print('[ERROR] loss type')
         '''
         
-        if self.optimization_method == 'adam':
-            self.train = tf.train.AdamOptimizer(learning_rate = self.lr)
         
-        elif self.optimization_method == 'RMSprop':
-            self.train = tf.train.RMSPropOptimizer(learning_rate = self.lr)
+        if self.optimization_lr_decay == True:
+            
+            global_step = tf.Variable(0, 
+                                      trainable = False)
+            
+            tmp_learning_rate = tf.train.exponential_decay(self.lr, 
+                                                           global_step,
+                                                           decay_steps = self.optimization_lr_decay_steps, 
+                                                           decay_rate = 0.96, 
+                                                           staircase = True)
+        else:
+            tmp_learning_rate = self.lr
             
         
-        self.optimizer = self.train.minimize(self.loss)
+        if self.optimization_method == 'adam':
+            self.train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
         
+        elif self.optimization_method == 'RMSprop':
+            self.train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+            
+        
+        if self.optimization_lr_decay == True:
+            
+            self.optimizer = self.train.minimize(self.loss, 
+                                                 global_step = global_step)
+        else:
+            self.optimizer = self.train.minimize(self.loss)
+            
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
         
@@ -864,7 +818,8 @@ class mixture_statistic():
         data_dict['y:0'] = y
         
         _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
-                                                feed_dict = data_dict)
+                                                    feed_dict = data_dict)
+        
         return tmp_loss, tmp_sq_err
     
     

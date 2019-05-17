@@ -91,6 +91,7 @@ performance optimizatin issue
 -- ml on multi source 
    
 
+** learning rate decay
 
 
 --------------- POINT LEARNED -------------------
@@ -137,22 +138,27 @@ correlated variable elimination
 
 *math operation check
    
+
 Regularization:
 
   latent dependence
   l1
   fine-grained regularization hyper-para 
 
+
 Training:
   
-  ** learning rate decay
   ** grid search / random search 
+  
   stop training on steps, instead of epoch 
+
 
 ** SG-MCMC:
    early stop for posterior sampling
   
+
 testing ensemble
+
 
 bias terms for different data sources 
 

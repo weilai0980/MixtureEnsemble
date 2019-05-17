@@ -10,68 +10,6 @@ from utils_libs import *
 # np.random.seed(1)
 # tf.set_random_seed(1)
 
-# ----- utilities functions -----
-
-def linear(x, 
-           dim_x, 
-           scope, 
-           bool_bias,
-           bool_scope_reuse):
-    
-    with tf.variable_scope(scope, 
-                           reuse = bool_scope_reuse):
-        
-        w = tf.get_variable('w', 
-                            [dim_x, 1],
-                            initializer = tf.contrib.layers.xavier_initializer())
-        
-        b = tf.get_variable("b", 
-                            shape = [1,], 
-                            initializer = tf.zeros_initializer())
-        
-        if bool_bias == True:
-            h = tf.matmul(x, w) + b
-        else:
-            h = tf.matmul(x, w)
-           
-           # [B]          l2: regularization
-    return tf.squeeze(h), tf.reduce_sum(tf.square(w))
-
-
-def bilinear(x, 
-             shape_x, 
-             scope,
-             bool_bias,
-             bool_scope_reuse):
-    
-    # shape of x: [b, l, r]
-    # shape_x: [l, r]
-    with tf.variable_scope(scope, 
-                           reuse = bool_scope_reuse):
-        
-        w_l = tf.get_variable('w_left', 
-                              [shape_x[0], 1],
-                              initializer = tf.contrib.layers.xavier_initializer())
-        
-        w_r = tf.get_variable('w_right', 
-                              [shape_x[1], 1],
-                              initializer = tf.contrib.layers.xavier_initializer())
-        
-        b = tf.get_variable("b", 
-                            shape = [1,], 
-                            initializer = tf.zeros_initializer())
-        
-        tmph = tf.tensordot(x, w_r, 1)
-        tmph = tf.squeeze(tmph, [2])
-        
-        if bool_bias == True:
-            h = tf.matmul(tmph, w_l) + b
-        else:
-            h = tf.matmul(tmph, w_l)
-            
-           # [B] 
-    return tf.squeeze(h), tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r)) 
-
 
 # ----- Mixture statistic -----
 
