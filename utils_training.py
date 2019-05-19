@@ -103,12 +103,13 @@ def rmse(y,
 
 # ----- logging
 
+
 def log_train_val_performance(path, 
                               hpara, 
                               hpara_error, 
                               train_time):
     
-    with open(path_log_error, "a") as text_env:
+    with open(path, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
         
@@ -122,7 +123,7 @@ def log_val_hyper_para(path,
      
     
 def log_test_performance(path, 
-             error_tuple):
+                         error_tuple):
     
     with open(path, "a") as text_file:
         text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
@@ -144,52 +145,58 @@ def log_null_loss_exception(epoch_errors,
 
 
 # ----- hyper-parameter searching 
+
+# hpara: hyper-parameter
     
 class hpara_grid_search(object):
     
 
-    def __init__(self, hpara_range):
+    def __init__(self, 
+                 hpara_range):
         
+        # lr_range, batch_size_range, l2_range
         self.n_hpara = len(hpara_range)
         self.hpara_range = hpara_range
         
         self.ini_flag = True
         
+        self.idx = [0 for _ in range(self.n_hpara)]
         
     def hpara_trial(self):
         
-        tmp_idx = [0 for _ in range(self.n_hpara)]
-        
-        if self.ini_flag == True or trial_search(tmp_idx, cur_hpara, False) == True:
+        if self.ini_flag == True or self.trial_search(self.idx, 0, False) == True:
             
             self.ini_flag = False
             
-            return [hpara_range[tmp_idx[i]] for i in range(self.n_hpara)]
+            return [self.hpara_range[i][self.idx[i]] for i in range(self.n_hpara)]
         
         else:
             return None
         
     
-    def trial_search(idx, cur_hpara, bool_restart):
+    def trial_search(self, 
+                     idx, 
+                     cur_n, 
+                     bool_restart):
         
-        if cur_hpara >= self.n_hpara:
+        if cur_n >= self.n_hpara:
             return False
         
         if bool_restart == True:
             
-            self.idx[cur_hpara] = 0
-            trial_search(idx, cur_hpara + 1, True)
+            self.idx[cur_n] = 0
+            self.trial_search(idx, cur_n + 1, True)
             
             return True
         
         else:
             
-            if trial_search(self.idx, cur_hpara + 1, False) == False:
+            if self.trial_search(self.idx, cur_n + 1, False) == False:
                 
-                if self.idx[cur_hpara] + 1 < len(self.hpara_range[cur_hpara]):
+                if self.idx[cur_n] + 1 < len(self.hpara_range[cur_n]):
                     
-                    self.idx[cur_hpara] += 1
-                    trial_search(self.idx, cur_hpara + 1, True)
+                    self.idx[cur_n] += 1
+                    self.trial_search(self.idx, cur_n + 1, True)
                     
                     return True
                 
@@ -198,26 +205,64 @@ class hpara_grid_search(object):
             else:
                 return True
             
-    
-'''
+            
 class hpara_random_search(object):
-
-
-    def __init__(self, name, balance=0.0):
-        """Return a Customer object whose name is *name* and starting
-        balance is *balance*."""
-        self.name = name
-        self.balance = balance
-
-    def withdraw(self, amount):
-        """Return the balance remaining after withdrawing *amount*
-        dollars."""
-        if amount > self.balance:
-            raise RuntimeError('Amount greater than available balance.')
-        self.balance -= amount
-        return self.balance
-'''
-
+    
+    def __init__(self, 
+                 hpara_range, 
+                 n_trial):
+        # ?
+        # np.random.seed(1)
+        
+        self.n_hpara = len(hpara_range)
+        # lr_range, batch_size_range, l2_range
+        
+        self.n_trial = n_trial
+        self.cur_trial = 0
+        
+        # [[lower_boud, up_bound]]
+        self.hpara_range = hpara_range
+        
+        # no duplication
+        self.hpara_set = set()
+        
+        self.ini_flag = True
+        
+    def hpara_trial(self):
+        
+        if self.cur_trial < self.n_trial:
+            
+            self.cur_trial += 1
+            return self.trial_search()
+        
+        else:
+            return None
+        
+        
+    def trial_search(self):
+        
+        bool_duplicate = True
+        
+        while bool_duplicate == True:
+            
+            tmp_hpara = ()
+            for i in self.hpara_range:
+                
+                tmp_hpara = tmp_hpara + (i[0] + (i[1] - i[0])*np.random.random(), )
+            
+            
+            # 
+            if tmp_hpara not in self.hpara_set:
+                
+                bool_duplicate = False
+                self.hpara_set.add(tmp_hpara)
+                
+                return tmp_hpara
+                
+        return
+        
+        
+    
 def hyper_para_selection(hpara_log, 
                          val_epoch_num, 
                          test_epoch_num,

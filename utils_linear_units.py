@@ -1,5 +1,10 @@
 #!/usr/bin/python
 
+import tensorflow as tf
+
+# local 
+from utils_libs import *
+
 # ----- utilities functions -----
 
 def multi_src_linear(x, 

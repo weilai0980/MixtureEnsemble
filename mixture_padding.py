@@ -46,6 +46,13 @@ class mixture_statistic():
         # number of components or sources in X
         self.num_src = num_src
         
+        # for SG-MCMC during both training and testing phases
+        # [A B S]
+        # A: number of samples
+        self.py_mean_src_samples = []
+        self.py_var_src_samples = []
+        self.py_gate_src_samples = []
+        
 
     def network_ini(self,
                     lr,
@@ -112,8 +119,6 @@ class mixture_statistic():
         bool_bias_var: have bias in variance prediction
         
         bool_bias_gate): : have bias in gate prediction
-        
-        
         
         '''
         
@@ -281,7 +286,7 @@ class mixture_statistic():
             '''
         
         
-        # -- individual means and variance
+        # ----- individual means and variance
         
         # [B S]
         mean_stack = tf.transpose(tmp_mean, [1, 0])
@@ -424,6 +429,8 @@ class mixture_statistic():
                 lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
                 self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
                 
+                #self.nllk_loss
+                #self.nllk
             
             elif self.loss_type == 'lk_inv':
                 
@@ -462,9 +469,10 @@ class mixture_statistic():
                 # based on lk_inv
         
                 # [B 1] - [B S]
-                tmp_nllk_inv = 0.5*tf.square(self.y-mean_stack)*inv_var_stack- 0.5*tf.log(inv_var_stack+1e-5) + 0.5*tf.log(2*np.pi)
+                tmp_nllk_inv = 0.5*tf.square(self.y - mean_stack)*inv_var_stack - 0.5*tf.log(inv_var_stack + 1e-5) + 0.5*tf.log(2*np.pi)
         
                 self.nllk_elbo = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_inv, -1)) 
+                
                 
                 
             elif self.loss_type == 'mse':
@@ -501,13 +509,13 @@ class mixture_statistic():
             
                 self.nllk_var_mix = tf.reduce_sum(tmp_nllk_mix) 
             
-                
+            
             elif self.loss_type == 'lk_var_mix_inv':
                 
                 # mixed variance
                 # [B 1]                     [B S]         [B S]
                 py_var_inv = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)
-                
+                # [B 1]
                 self.py_var = tf.reduce_sum(1.0/(inv_var_stack + 1.0) * self.gates, 1, keepdims = True)
                 
                 # negative log likelihood
@@ -685,7 +693,6 @@ class mixture_statistic():
             
             self.regularization += regu_global_logits
         
-        
         # -- gate smoothing
         
         if latent_prob_type != "none":
@@ -695,10 +702,10 @@ class mixture_statistic():
                 # exact llk
                 # self.latent_depend = -1.0*tf.reduce_sum(tf.log(latent_prob))
                 
-                # lower bound
+                # lower bound, comparable perforamcne to exact llk 
                 self.latent_depend = 0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*pos_logits))))\
                                                                 + \
-                                          0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
+                                     0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
             
             else:
                 
@@ -795,7 +802,11 @@ class mixture_statistic():
         
         elif self.optimization_method == 'RMSprop':
             self.train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+        
+        elif self.optimization_method == 'sg-mcmc-RMSprop':
             
+            self.train = tfp.optimizer.StochasticGradientLangevinDynamics(learning_rate = tmp_learning_rate,
+                                                                          preconditioner_decay_rate = 0.99)
         
         if self.optimization_lr_decay == True:
             
@@ -880,8 +891,8 @@ class mixture_statistic():
                                                 tf.get_collection('nnllk')[0]],
                                                 feed_dict = data_dict)
         
-        # test: for the observing during the training
-        # [B S]
+        # monitoring during the training
+        # [B S]      [B S]
         py_gate_src, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
                                 feed_dict = data_dict)
         
@@ -893,6 +904,12 @@ class mixture_statistic():
                                                          tf.get_collection('py_var_src')[0],
                                                          ],
                                                          feed_dict = data_dict)
+            
+            # for SG-MCMC
+            self.py_mean_src_samples.append(py_mean_src)
+            self.py_var_src_samples.append(py_var_src)
+            self.py_gate_src_samples.append(py_gate_src)
+            
         else:
             py_mean = None
             py_var = None
@@ -919,6 +936,7 @@ class mixture_statistic():
                                            clear_devices = True)
         saver.restore(self.sess, 
                       path_data)
+        
         
         return
     

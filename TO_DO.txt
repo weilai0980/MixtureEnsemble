@@ -93,6 +93,13 @@ performance optimizatin issue
 
 ** learning rate decay
 
+ / random search 
+
+
+** l2, # epoches in random search 
+
+** grid search
+
 
 --------------- POINT LEARNED -------------------
 
@@ -100,6 +107,11 @@ bias term effect on generalization ability. It is related to the marginal mean o
 
 lk_inv is numerical stable
 
+hyper-para
+
+design choice:
+  lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
+                    + 
 
 
 --------------- TO DO -------------------
@@ -136,6 +148,7 @@ correlated variable elimination
 
 ----- Statistic heteroskedasticity mixture
 
+
 *math operation check
    
 
@@ -145,23 +158,24 @@ Regularization:
   l1
   fine-grained regularization hyper-para 
 
-
 Training:
-  
-  ** grid search / random search 
-  
-  stop training on steps, instead of epoch 
+
+     stop training on steps, instead of epoch
+     
+     
+Cross-check:
+
+  ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
 
 
 ** SG-MCMC:
    early stop for posterior sampling
-  
+
+** bias terms for different data sources 
+
+
 
 testing ensemble
-
-
-bias terms for different data sources 
-
 
 EM training
 inference 

@@ -73,7 +73,7 @@ path_data = "../dataset/bitcoin/double_trx_ob_tar5_len10/"
 #"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
-path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
+#path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
 
 path_model = "../results/mixture/"
 path_model_posterior = "../results/model_posterior/"
@@ -84,10 +84,7 @@ path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + 
 # ----- hyper-parameters set-up
 
 para_y_log = False
-
 para_bool_bilinear = True
-
-para_n_epoch = 60
 
 para_distr_type = args.target_distr
 # gaussian, student_t
@@ -95,28 +92,28 @@ para_distr_para = [3]
 # gaussian: [] 
 # student_t: [nu], nu>=3
 
-para_loss_type = args.loss_type
+para_bool_target_seperate = False
 para_var_type = "square" # square, exp
+
+# -- optimization
+
+para_n_epoch = 80
+para_loss_type = args.loss_type
 
 para_optimizer = "adam" # RMSprop, adam
 para_optimizer_lr_decay = True
-para_optimizer_lr_decay_epoch = 10
+para_optimizer_lr_decay_epoch = 15
 
+# -- hyper-para
 
-para_regu_positive = False
-para_regu_gate = False # -
-para_regu_global_gate = False  
-para_regu_latent_dependence = False
-para_regu_weight_on_latent = True
+para_hpara_search = "grid" # random, grid 
 
-para_bool_bias_in_mean = True
-para_bool_bias_in_var = True
-para_bool_bias_in_gate = True
+para_lr_range = [0.002, ]
+para_batch_range = [64, 32, 16, 80]
+para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 
-para_bool_target_seperate = False
-
-para_latent_dependence = args.latent_dependence
-para_latent_prob_type = args.latent_prob_type
+para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
+para_hpara_n_trial = 15
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -125,10 +122,74 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
 
-para_lr_range = [0.001, ]
-para_batch_range = [64, 32, 16, 80]
-para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
-#[1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01]
+# -- regularization
+
+para_regu_positive = False
+para_regu_gate = False
+para_regu_global_gate = False  
+para_regu_latent_dependence = True
+para_regu_weight_on_latent = True
+
+para_bool_bias_in_mean = True
+para_bool_bias_in_var = True
+para_bool_bias_in_gate = True
+
+para_latent_dependence = args.latent_dependence
+para_latent_prob_type = args.latent_prob_type
+
+
+def log_train(path):
+    
+    with open(path, "a") as text_file:
+        
+        text_file.write("\n\n ------ Statistic mixture : \n")
+        
+        text_file.write("data_mode : %s \n"%(args.data_mode))
+        text_file.write("data path : %s \n"%(path_data))
+        text_file.write("data source timesteps : %s \n"%(para_steps_x))
+        text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
+        text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
+        text_file.write("\n")
+        
+        text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
+        text_file.write("target distribution type : %s \n"%(para_distr_type))
+        text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
+        text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
+        text_file.write("\n")
+        
+        text_file.write("regularization on positive means : %s \n"%(para_regu_positive))
+        text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
+        text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
+        text_file.write("regularization on latent dependence parameters : %s \n"%(para_regu_latent_dependence))
+        text_file.write("regularization l2 on latent : %s \n"%(para_regu_weight_on_latent))
+        
+        text_file.write("adding bias terms in mean: %s \n"%(para_bool_bias_in_mean))
+        text_file.write("adding bias terms in variance: %s \n"%(para_bool_bias_in_var))
+        text_file.write("adding bias terms in gates: %s \n"%(para_bool_bias_in_gate))
+        text_file.write("\n")
+        
+        text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
+        text_file.write("latent dependence probability type : %s \n"%(para_latent_prob_type))
+        text_file.write("latent dependence as a regularization : %s \n"%(True if para_latent_prob_type != "none" else False))
+        text_file.write("\n")
+        
+        text_file.write("loss type : %s \n"%(para_loss_type))
+        text_file.write("optimizer: %s \n"%(para_optimizer))
+        text_file.write("number of epochs : %s \n"%(para_n_epoch))
+        text_file.write("learning rate decay: %s \n"%(str(para_optimizer_lr_decay)))
+        text_file.write("learning rate decay epoch: %s \n"%(str(para_optimizer_lr_decay_epoch)))
+        text_file.write("\n")
+        
+        text_file.write("hyper-para search: %s \n"%(para_hpara_search))
+        text_file.write("hyper-para range: %s \n"%(str(para_hpara_range)))
+        text_file.write("hyper-para trials: %s \n"%(str(para_hpara_n_trial)))
+        
+        text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
+        text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
+        text_file.write("validation metric : %s \n"%(para_validation_metric))
+        text_file.write("variance calculation type : %s \n"%(para_var_type))
+        
+        text_file.write("\n\n")
 
 
 # ----- training and evalution
@@ -169,8 +230,6 @@ def train_validate(xtr,
        hp_lr: float, learning rate
     
        hp_batch_size: int
-    
-    
     
     '''
     
@@ -256,19 +315,10 @@ def train_validate(xtr,
             for i in range(total_batch_num):
                 
                 # batch data
-                batch_idx = total_idx[i*hp_batch_size: (i+1)*hp_batch_size] 
+                batch_idx = total_idx[i*hp_batch_size : (i+1)*hp_batch_size] 
                 
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
                 batch_y = ytr[batch_idx]
-                
-                '''
-                # log transformation on the target
-                if para_y_log == True:
-                    batch_y = log(ytr[batch_idx]+1e-5)
-                    
-                else:
-                    batch_y = ytr[batch_idx]
-                '''
                 
                 # one-step training on the batch data
                 tmp_loss, tmp_sq_err = model.train_batch(batch_x, 
@@ -315,9 +365,6 @@ def train_validate(xtr,
             if np.isnan(epoch_loss) == True:
                 print("\n --- NAN loss !! \n" )
                 break
-        
-        
-        print("Optimization Finished!")
         
         ed_time = time.time()
     
@@ -377,56 +424,6 @@ def test_nn(epoch_set,
                                    bool_py_eval = bool_instance_eval)
     #py_ensemble    
         
-
-def log_train(path):
-    
-    with open(path, "a") as text_file:
-        
-        text_file.write("\n\n ------ Statistic mixture : \n")
-        
-        text_file.write("data_mode : %s \n"%(args.data_mode))
-        text_file.write("data source timesteps : %s \n"%(para_steps_x))
-        text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
-        text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
-        text_file.write("data path : %s \n"%(path_data))
-        
-        text_file.write("loss type : %s \n"%(para_loss_type))
-        text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
-        
-        text_file.write("target distribution type : %s \n"%(para_distr_type))
-        text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
-        text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
-        
-        text_file.write("regularization on positive means : %s \n"%(para_regu_positive))
-        text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
-        text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
-        text_file.write("regularization on latent dependence parameters : %s \n"%(para_regu_latent_dependence))
-        text_file.write("regularization l2 on latent : %s \n"%(para_regu_weight_on_latent))
-        
-        text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
-        text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
-        
-        text_file.write("number of epochs : %s \n"%(para_n_epoch))
-        #text_file.write("batch size : %s \n"%(para_batch_size))
-        
-        text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
-        text_file.write("latent dependence probability type : %s \n"%(para_latent_prob_type))
-        text_file.write("latent dependence as a regularization : %s \n"%(True if para_latent_prob_type != "none" else False))
-        
-        text_file.write("validation metric : %s \n"%(para_validation_metric))
-        text_file.write("variance calculation type : %s \n"%(para_var_type))
-        
-        text_file.write("adding bias terms in mean: %s \n"%(para_bool_bias_in_mean))
-        text_file.write("adding bias terms in variance: %s \n"%(para_bool_bias_in_var))
-        text_file.write("adding bias terms in gates: %s \n"%(para_bool_bias_in_gate))
-        
-        text_file.write("optimization: %s \n"%(para_optimizer))
-        text_file.write("learning rate decay: %s \n"%(str(para_optimizer_lr_decay)))
-        text_file.write("learning rate decay epoch: %s \n"%(str(para_optimizer_lr_decay_epoch)))
-        
-        text_file.write("\n\n")
-        
-    
     
 # ----- main process  
 
@@ -491,7 +488,6 @@ if __name__ == '__main__':
                               num_src = len(tr_x))
     
         print("Shapes after padding: ", np.shape(tr_x), np.shape(val_x), np.shape(ts_x))
-        #print(tr_x[0][0], tr_x[1][0], tr_x[2][0])
         
         para_steps_x = np.shape(tr_x)[2] 
         para_dim_x = np.shape(tr_x)[3]
@@ -500,43 +496,58 @@ if __name__ == '__main__':
     # ----- training and validation
     
     log_train(path_log_error)
-                           
+    
+    # -- hyper-para generator 
+    
+    if para_hpara_search == "random":
+        
+        hpara_generator = hpara_random_search(para_hpara_range, 
+                                              para_hpara_n_trial)
+    elif para_hpara_search == "grid":
+
+        hpara_generator = hpara_grid_search([para_lr_range, para_batch_range, para_l2_range])
+        
+        
+    # -- begin hyper-para search
+    
     hpara_log = []
+    tmp_hpara = hpara_generator.hpara_trial()
     
-    # hp: hyper-parameter
-    for tmp_lr in para_lr_range:
-        for tmp_batch in para_batch_range:
+    while tmp_hpara != None:
+        
+        # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]
+        hp_epoch_error, hp_epoch_time = train_validate(tr_x, 
+                                                       tr_y,
+                                                       val_x,
+                                                       val_y,
+                                                       dim_x = para_dim_x,
+                                                       steps_x = para_steps_x,
+                                                       hp_lr = tmp_hpara[0],
+                                                       hp_batch_size = int(tmp_hpara[1]),
+                                                       hp_l2 = tmp_hpara[2],
+                                                       retrain_epoch_set = [],
+                                                       retrain_bool = False, 
+                                                       retrain_best_val_err = 0.0)
+        
+        # [ [tmp_lr, tmp_batch, tmp_l2], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
+        hpara_log.append([tmp_hpara, hp_epoch_error])
+        
+        log_train_val_performance(path_log_error, 
+                                  hpara = hpara_log[-1][0], 
+                                  hpara_error = hpara_log[-1][1][0],
+                                  train_time = hp_epoch_time)
+        
+        # NAN loss exception
+        log_null_loss_exception(hp_epoch_error, 
+                                 path_log_error)
+        
+        # sample the next hyper-para
+        tmp_hpara = hpara_generator.hpara_trial()
+        
+        print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
+        print('\n Training time: \n', hp_epoch_time, '\n')
             
-            for tmp_l2 in para_l2_range:
-                
-                # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]
-                hp_epoch_error, hp_epoch_time = train_validate(tr_x, 
-                                                               tr_y,
-                                                               val_x,
-                                                               val_y,
-                                                               dim_x = para_dim_x,
-                                                               steps_x = para_steps_x,
-                                                               hp_lr = tmp_lr,
-                                                               hp_batch_size = tmp_batch,
-                                                               hp_l2 = tmp_l2,
-                                                               retrain_epoch_set = [],
-                                                               retrain_bool = False, 
-                                                               retrain_best_val_err = 0.0)
-            
-                hpara_log.append([[tmp_lr, tmp_batch, tmp_l2], hp_epoch_error])
-            
-                print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
-                print('\n Training time: \n', hp_epoch_time, '\n')
-                           
-                log_train_val_performance(path_log_error, 
-                                          hpara = hpara_log[-1][0], 
-                                          hpara_error = hpara_log[-1][1][0],
-                                          train_time = hp_epoch_time)
-                
-                # null loss exception
-                log_null_loss_exception(hp_epoch_error, 
-                                        path_log_error)
-    
+        
     # ----- re-train
     
     # best validation performance
@@ -544,10 +555,6 @@ if __name__ == '__main__':
                                                                   val_epoch_num = para_val_epoch_num, 
                                                                   test_epoch_num = para_test_epoch_num,
                                                                   metric_idx = para_metric_map[para_validation_metric])
-    
-    print('\n----- Best hyper-parameters: ', best_hpara, epoch_sample, best_val_err, '\n')
-    
-    
     epoch_error, _ = train_validate(tr_x, 
                                     tr_y,
                                     val_x, 
@@ -555,21 +562,21 @@ if __name__ == '__main__':
                                     dim_x = para_dim_x,
                                     steps_x = para_steps_x,
                                     hp_lr = best_hpara[0],
-                                    hp_batch_size = best_hpara[1],
+                                    hp_batch_size = int(best_hpara[1]),
                                     hp_l2 = best_hpara[2],
                                     retrain_epoch_set = epoch_sample, 
                                     retrain_bool = True,
                                     retrain_best_val_err = best_val_err)
     
+    log_val_hyper_para(path = path_log_error, 
+                       hpara_tuple = [best_hpara, epoch_sample, best_val_err], 
+                       error_tuple = epoch_error[0])
+    
+    print('\n----- Best hyper-parameters: ', best_hpara, epoch_sample, best_val_err, '\n')
     print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
     
-    log_val_hyper_para(path = path_log_error, 
-                      hpara_tuple = [best_hpara, epoch_sample, best_val_err], 
-                      error_tuple = epoch_error[0])
     
     # ----- testing
-    
-    print('\n ----- testing performance: \n')
     
     rmse, mae, mape, nnllk, py_tuple, _ = test_nn(epoch_set = epoch_sample, 
                                                   xts = ts_x, 
@@ -582,10 +589,11 @@ if __name__ == '__main__':
     log_test_performance(path = path_log_error, 
                          error_tuple = [rmse, mae, mape, nnllk])
     
-    print('\n testing errors: ', rmse, mae, mape, nnllk, '\n\n') 
-
-    print("\n ------ test ------ \n", np.shape(py_tuple[0]), np.shape(py_tuple[1]))
-    
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
+    
+    
+    print('\n ----- testing performance: \n')
+    print('\n testing errors: ', rmse, mae, mape, nnllk, '\n\n') 
+    
     

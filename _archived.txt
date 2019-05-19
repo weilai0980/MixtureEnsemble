@@ -1,4 +1,42 @@
 '''
+    # hp: hyper-parameter
+    for tmp_lr in para_lr_range:
+        for tmp_batch in para_batch_range:
+            for tmp_l2 in para_l2_range:
+                
+                # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]
+                hp_epoch_error, hp_epoch_time = train_validate(tr_x, 
+                                                               tr_y,
+                                                               val_x,
+                                                               val_y,
+                                                               dim_x = para_dim_x,
+                                                               steps_x = para_steps_x,
+                                                               hp_lr = tmp_lr,
+                                                               hp_batch_size = tmp_batch,
+                                                               hp_l2 = tmp_l2,
+                                                               retrain_epoch_set = [],
+                                                               retrain_bool = False, 
+                                                               retrain_best_val_err = 0.0)
+            
+                hpara_log.append([[tmp_lr, tmp_batch, tmp_l2], hp_epoch_error])
+            
+                print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
+                print('\n Training time: \n', hp_epoch_time, '\n')
+                           
+                log_train_val_performance(path_log_error, 
+                                          hpara = hpara_log[-1][0], 
+                                          hpara_error = hpara_log[-1][1][0],
+                                          train_time = hp_epoch_time)
+                
+                # null loss exception
+                log_null_loss_exception(hp_epoch_error, 
+                                        path_log_error)
+    '''
+    
+
+
+
+'''
         # ----- negative log likelihood and loss function
                 
         # lk: likelihood
