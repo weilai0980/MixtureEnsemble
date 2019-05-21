@@ -107,12 +107,13 @@ bias term effect on generalization ability. It is related to the marginal mean o
 
 lk_inv is numerical stable
 
-hyper-para
+hyper-para search: grid random bayesian 
 
 design choice:
   lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
                     + 
-
+                    
+early stopping for generalization ability
 
 --------------- TO DO -------------------
 
@@ -158,9 +159,10 @@ Regularization:
   l1
   fine-grained regularization hyper-para 
 
+
 Training:
 
-     stop training on steps, instead of epoch
+  early stopping: stop training on steps, instead of epoch
      
      
 Cross-check:
@@ -174,8 +176,9 @@ Cross-check:
 ** bias terms for different data sources 
 
 
+Testing:
+  ensemble
 
-testing ensemble
 
 EM training
 inference 
@@ -190,6 +193,13 @@ hidden transition
 
 
 ----- bayesian
+
+
+sgld efficiency
+training-testing framework
+average consistency
+
+
 
 concrete dropout
 

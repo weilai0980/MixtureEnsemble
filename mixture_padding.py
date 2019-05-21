@@ -3,11 +3,12 @@
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.contrib import rnn
+import tensorflow_probability as tfp
 
 # local packages
 from utils_libs import *
 from utils_linear_units import *
+from utils_training import *
 
 # reproducibility by fixing the random seed
 # np.random.seed(1)
@@ -53,6 +54,8 @@ class mixture_statistic():
         self.py_var_src_samples = []
         self.py_gate_src_samples = []
         
+        self.py_mean_samples = []
+        
 
     def network_ini(self,
                     lr,
@@ -76,7 +79,9 @@ class mixture_statistic():
                     bool_bias_gate,
                     optimization_method,
                     optimization_lr_decay,
-                    optimization_lr_decay_steps):
+                    optimization_lr_decay_steps,
+                    optimization_mode
+                    burn_in_step):
         
 
         
@@ -118,7 +123,9 @@ class mixture_statistic():
         
         bool_bias_var: have bias in variance prediction
         
-        bool_bias_gate): : have bias in gate prediction
+        bool_bias_gate: have bias in gate prediction
+        
+        optimization_mode: bayesian, map
         
         '''
         
@@ -158,6 +165,11 @@ class mixture_statistic():
         self.optimization_method =   optimization_method
         self.optimization_lr_decay = optimization_lr_decay
         self.optimization_lr_decay_steps = optimization_lr_decay_steps 
+        
+        
+        self.optimization_mode = optimization_mode
+        self.training_step = 0
+        self.burn_in_step = burn_in_step
         
         # ----- individual models
         
@@ -798,22 +810,22 @@ class mixture_statistic():
             
         
         if self.optimization_method == 'adam':
-            self.train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
+            tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
         
         elif self.optimization_method == 'RMSprop':
-            self.train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+            tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
         
-        elif self.optimization_method == 'sg-mcmc-RMSprop':
+        elif self.optimization_method == 'sgmcmc_RMSprop':
             
-            self.train = tfp.optimizer.StochasticGradientLangevinDynamics(learning_rate = tmp_learning_rate,
+            tmp_train = tfp.optimizer.StochasticGradientLangevinDynamics(learning_rate = tmp_learning_rate,
                                                                           preconditioner_decay_rate = 0.99)
         
         if self.optimization_lr_decay == True:
             
-            self.optimizer = self.train.minimize(self.loss, 
-                                                 global_step = global_step)
+            self.optimizer = tmp_train.minimize(self.loss, 
+                                                global_step = global_step)
         else:
-            self.optimizer = self.train.minimize(self.loss)
+            self.optimizer = tmp_train.minimize(self.loss)
             
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
@@ -822,11 +834,15 @@ class mixture_statistic():
     #   training on batch of data
     def train_batch(self, 
                     x, 
-                    y):
+                    y,
+                    global_step):
         
         data_dict = {}
         data_dict["x:0"] = x
         data_dict['y:0'] = y
+        
+        # record the global training step 
+        self.training_step = global_step
         
         _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
                                                     feed_dict = data_dict)
@@ -872,12 +888,11 @@ class mixture_statistic():
         tf.add_to_collection("py_var_src", self.py_var_src)
         
     
-    #   infer givn testing data
-    def inference(self, 
-                  x, 
-                  y, 
-                  bool_py_eval):
-        
+    def validation(self,
+                   x,
+                   y,
+                   )
+    
         # x: shape [S B T D]
         # y: [B 1]
         
@@ -891,12 +906,13 @@ class mixture_statistic():
                                                 tf.get_collection('nnllk')[0]],
                                                 feed_dict = data_dict)
         
-        # monitoring during the training
+        # monitoring tuple during the training
         # [B S]      [B S]
         py_gate_src, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
-                                feed_dict = data_dict)
+                                                 feed_dict = data_dict)
         
-        if bool_py_eval == True:
+        
+        if self.optimization_mode == "bayesian" and self.training_step > self.burn_in_step:
             
             # [B 1]          [B S]
             py_mean, py_var, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
@@ -910,13 +926,76 @@ class mixture_statistic():
             self.py_var_src_samples.append(py_var_src)
             self.py_gate_src_samples.append(py_gate_src)
             
+            self.py_mean_samples.append(py_mean)
+
+        
+        # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
+        return rmse, mae, mape, nnllk, [py_gate_src, py_mean_src]
+    
+    
+    def validation_bayesian(self,
+                            x, 
+                            y):
+        # [A B S]
+        # A: number of samples
+        
+        m_src_sample = np.asarray(self.py_mean_src_samples)
+        v_src_sample = np.asarray(self.py_var_src_samples)
+        g_src_sample = np.asarray(self.py_gate_src_samples)
+        
+        # [A B 1]
+        m_sample = np.asarray(self.py_mean_samples)
+        
+        # [B]
+        bayes_mean_src = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        
+        bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        
+        #tmp_m_src_sample = m_src_sample**2
+        #py_var = 
+        
+        return [rmse(y, bayes_mean_src), mae(y, bayes_mean_src), mape(y, bayes_mean_src), \
+                rmse(y, bayes_mean), mae(y, bayes_mean), mape(y, bayes_mean)]
+    
+    
+    #   infer givn testing data
+    def inference(self, 
+                  x, 
+                  y, 
+                  bool_py_eval, 
+                  ):
+        
+        # x: shape [S B T D]
+        # y: [B 1]
+        
+        data_dict = {}
+        data_dict["x:0"] = x
+        data_dict['y:0'] = y
+        
+        rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
+                                                tf.get_collection('mae')[0],
+                                                tf.get_collection('mape')[0],
+                                                tf.get_collection('nnllk')[0]],
+                                                feed_dict = data_dict)
+        if bool_py_eval == True:
+            
+            # [B 1]          [B S]
+            py_mean, py_var, py_gate_src, py_mean_src, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
+                                                                                   tf.get_collection('py_var')[0],
+                                                                                   tf.get_collection('py_gate')[0]
+                                                                                   tf.get_collection('py_mean_src')[0],
+                                                                                   tf.get_collection('py_var_src')[0]
+                                                                                   ],
+                                                                                   feed_dict = data_dict)
         else:
             py_mean = None
             py_var = None
+            py_gate_src = None
+            py_mean_src = None
             py_var_src = None
         
-        # error metric tuple [rmse, mae, mape, nnllk], py tuple [], monitoring tuple []
-        return rmse, mae, mape, nnllk, [py_mean, py_var, py_mean_src, py_var_src, py_gate_src], [py_gate_src, py_mean_src]
+        # error metric tuple [rmse, mae, mape, nnllk], py tuple []
+        return rmse, mae, mape, nnllk, [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
     
     
     #   collect the optimized variable values
@@ -925,7 +1004,7 @@ class mixture_statistic():
         
         return [tf_var.name for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)],\
                [tf_var.eval() for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)]
-    
+        
     
     #   restore the model from the files
     def pre_train_restore_model(self, 
@@ -936,7 +1015,56 @@ class mixture_statistic():
                                            clear_devices = True)
         saver.restore(self.sess, 
                       path_data)
-        
-        
         return
     
+    
+class ensemble_inference(object):
+
+    def __init__(self,)
+        
+        # for SG-MCMC
+        # [A B S]
+        # A: number of samples
+        self.py_mean_src_samples = []
+        self.py_var_src_samples = []
+        self.py_gate_src_samples = []
+        
+        self.py_mean_samples = []
+        
+        
+    def add_samples(self, 
+                    py_mean, 
+                    py_var,
+                    py_gate_src,
+                    py_mean_src,
+                    py_var_src):
+        
+        # [A B S]         
+        self.py_mean_src_samples.append(py_mean_src)
+        self.py_var_src_samples.append(py_var_src)
+        self.py_gate_src_samples.append(py_gate_src)
+        
+        # [A B 1]
+        self.py_mean_samples.append(py_mean)
+        
+        return
+            
+    def bayesian_inference(self):
+        
+        # [A B S]
+        # A: number of samples
+        
+        m_src_sample = np.asarray(self.py_mean_src_samples)
+        v_src_sample = np.asarray(self.py_var_src_samples)
+        g_src_sample = np.asarray(self.py_gate_src_samples)
+        
+        # [A B 1]
+        m_sample = np.asarray(self.py_mean_samples)
+        
+        # [B]
+        bayes_mean_src = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        
+        bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        
+        return [rmse(y, bayes_mean_src), mae(y, bayes_mean_src), mape(y, bayes_mean_src), \
+                rmse(y, bayes_mean), mae(y, bayes_mean), mape(y, bayes_mean)]

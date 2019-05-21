@@ -6,6 +6,8 @@ from tensorflow.python.ops.rnn_cell_impl import *
 import tensorflow as tf
 '''
 
+import numpy as np
+
 # local 
 from utils_libs import *
 
@@ -111,6 +113,14 @@ def log_train_val_performance(path,
     
     with open(path, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
+        
+        
+def log_train_val_bayesian_error(path, 
+                                 error, 
+                                 ):
+    
+    with open(path, "a") as text_env:
+        text_env.write("          %s\n\n"%(str(error)))
         
         
 def log_val_hyper_para(path, 
