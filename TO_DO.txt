@@ -101,6 +101,13 @@ performance optimizatin issue
 ** grid search
 
 
+training-testing framework
+average consistency
+
+
+
+
+
 --------------- POINT LEARNED -------------------
 
 bias term effect on generalization ability. It is related to the marginal mean of the target. 
@@ -114,6 +121,10 @@ design choice:
                     + 
                     
 early stopping for generalization ability
+
+
+
+
 
 --------------- TO DO -------------------
 
@@ -196,8 +207,7 @@ hidden transition
 
 
 sgld efficiency
-training-testing framework
-average consistency
+
 
 
 

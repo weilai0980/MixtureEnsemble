@@ -1,11 +1,5 @@
 #!/usr/bin/python
 
-'''
-from tensorflow.python.ops import rnn_cell_impl
-from tensorflow.python.ops.rnn_cell_impl import *
-import tensorflow as tf
-'''
-
 import numpy as np
 
 # local 

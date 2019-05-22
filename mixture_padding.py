@@ -80,7 +80,7 @@ class mixture_statistic():
                     optimization_method,
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
-                    optimization_mode
+                    optimization_mode,
                     burn_in_step):
         
 
@@ -890,8 +890,7 @@ class mixture_statistic():
     
     def validation(self,
                    x,
-                   y,
-                   )
+                   y):
     
         # x: shape [S B T D]
         # y: [B 1]
@@ -912,7 +911,7 @@ class mixture_statistic():
                                                  feed_dict = data_dict)
         
         
-        if self.optimization_mode == "bayesian" and self.training_step > self.burn_in_step:
+        if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
             
             # [B 1]          [B S]
             py_mean, py_var, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
@@ -939,9 +938,12 @@ class mixture_statistic():
         # [A B S]
         # A: number of samples
         
+        
         m_src_sample = np.asarray(self.py_mean_src_samples)
         v_src_sample = np.asarray(self.py_var_src_samples)
         g_src_sample = np.asarray(self.py_gate_src_samples)
+        
+        
         
         # [A B 1]
         m_sample = np.asarray(self.py_mean_samples)
@@ -954,8 +956,12 @@ class mixture_statistic():
         #tmp_m_src_sample = m_src_sample**2
         #py_var = 
         
-        return [rmse(y, bayes_mean_src), mae(y, bayes_mean_src), mape(y, bayes_mean_src), \
-                rmse(y, bayes_mean), mae(y, bayes_mean), mape(y, bayes_mean)]
+        tmpy = np.squeeze(y)
+        
+        print("------------------ test ", np.shape(bayes_mean_src), np.shape(bayes_mean), np.shape(tmpy))
+        
+        return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
+                rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
     
     
     #   infer givn testing data
@@ -982,7 +988,7 @@ class mixture_statistic():
             # [B 1]          [B S]
             py_mean, py_var, py_gate_src, py_mean_src, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
                                                                                    tf.get_collection('py_var')[0],
-                                                                                   tf.get_collection('py_gate')[0]
+                                                                                   tf.get_collection('py_gate')[0],
                                                                                    tf.get_collection('py_mean_src')[0],
                                                                                    tf.get_collection('py_var_src')[0]
                                                                                    ],
@@ -1018,9 +1024,12 @@ class mixture_statistic():
         return
     
     
+    
+    
+    
 class ensemble_inference(object):
 
-    def __init__(self,)
+    def __init__(self):
         
         # for SG-MCMC
         # [A B S]
@@ -1049,7 +1058,7 @@ class ensemble_inference(object):
         
         return
             
-    def bayesian_inference(self):
+    def bayesian_inference(self, y):
         
         # [A B S]
         # A: number of samples
@@ -1066,5 +1075,7 @@ class ensemble_inference(object):
         
         bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
         
-        return [rmse(y, bayes_mean_src), mae(y, bayes_mean_src), mape(y, bayes_mean_src), \
-                rmse(y, bayes_mean), mae(y, bayes_mean), mape(y, bayes_mean)]
+        tmpy = np.squeeze(y)
+        
+        return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
+                rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
