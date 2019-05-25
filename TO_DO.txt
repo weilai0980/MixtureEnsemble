@@ -130,15 +130,20 @@ early stopping for generalization ability
 
 ---- Boosting
 
+
 ---- Diagnostic 
 
 
 ---- Tuning
 
+
 https://karpathy.github.io/2019/04/25/recipe/?utm_source=Deep+Learning+Weekly&utm_campaign=6049a04f13-EMAIL_CAMPAIGN_2019_04_24_03_18_COPY_01&utm_medium=email&utm_term=0_384567b42d-6049a04f13-72960733
 
 
 https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learning%20Weekly&utm_medium=email&utm_source=Revue%20newsletter
+
+
+https://towardsdatascience.com/checklist-for-debugging-neural-networks-d8b2a9434f21
 
 
 ----- TRAINING HYPER-PARA:
@@ -147,6 +152,7 @@ https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learn
 
 
 ----- DATA
+
 data inspection
 
 correlated variable elimination
@@ -173,7 +179,9 @@ Regularization:
 
 Training:
 
-  early stopping: stop training on steps, instead of epoch
+  *early stopping: epoch-wise, batch-wise
+  
+  Cyclical learning rates
      
      
 Cross-check:
@@ -182,9 +190,11 @@ Cross-check:
 
 
 ** SG-MCMC:
-   early stop for posterior sampling
+
+   thinning
 
 ** bias terms for different data sources 
+      bias as a constant effect 
 
 
 Testing:

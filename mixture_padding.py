@@ -56,6 +56,10 @@ class mixture_statistic():
         
         self.py_mean_samples = []
         
+        
+        self.log_step_error = []
+        self.stored_step_id = []
+        
 
     def network_ini(self,
                     lr,
@@ -874,7 +878,7 @@ class mixture_statistic():
         # shape of x: [S, B, T, D]
         self.nnllk = self.nllk / tf.to_float(tf.shape(self.x)[1])
         
-        # for restored models
+        # for model restore and inference
         tf.add_to_collection("rmse", self.rmse)
         tf.add_to_collection("mae", self.mae)
         tf.add_to_collection("mape", self.mape)
@@ -911,6 +915,12 @@ class mixture_statistic():
                                                  feed_dict = data_dict)
         
         
+        # for early stopping
+        # epoch-wise 
+        self.log_step_error.append([rmse, mae, mape, nnllk])
+        
+        
+        
         if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
             
             # [B 1]          [B S]
@@ -939,10 +949,13 @@ class mixture_statistic():
         # A: number of samples
         
         
+        if len(self.py_mean_src_samples) == 0:
+            return None
+            
+        
         m_src_sample = np.asarray(self.py_mean_src_samples)
         v_src_sample = np.asarray(self.py_var_src_samples)
         g_src_sample = np.asarray(self.py_gate_src_samples)
-        
         
         
         # [A B 1]
@@ -1003,6 +1016,64 @@ class mixture_statistic():
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
         return rmse, mae, mape, nnllk, [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
     
+    def model_stored_id(self):
+        
+        return self.stored_step_id
+    
+    
+    def model_saver(self, 
+                    path,
+                    step_id_to_store,
+                    early_stop_bool,
+                    early_stop_metric_id,
+                    early_stop_window,
+                    early_stop_threshold):
+        
+        if early_stop_bool == True and self.training_step > early_stop_window:
+            
+            tmp_last = self.log_step_error[-1][early_stop_metric_id]
+            
+            tmp_window = np.mean([i[early_stop_metric_id] for i in self.log_step_error[-1*early_stop_window:-1]])
+            
+            # stop condition
+            if len(self.stored_step_id) < 5 and 1.0*(tmp_window - tmp_last)/tmp_window < early_stop_threshold:
+                
+                self.stored_step_id.append(self.training_step)
+                
+                saver = tf.train.Saver()
+                saver.save(self.sess, path)
+                
+                return True
+                
+        
+        elif len(step_id_to_store) != 0 and self.training_step in step_id_to_store:
+            
+            saver = tf.train.Saver()
+            saver.save(self.sess, path)
+            
+            return True
+            
+        elif self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
+            
+            saver = tf.train.Saver()
+            saver.save(self.sess, path)
+            
+            return True
+        
+            
+        return False
+        
+    
+    #   restore the model from the files
+    def model_restore(self,
+                      path_meta, 
+                      path_data):
+        
+        saver = tf.train.import_meta_graph(path_meta, 
+                                           clear_devices = True)
+        saver.restore(self.sess, 
+                      path_data)
+        return
     
     #   collect the optimized variable values
     def collect_coeff_values(self, 
@@ -1010,18 +1081,6 @@ class mixture_statistic():
         
         return [tf_var.name for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)],\
                [tf_var.eval() for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)]
-        
-    
-    #   restore the model from the files
-    def pre_train_restore_model(self, 
-                                path_meta, 
-                                path_data):
-        
-        saver = tf.train.import_meta_graph(path_meta, 
-                                           clear_devices = True)
-        saver.restore(self.sess, 
-                      path_data)
-        return
     
     
     

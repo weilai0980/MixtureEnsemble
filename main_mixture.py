@@ -83,6 +83,8 @@ path_py =    "../results/mixture/py_" + args.target_distr + "_" + args.loss_type
 
 # ----- hyper-parameters set-up
 
+# -- model and data
+
 para_y_log = False
 para_bool_bilinear = True
 
@@ -95,19 +97,21 @@ para_distr_para = [3]
 para_bool_target_seperate = False
 para_var_type = "square" # square, exp
 
+
 # -- optimization
 
 para_optimization_mode = "bayesian" # map
 para_burn_in_epoch = 40
 
-para_n_epoch = 70
+para_n_epoch = 60
 para_loss_type = args.loss_type
 
 para_optimizer = "adam" # RMSprop, adam, 'sgmcmc_RMSprop'
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
-# -- hyper-para
+
+# -- training and validation
 
 para_hpara_search = "random" # random, grid 
 
@@ -124,6 +128,11 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 # epoch sample
 para_val_epoch_num = max(1, int(0.05*para_n_epoch))
 para_test_epoch_num = 1
+
+para_early_stop_bool = True
+para_early_stop_window = 10 
+para_early_stop_threshold = 0.01
+
 
 # -- regularization
 
@@ -187,12 +196,16 @@ def log_train(path):
         
         text_file.write("hyper-para search: %s \n"%(para_hpara_search))
         text_file.write("hyper-para range: %s \n"%(str(para_hpara_range)))
-        text_file.write("hyper-para trials: %s \n"%(str(para_hpara_n_trial)))
+        text_file.write("hyper-para random search trials: %s \n"%(str(para_hpara_n_trial)))
         
         text_file.write("epoch num. in validation : %s \n"%(para_val_epoch_num))
         text_file.write("epoch ensemble num. in testing : %s \n"%(para_test_epoch_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
         text_file.write("variance calculation type : %s \n"%(para_var_type))
+        
+        text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
+        text_file.write("early-stoping look-back window: %s \n"%(para_early_stop_window))
+        text_file.write("early-stoping threshold: %s \n"%(para_early_stop_threshold))
         
         text_file.write("\n\n")
 
@@ -358,19 +371,44 @@ def training_validate(xtr,
             
             
             # model saver 
-            if retrain_bool == True and \
+            
+            tmp_path = path_model + method_str + '_' + str(epoch)
+            
+            if retrain_bool == True:
+
+                if model.model_saver(path = tmp_path,
+                                  step_id_to_store = retrain_epoch_set,
+                                  early_stop_bool = para_early_stop_bool,
+                                  early_stop_metric_id = para_metric_map[para_validation_metric],
+                                  early_stop_window = para_early_stop_window,
+                                  early_stop_threshold = para_early_stop_threshold) == True:
+                    
+                    print("\n    [MODEL SAVED] \n " + tmp_path)
+            
+            
+            ''' 
+            if retrain_bool == True and (para_optimization_mode == "bayesian" and epoch >= para_burn_in_epoch):
+                
+                model_saver(self, 
+                            tmp_path)
+                
+                print("\n    [MODEL SAVED] \n " + tmp_path)
+                
+               
             ((para_optimization_mode == "bayesian" and epoch >= para_burn_in_epoch) or \
              ( epoch in retrain_epoch_set) ):
                 
                 saver = tf.train.Saver()
                 saver.save(sess, path_model + method_str + '_' + str(epoch))
+                
                 print("\n    [MODEL SAVED] \n " + path_model + method_str + '_' + str(epoch))
-            
+            '''
             
             # NAN value exception 
             if np.isnan(epoch_loss) == True:
                 print("\n --- NAN loss !! \n" )
                 break
+                
                 
         ed_time = time.time()
         
@@ -384,8 +422,8 @@ def training_validate(xtr,
     # the epoch with the lowest valdiation RMSE
     return sorted(epoch_error, key = lambda x:x[3]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
-           bayes_error_tuple
-           
+           bayes_error_tuple, \
+           model.model_stored_id()
            
     
 
@@ -423,7 +461,7 @@ def testing(model_set,
                                       num_src = num_src)
             
             # restore the model    
-            model.pre_train_restore_model(tmp_meta, tmp_data)
+            model.model_restore(tmp_meta, tmp_data)
             
             # one-shot inference sample
             rmse, mae, mape, nnllk, py_tuple = model.inference(xts,
@@ -539,7 +577,7 @@ if __name__ == '__main__':
     while tmp_hpara != None:
         
         # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]
-        hp_epoch_error, hp_epoch_time, hp_bayesian_error = training_validate(tr_x, 
+        hp_epoch_error, hp_epoch_time, hp_bayesian_error, _ = training_validate(tr_x, 
                                                        tr_y,
                                                        val_x,
                                                        val_y,
@@ -581,12 +619,13 @@ if __name__ == '__main__':
         
     # ----- re-train
     
-    # best validation performance
+    # best hyper-para and epoch set 
     best_hpara, epoch_sample, best_val_err = hyper_para_selection(hpara_log, 
                                                                   val_epoch_num = para_val_epoch_num, 
                                                                   test_epoch_num = para_test_epoch_num,
                                                                   metric_idx = para_metric_map[para_validation_metric])
-    epoch_error, _, _ = training_validate(tr_x, 
+    
+    epoch_error, _, _, early_stop_id = training_validate(tr_x, 
                                     tr_y,
                                     val_x, 
                                     val_y,
@@ -603,13 +642,15 @@ if __name__ == '__main__':
                        hpara_tuple = [best_hpara, epoch_sample, best_val_err], 
                        error_tuple = epoch_error[0])
     
-    print('\n----- Best hyper-parameters: ', best_hpara, epoch_sample, best_val_err, '\n')
+    print('\n----- Best_epoch hyper-parameters: ', best_hpara, epoch_sample, best_val_err, '\n')
     print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
     
     
-    # ----- one-shot testing
+    # ----- testing
     
-    # error tuple: rmse, mae, mape, nnllk,
+    # error tuple: rmse, mae, mape, nnllk
+    
+    # -- best_epoch 
     
     error_tuple, py_tuple = testing(model_set = epoch_sample, 
                                                   xts = ts_x, 
@@ -620,12 +661,10 @@ if __name__ == '__main__':
                                                   num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple)
+                         error_tuple = error_tuple + epoch_sample)
     
     
-    # ----- ensemble testing
-    
-    # error tuple: rmse, mae, mape, nnllk,
+    # -- ensemble or bayesian
     
     error_tuple, py_tuple = testing(model_set = list(range(para_burn_in_epoch, para_n_epoch)), 
                                                xts = ts_x, 
@@ -636,13 +675,27 @@ if __name__ == '__main__':
                                                num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple)
+                         error_tuple = error_tuple + model_set)
+    
+    
+    # -- early-stopping
+    
+    error_tuple, py_tuple = testing(model_set = early_stop_id, 
+                                               xts = ts_x, 
+                                               yts = ts_y, 
+                                               file_path = path_model, 
+                                               bool_instance_eval = True,
+                                               loss_type = para_loss_type,
+                                               num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+    
+    log_test_performance(path = path_log_error, 
+                         error_tuple = error_tuple + early_stop_id)
     
     
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
     
     print('\n ----- testing performance: \n')
-    print('\n one-shot testing errors: ', error_tuple, '\n\n') 
+    print('\n testing errors: ', error_tuple, '\n\n') 
     
     
