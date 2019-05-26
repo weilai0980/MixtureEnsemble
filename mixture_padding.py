@@ -58,6 +58,8 @@ class mixture_statistic():
         
         
         self.log_step_error = []
+        self.log_error_up_flag = False
+        
         self.stored_step_id = []
         
 
@@ -899,6 +901,8 @@ class mixture_statistic():
         # x: shape [S B T D]
         # y: [B 1]
         
+        # -- validation inference
+        
         data_dict = {}
         data_dict["x:0"] = x
         data_dict['y:0'] = y
@@ -914,12 +918,14 @@ class mixture_statistic():
         py_gate_src, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
                                                  feed_dict = data_dict)
         
+        # -- validation monitoring
         
-        # for early stopping
+        # validation error log for early stopping
         # epoch-wise 
-        self.log_step_error.append([rmse, mae, mape, nnllk])
+        self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
         
         
+        # -- validation for SG-MCMC
         
         if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
             
@@ -970,8 +976,6 @@ class mixture_statistic():
         #py_var = 
         
         tmpy = np.squeeze(y)
-        
-        print("------------------ test ", np.shape(bayes_mean_src), np.shape(bayes_mean), np.shape(tmpy))
         
         return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
                 rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
@@ -1025,34 +1029,102 @@ class mixture_statistic():
                     path,
                     step_id_to_store,
                     early_stop_bool,
-                    early_stop_metric_id,
+                    early_stop_metric_idx,
                     early_stop_window,
-                    early_stop_threshold):
+                    ):
         
-        if early_stop_bool == True and self.training_step > early_stop_window:
+        
+        # -- early stopping
+        
+        # self.log_step_error: [self.training_step, [rmse, mae, mape, nnllk]]
+        
+        if early_stop_bool == True:
             
-            tmp_last = self.log_step_error[-1][early_stop_metric_id]
+            if len(self.stored_step_id) < 5 and self.training_step >= early_stop_window:
+                
+                #tmp_min_error = min(self.log_step_error, key = lambda x: x[1][early_stop_metric_id])
+                #tmp_min_idx = self.log_step_error.index(tmp_min_error)
+
+                tmp_last_error = self.log_step_error[-1][1][early_stop_metric_idx]
+                tmp_window_error = np.mean([i[1][early_stop_metric_idx] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
+                
+                if tmp_window_error < tmp_last_error:
+                    
+                    #  consecutive upward 
+                    
+                    if self.log_error_up_flag == False:
+                        
+                        self.stored_step_id.append(self.training_step - 1)
+                    
+                        saver = tf.train.Saver()
+                        saver.save(self.sess, path)
+                        
+                        self.log_error_up_flag = True
+                
+                        return True
+                else:
+                    
+                    self.log_error_up_flag = False
+                    
+                
+                '''
+                tmp_min_error = min(self.log_step_error, key = lambda x: x[1][early_stop_metric_id])
+                
+                tmp_min_step = tmp_min_error[0]
+                tmp_min_idx = self.log_step_error.index(tmp_min_error)
+                
+                
+                if self.training_step - tmp_min_step >= 3:
+                    
+                    print("---------- early stopping ", self.stored_step_id)
+                    
+                    self.stored_step_id.append(self.training_step)
+                    
+                    del self.log_step_error[:tmp_min_idx+1]
+                
+                    saver = tf.train.Saver()
+                    saver.save(self.sess, path)
+                    
+                    return True
+                '''   
+                    
             
-            tmp_window = np.mean([i[early_stop_metric_id] for i in self.log_step_error[-1*early_stop_window:-1]])
+        #and self.training_step > early_stop_window:
+        #    tmp_last = self.log_step_error[-1][early_stop_metric_id]
+        #    tmp_window = np.mean([i[early_stop_metric_id] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
             
             # stop condition
-            if len(self.stored_step_id) < 5 and 1.0*(tmp_window - tmp_last)/tmp_window < early_stop_threshold:
                 
-                self.stored_step_id.append(self.training_step)
+                '''
+                if tmp_window <= tmp_last:
+                    self.log_error_decline_cnt += 1
+                else:
+                    self.log_error_decline_cnt = 0
                 
-                saver = tf.train.Saver()
-                saver.save(self.sess, path)
+                #1.0*(tmp_window - tmp_last)/tmp_window < early_stop_threshold:
                 
-                return True
+                if tmp_window < tmp_last:
+                    
+                    self.stored_step_id.append(self.training_step - 1)
                 
+                    saver = tf.train.Saver()
+                    saver.save(self.sess, path)
+                
+                    return True
+                '''
         
-        elif len(step_id_to_store) != 0 and self.training_step in step_id_to_store:
+        # -- best snapshots
+        
+        if len(step_id_to_store) != 0 and self.training_step in step_id_to_store:
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
             
             return True
-            
+        
+        
+        # -- bayesian ensembles
+        
         elif self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
             
             saver = tf.train.Saver()
@@ -1103,9 +1175,9 @@ class ensemble_inference(object):
     def add_samples(self, 
                     py_mean, 
                     py_var,
-                    py_gate_src,
                     py_mean_src,
-                    py_var_src):
+                    py_var_src, 
+                    py_gate_src):
         
         # [A B S]         
         self.py_mean_src_samples.append(py_mean_src)

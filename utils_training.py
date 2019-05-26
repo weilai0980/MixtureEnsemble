@@ -166,7 +166,7 @@ class hpara_grid_search(object):
         
         self.idx = [0 for _ in range(self.n_hpara)]
         
-    def hpara_trial(self):
+    def one_trial(self):
         
         if self.ini_flag == True or self.trial_search(self.idx, 0, False) == True:
             
@@ -232,7 +232,7 @@ class hpara_random_search(object):
         
         self.ini_flag = True
         
-    def hpara_trial(self):
+    def one_trial(self):
         
         if self.cur_trial < self.n_trial:
             
@@ -268,8 +268,8 @@ class hpara_random_search(object):
         
     
 def hyper_para_selection(hpara_log, 
-                         val_epoch_num, 
-                         test_epoch_num,
+                         val_aggreg_num, 
+                         test_snapshot_num,
                          metric_idx):
     
     # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
@@ -277,14 +277,19 @@ def hyper_para_selection(hpara_log,
     hp_err = []
     
     for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_epoch_num]])])
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
     
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
+    
     
     # -- print out for checking
     print([(i[0], i[-1]) for i in sorted_hp])
     
+    
     # best hp, epoch_sample, best validation error
     return sorted_hp[0][0],\
-           [k[0] for k in sorted_hp[0][1]][:test_epoch_num],\
+           [k[0] for k in sorted_hp[0][1]][:test_snapshot_num],\
            min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]])
+    
+        
+        

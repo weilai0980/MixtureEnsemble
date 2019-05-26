@@ -104,25 +104,35 @@ performance optimizatin issue
 training-testing framework
 average consistency
 
+early stopping: epoch-wise,
 
-
-
+Testing:
+  ensemble
 
 --------------- POINT LEARNED -------------------
 
+
 bias term effect on generalization ability. It is related to the marginal mean of the target. 
+
 
 lk_inv is numerical stable
 
+
 hyper-para search: grid random bayesian 
+
 
 design choice:
   lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
-                    + 
-                    
+
+
 early stopping for generalization ability
 
 
+training-validattion:
+  set of optimal hyper-parameters
+  snapshots under one certain hyper-parameter
+  
+  
 
 
 
@@ -179,7 +189,7 @@ Regularization:
 
 Training:
 
-  *early stopping: epoch-wise, batch-wise
+  early stopping: batch-wise, change point detection, exponential moving average 
   
   Cyclical learning rates
      
@@ -198,7 +208,6 @@ Cross-check:
 
 
 Testing:
-  ensemble
 
 
 EM training
