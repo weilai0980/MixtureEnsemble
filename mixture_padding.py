@@ -87,7 +87,8 @@ class mixture_statistic():
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
                     optimization_mode,
-                    burn_in_step):
+                    burn_in_step,
+                    bool_global_bias_src):
         
 
         
@@ -306,9 +307,31 @@ class mixture_statistic():
         
         # ----- individual means and variance
         
-        # [B S]
-        mean_stack = tf.transpose(tmp_mean, [1, 0])
+        # -- mean
+        if bool_global_bias_src == True:
+            
+            # global bias term
         
+            global_b = tf.get_variable('global_b', 
+                                   shape = [1, ],
+                                   initializer = tf.zeros_initializer())
+            
+            #[1 B]                    [S B]
+            tmp_target_src = tf.slice(tmp_mean, [0, 0], [1, -1]) 
+            #[S-1 B]
+            tmp_rest_src = tf.slice(tmp_mean, [1, 0], [-1, -1])
+        
+            tmp_target_src = tmp_target_src + global_b
+            # [B S]            [S B]
+            mean_stack = tf.transpose(tf.concat([tmp_target_src, tmp_rest_src], axis = 0), [1, 0])
+        
+        else:
+            
+            # [B S]
+            mean_stack = tf.transpose(tmp_mean, [1, 0])
+        
+        
+        # -- variance
         if var_type == "square":
             
             # square
@@ -711,6 +734,7 @@ class mixture_statistic():
             
             self.regularization += regu_global_logits
         
+        
         # -- gate smoothing
         
         if latent_prob_type != "none":
@@ -935,14 +959,12 @@ class mixture_statistic():
                                                          tf.get_collection('py_var_src')[0],
                                                          ],
                                                          feed_dict = data_dict)
-            
             # for SG-MCMC
             self.py_mean_src_samples.append(py_mean_src)
             self.py_var_src_samples.append(py_var_src)
             self.py_gate_src_samples.append(py_gate_src)
             
             self.py_mean_samples.append(py_mean)
-
         
         # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
         return rmse, mae, mape, nnllk, [py_gate_src, py_mean_src]
@@ -954,15 +976,12 @@ class mixture_statistic():
         # [A B S]
         # A: number of samples
         
-        
         if len(self.py_mean_src_samples) == 0:
             return None
-            
         
         m_src_sample = np.asarray(self.py_mean_src_samples)
         v_src_sample = np.asarray(self.py_var_src_samples)
         g_src_sample = np.asarray(self.py_gate_src_samples)
-        
         
         # [A B 1]
         m_sample = np.asarray(self.py_mean_samples)
@@ -1018,7 +1037,8 @@ class mixture_statistic():
             py_var_src = None
         
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
-        return rmse, mae, mape, nnllk, [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+        return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+    
     
     def model_stored_id(self):
         
@@ -1042,15 +1062,10 @@ class mixture_statistic():
             
             if len(self.stored_step_id) < 5 and self.training_step >= early_stop_window:
                 
-                #tmp_min_error = min(self.log_step_error, key = lambda x: x[1][early_stop_metric_id])
-                #tmp_min_idx = self.log_step_error.index(tmp_min_error)
-
                 tmp_last_error = self.log_step_error[-1][1][early_stop_metric_idx]
                 tmp_window_error = np.mean([i[1][early_stop_metric_idx] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
                 
                 if tmp_window_error < tmp_last_error:
-                    
-                    #  consecutive upward 
                     
                     if self.log_error_up_flag == False:
                         
@@ -1059,59 +1074,14 @@ class mixture_statistic():
                         saver = tf.train.Saver()
                         saver.save(self.sess, path)
                         
+                        #  avoid consecutive upward 
                         self.log_error_up_flag = True
                 
                         return True
                 else:
                     
                     self.log_error_up_flag = False
-                    
-                
-                '''
-                tmp_min_error = min(self.log_step_error, key = lambda x: x[1][early_stop_metric_id])
-                
-                tmp_min_step = tmp_min_error[0]
-                tmp_min_idx = self.log_step_error.index(tmp_min_error)
-                
-                
-                if self.training_step - tmp_min_step >= 3:
-                    
-                    print("---------- early stopping ", self.stored_step_id)
-                    
-                    self.stored_step_id.append(self.training_step)
-                    
-                    del self.log_step_error[:tmp_min_idx+1]
-                
-                    saver = tf.train.Saver()
-                    saver.save(self.sess, path)
-                    
-                    return True
-                '''   
-                    
-            
-        #and self.training_step > early_stop_window:
-        #    tmp_last = self.log_step_error[-1][early_stop_metric_id]
-        #    tmp_window = np.mean([i[early_stop_metric_id] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
-            
-            # stop condition
-                
-                '''
-                if tmp_window <= tmp_last:
-                    self.log_error_decline_cnt += 1
-                else:
-                    self.log_error_decline_cnt = 0
-                
-                #1.0*(tmp_window - tmp_last)/tmp_window < early_stop_threshold:
-                
-                if tmp_window < tmp_last:
-                    
-                    self.stored_step_id.append(self.training_step - 1)
-                
-                    saver = tf.train.Saver()
-                    saver.save(self.sess, path)
-                
-                    return True
-                '''
+        
         
         # -- best snapshots
         
@@ -1156,8 +1126,6 @@ class mixture_statistic():
     
     
     
-    
-    
 class ensemble_inference(object):
 
     def __init__(self):
@@ -1189,7 +1157,8 @@ class ensemble_inference(object):
         
         return
             
-    def bayesian_inference(self, y):
+    def bayesian_inference(self, 
+                           y):
         
         # [A B S]
         # A: number of samples

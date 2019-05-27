@@ -63,8 +63,6 @@ with open('config.json') as f:
     para_dict = json.load(f)
     print(para_dict) 
 '''
-#para_step_ahead = 0
-
 
 # ----- data and log paths
 
@@ -103,7 +101,7 @@ para_var_type = "square" # square, exp
 para_optimization_mode = "bayesian" # map
 para_burn_in_epoch = 40
 
-para_n_epoch = 90
+para_n_epoch = 60
 para_loss_type = args.loss_type
 
 para_optimizer = "adam" # RMSprop, adam, 'sgmcmc_RMSprop'
@@ -120,7 +118,7 @@ para_batch_range = [64, 32, 16, 80]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
-para_hpara_n_trial = 15
+para_hpara_n_trial = 5
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
@@ -129,8 +127,8 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 para_val_aggreg_num = max(1, int(0.1*para_n_epoch))
 para_test_snapshot_num = 5
 
-para_early_stop_bool = True
-para_early_stop_window = 10
+para_early_stop_bool = False
+para_early_stop_window = 0
 
 
 # -- regularization
@@ -144,6 +142,7 @@ para_regu_weight_on_latent = True
 para_bool_bias_in_mean = True
 para_bool_bias_in_var = True
 para_bool_bias_in_gate = True
+para_bool_global_bias = False
 
 para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
@@ -178,6 +177,9 @@ def log_train(path):
         text_file.write("adding bias terms in mean: %s \n"%(para_bool_bias_in_mean))
         text_file.write("adding bias terms in variance: %s \n"%(para_bool_bias_in_var))
         text_file.write("adding bias terms in gates: %s \n"%(para_bool_bias_in_gate))
+        text_file.write("global bias terms : %s \n"%(para_bool_global_bias))
+        
+        
         text_file.write("\n")
         
         text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
@@ -221,7 +223,6 @@ def training_validate(xtr,
                    hp_l2, 
                    retrain_epoch_set, 
                    retrain_bool,
-                   retrain_best_val_err
                   ):
     
     '''
@@ -252,7 +253,7 @@ def training_validate(xtr,
     # clear the graph in the current session 
     tf.reset_default_graph()
     
-    # stabilize the network by fixing the random seed
+    # stabilize the network by fixing random seeds
     np.random.seed(1)
     tf.set_random_seed(1)
     
@@ -301,7 +302,8 @@ def training_validate(xtr,
                           optimization_lr_decay = para_optimizer_lr_decay,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size),
                           optimization_mode = para_optimization_mode,
-                          burn_in_step = para_burn_in_epoch)
+                          burn_in_step = para_burn_in_epoch,
+                          bool_global_bias_src = para_bool_global_bias)
                           
         model.train_ini()
         model.inference_ini()
@@ -401,9 +403,7 @@ def training_validate(xtr,
     # 
     return sorted(epoch_error, key = lambda x:x[3]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
-           bayes_error_tuple, \
-           model.model_stored_id()
-           
+           bayes_error_tuple
     
 
 def testing(model_snapshots, 
@@ -416,7 +416,6 @@ def testing(model_snapshots,
     
     # ensemble of model snapshots
     infer = ensemble_inference()
-    
     
     for tmp_model_id in model_snapshots:
         
@@ -443,9 +442,10 @@ def testing(model_snapshots,
             model.model_restore(tmp_meta, tmp_data)
             
             # one-shot inference sample
-            rmse, mae, mape, nnllk, py_tuple = model.inference(xts,
-                                                               yts, 
-                                                               bool_py_eval = bool_instance_eval)
+            # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+            error_tuple, py_tuple = model.inference(xts,
+                                                    yts, 
+                                                    bool_py_eval = bool_instance_eval)
             # store the samples
             infer.add_samples(py_mean = py_tuple[0],
                               py_var = py_tuple[1],
@@ -462,7 +462,7 @@ def testing(model_snapshots,
     elif len(model_snapshots) == 1:
         
         # error tuple, prediction tuple 
-        return [rmse, mae, mape, nnllk], py_tuple
+        return error_tuple, py_tuple
     
     else:
         
@@ -565,19 +565,19 @@ if __name__ == '__main__':
     
     while tmp_hpara != None:
         
-        # [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]
-        hp_epoch_error, hp_epoch_time, hp_bayesian_error, _ = training_validate(tr_x, 
-                                                       tr_y,
-                                                       val_x,
-                                                       val_y,
-                                                       dim_x = para_dim_x,
-                                                       steps_x = para_steps_x,
-                                                       hp_lr = tmp_hpara[0],
-                                                       hp_batch_size = int(tmp_hpara[1]),
-                                                       hp_l2 = tmp_hpara[2],
-                                                       retrain_epoch_set = [],
-                                                       retrain_bool = False, 
-                                                       retrain_best_val_err = 0.0)
+        # [ [epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk] ]
+        hp_epoch_error, hp_epoch_time, hp_bayesian_error = training_validate(tr_x, 
+                                                                             tr_y,
+                                                                             val_x,
+                                                                             val_y,
+                                                                             dim_x = para_dim_x,
+                                                                             steps_x = para_steps_x,
+                                                                             hp_lr = tmp_hpara[0],
+                                                                             hp_batch_size = int(tmp_hpara[1]),
+                                                                             hp_l2 = tmp_hpara[2],
+                                                                             retrain_epoch_set = [],
+                                                                             retrain_bool = False, 
+                                                                             )
         
         # [ [tmp_lr, tmp_batch, tmp_l2], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
         hpara_log.append([tmp_hpara, hp_epoch_error])
@@ -609,12 +609,12 @@ if __name__ == '__main__':
     # ----- re-train
     
     # best hyper-para and epoch set 
-    best_hpara, epoch_sample, best_val_err = hyper_para_selection(hpara_log, 
+    best_hpara, model_snapshots, best_val_err = hyper_para_selection(hpara_log, 
                                                                   val_aggreg_num = para_val_aggreg_num, 
                                                                   test_snapshot_num = para_test_snapshot_num,
                                                                   metric_idx = para_metric_map[para_validation_metric])
     
-    epoch_error, _, _, early_stop_id = training_validate(tr_x, 
+    epoch_error, _, _ = training_validate(tr_x, 
                                     tr_y,
                                     val_x, 
                                     val_y,
@@ -623,15 +623,15 @@ if __name__ == '__main__':
                                     hp_lr = best_hpara[0],
                                     hp_batch_size = int(best_hpara[1]),
                                     hp_l2 = best_hpara[2],
-                                    retrain_epoch_set = epoch_sample, 
+                                    retrain_epoch_set = model_snapshots, 
                                     retrain_bool = True,
-                                    retrain_best_val_err = best_val_err)
+                                    )
     
     log_val_hyper_para(path = path_log_error, 
-                       hpara_tuple = [best_hpara, epoch_sample, best_val_err], 
+                       hpara_tuple = [best_hpara, model_snapshots, best_val_err], 
                        error_tuple = epoch_error[0])
     
-    print('\n----- Best_epoch hyper-parameters: ', best_hpara, epoch_sample, best_val_err, '\n')
+    print('\n----- Best_epoch hyper-parameters: ', best_hpara, model_snapshots, best_val_err, '\n')
     print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
     
     
@@ -642,9 +642,8 @@ if __name__ == '__main__':
     
     # -- best one epoch 
     
-    print(epoch_sample[:1])
     
-    error_tuple, py_tuple = testing(model_snapshots = epoch_sample[:1], 
+    error_tuple, py_tuple = testing(model_snapshots = model_snapshots[:1], 
                                     xts = ts_x, 
                                     yts = ts_y, 
                                     file_path = path_model, 
@@ -653,14 +652,12 @@ if __name__ == '__main__':
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + epoch_sample[:1])
+                         error_tuple = error_tuple + model_snapshots[:1])
     
     
     # -- best epochs 
     
-    print(epoch_sample)
-    
-    error_tuple, py_tuple = testing(model_snapshots = epoch_sample, 
+    error_tuple, py_tuple = testing(model_snapshots = model_snapshots, 
                                     xts = ts_x, 
                                     yts = ts_y, 
                                     file_path = path_model, 
@@ -669,7 +666,7 @@ if __name__ == '__main__':
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + epoch_sample)
+                         error_tuple = error_tuple + model_snapshots)
     
     
     # -- ensemble or bayesian
@@ -688,7 +685,10 @@ if __name__ == '__main__':
                          error_tuple = error_tuple + list(range(para_burn_in_epoch, para_n_epoch)))
     
     
+    '''
     # -- early-stopping
+    
+    # ? early_stop_id + best one epoch ?
     
     print(early_stop_id)
     
@@ -702,7 +702,7 @@ if __name__ == '__main__':
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + early_stop_id)
-    
+    '''
     
     '''
     import pickle

@@ -109,31 +109,34 @@ early stopping: epoch-wise,
 Testing:
   ensemble
 
+bias terms for different data sources 
+  bias as a constant effect
+
+
 --------------- POINT LEARNED -------------------
 
 
-bias term effect on generalization ability. It is related to the marginal mean of the target. 
+Model:
 
+   bias term effect on generalization ability. It is related to the marginal mean of the target. 
+   lk_inv is numerical stable
 
-lk_inv is numerical stable
+Training-validation:
+   
+  hyper-para search: grid random bayesian 
 
+  early stopping using change-point detection for generalization ability
 
-hyper-para search: grid random bayesian 
+  set of optimal hyper-parameters
+  snapshots under one certain hyper-parameter
 
+Testing:
+
+  validation and testing data difference
+  
 
 design choice:
   lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
-
-
-early stopping for generalization ability
-
-
-training-validattion:
-  set of optimal hyper-parameters
-  snapshots under one certain hyper-parameter
-  
-  
-
 
 
 --------------- TO DO -------------------
@@ -178,13 +181,20 @@ correlated variable elimination
 
 
 *math operation check
-   
+
 
 Regularization:
 
   latent dependence
   l1
   fine-grained regularization hyper-para 
+
+
+Data:
+  
+  data augments: spikes
+  
+  discrepency between validation and testing data
 
 
 Training:
@@ -203,16 +213,17 @@ Cross-check:
 
    thinning
 
-** bias terms for different data sources 
-      bias as a constant effect 
-
 
 Testing:
+
+  discrepency between validation and testing data 
 
 
 EM training
 inference 
 output wrapper positive
+
+
 
 
 ----- Neural heteroskedasticity mixture
@@ -226,8 +237,6 @@ hidden transition
 
 
 sgld efficiency
-
-
 
 
 concrete dropout
