@@ -152,7 +152,7 @@ def log_null_loss_exception(epoch_errors,
 
 # hpara: hyper-parameter
     
-class hpara_grid_search(object):
+class hyper_para_grid_search(object):
     
 
     def __init__(self, 
@@ -210,7 +210,7 @@ class hpara_grid_search(object):
                 return True
             
             
-class hpara_random_search(object):
+class hyper_para_random_search(object):
     
     def __init__(self, 
                  hpara_range, 

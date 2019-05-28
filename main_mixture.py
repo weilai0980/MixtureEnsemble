@@ -73,7 +73,6 @@ path_log_error = "../results/mixture/log_error_mix.txt"
 #path_log_epoch  = "../results/mixture/log_epoch_mix.txt"
 
 path_model = "../results/mixture/"
-#path_model_posterior = "../results/mixture/model_posterior/"
 
 path_py =    "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
 
@@ -213,17 +212,17 @@ def log_train(path):
 # ----- training and evalution
     
 def training_validate(xtr, 
-                   ytr, 
-                   xval, 
-                   yval, 
-                   dim_x, 
-                   steps_x, 
-                   hp_lr,
-                   hp_batch_size,
-                   hp_l2, 
-                   retrain_epoch_set, 
-                   retrain_bool,
-                  ):
+                      ytr, 
+                      xval, 
+                      yval, 
+                      dim_x, 
+                      steps_x, 
+                      hp_lr,
+                      hp_batch_size,
+                      hp_l2, 
+                      retrain_epoch_set, 
+                      retrain_bool,
+                      ):
     
     '''
     Args:
@@ -359,6 +358,7 @@ def training_validate(xtr,
             
             tr_rmse = sqrt(1.0*epoch_sq_err/total_cnt)
             
+            # para_metric_map[] defined on
             epoch_error.append([epoch,
                                 1.0*epoch_loss/total_batch_num,
                                 tr_rmse, 
@@ -379,10 +379,9 @@ def training_validate(xtr,
             if retrain_bool == True:
 
                 if model.model_saver(path = tmp_path,
-                                  step_id_to_store = retrain_epoch_set,
-                                  early_stop_bool = para_early_stop_bool,
-                                  early_stop_metric_idx = para_metric_map[para_validation_metric],
-                                  early_stop_window = para_early_stop_window) == True:
+                                     step_id_to_store = retrain_epoch_set,
+                                     early_stop_bool = para_early_stop_bool,
+                                     early_stop_window = para_early_stop_window) == True:
                     
                     print("\n    [MODEL SAVED] \n " + tmp_path)
             
@@ -401,7 +400,7 @@ def training_validate(xtr,
     
     # ? the epoch with the lowest valdiation RMSE ?
     # 
-    return sorted(epoch_error, key = lambda x:x[3]),\
+    return sorted(epoch_error, key = lambda x:x[para_metric_map[para_validation_metric]]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
            bayes_error_tuple
     
@@ -547,11 +546,11 @@ if __name__ == '__main__':
     
     if para_hpara_search == "random":
         
-        hpara_generator = hpara_random_search(para_hpara_range, 
-                                              para_hpara_n_trial)
+        hpara_generator = hyper_para_random_search(para_hpara_range, 
+                                                   para_hpara_n_trial)
     elif para_hpara_search == "grid":
 
-        hpara_generator = hpara_grid_search([para_lr_range, para_batch_range, para_l2_range])
+        hpara_generator = hyper_para_grid_search([para_lr_range, para_batch_range, para_l2_range])
         
         
     # -- begin hyper-para search
@@ -610,22 +609,22 @@ if __name__ == '__main__':
     
     # best hyper-para and epoch set 
     best_hpara, model_snapshots, best_val_err = hyper_para_selection(hpara_log, 
-                                                                  val_aggreg_num = para_val_aggreg_num, 
-                                                                  test_snapshot_num = para_test_snapshot_num,
-                                                                  metric_idx = para_metric_map[para_validation_metric])
+                                                                     val_aggreg_num = para_val_aggreg_num, 
+                                                                     test_snapshot_num = para_test_snapshot_num,
+                                                                     metric_idx = para_metric_map[para_validation_metric])
     
     epoch_error, _, _ = training_validate(tr_x, 
-                                    tr_y,
-                                    val_x, 
-                                    val_y,
-                                    dim_x = para_dim_x,
-                                    steps_x = para_steps_x,
-                                    hp_lr = best_hpara[0],
-                                    hp_batch_size = int(best_hpara[1]),
-                                    hp_l2 = best_hpara[2],
-                                    retrain_epoch_set = model_snapshots, 
-                                    retrain_bool = True,
-                                    )
+                                          tr_y,
+                                          val_x, 
+                                          val_y,
+                                          dim_x = para_dim_x,
+                                          steps_x = para_steps_x,
+                                          hp_lr = best_hpara[0],
+                                          hp_batch_size = int(best_hpara[1]),
+                                          hp_l2 = best_hpara[2],
+                                          retrain_epoch_set = model_snapshots, 
+                                          retrain_bool = True,
+                                          )
     
     log_val_hyper_para(path = path_log_error, 
                        hpara_tuple = [best_hpara, model_snapshots, best_val_err], 
@@ -684,7 +683,6 @@ if __name__ == '__main__':
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + list(range(para_burn_in_epoch, para_n_epoch)))
     
-    
     '''
     # -- early-stopping
     
@@ -703,6 +701,7 @@ if __name__ == '__main__':
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + early_stop_id)
     '''
+    
     
     '''
     import pickle

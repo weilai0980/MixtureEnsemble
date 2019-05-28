@@ -1049,7 +1049,6 @@ class mixture_statistic():
                     path,
                     step_id_to_store,
                     early_stop_bool,
-                    early_stop_metric_idx,
                     early_stop_window,
                     ):
         
@@ -1062,8 +1061,8 @@ class mixture_statistic():
             
             if len(self.stored_step_id) < 5 and self.training_step >= early_stop_window:
                 
-                tmp_last_error = self.log_step_error[-1][1][early_stop_metric_idx]
-                tmp_window_error = np.mean([i[1][early_stop_metric_idx] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
+                tmp_last_error = self.log_step_error[-1][1][0]
+                tmp_window_error = np.mean([i[1][0] for i in self.log_step_error[-1*(early_stop_window + 1):-1]])
                 
                 if tmp_window_error < tmp_last_error:
                     
@@ -1138,6 +1137,7 @@ class ensemble_inference(object):
         self.py_gate_src_samples = []
         
         self.py_mean_samples = []
+        self.py_var_samples = []
         
         
     def add_samples(self, 
@@ -1154,6 +1154,7 @@ class ensemble_inference(object):
         
         # [A B 1]
         self.py_mean_samples.append(py_mean)
+        self.py_var_samples.append(py_var)
         
         return
             
@@ -1169,13 +1170,35 @@ class ensemble_inference(object):
         
         # [A B 1]
         m_sample = np.asarray(self.py_mean_samples)
+        v_sample = np.asarray(self.py_var_samples)
         
+        
+        # -- mean
         # [B]
         bayes_mean_src = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
         
+        # for cross check
         bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
         
-        tmpy = np.squeeze(y)
+        # -- variance
+        # [B]
+        sq_mean = bayes_mean**2
         
+        # [A B S]
+        var_plus_sq_mean_src =  v_src_sample + m_src_sample**2
+        # [B]
+        bayes_var = np.sum(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        
+        # -- nnllk
+        # normalized negative log-likelihood
+        
+        
+        
+        tmpy = np.squeeze(y)
         return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
                 rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
+    
+    
+    
+    
+    

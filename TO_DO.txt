@@ -129,6 +129,8 @@ Training-validation:
 
   set of optimal hyper-parameters
   snapshots under one certain hyper-parameter
+  
+  discrepency between validation and testing data
 
 Testing:
 
