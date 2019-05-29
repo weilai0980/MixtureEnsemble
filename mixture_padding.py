@@ -583,7 +583,7 @@ class mixture_statistic():
             # component mean
             self.py_mean_src = mean_stack
             
-            # mixed mean
+            # mixture mean
             # [B 1]                      [B S]       [B S]
             self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
             
@@ -1021,7 +1021,7 @@ class mixture_statistic():
                                                 feed_dict = data_dict)
         if bool_py_eval == True:
             
-            # [B 1]          [B S]
+            # [B 1]  [B 1]   [B S]
             py_mean, py_var, py_gate_src, py_mean_src, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
                                                                                    tf.get_collection('py_var')[0],
                                                                                    tf.get_collection('py_gate')[0],
@@ -1161,6 +1161,8 @@ class ensemble_inference(object):
     def bayesian_inference(self, 
                            y):
         
+        # y: [B 1]
+        
         # [A B S]
         # A: number of samples
         
@@ -1172,12 +1174,12 @@ class ensemble_inference(object):
         m_sample = np.asarray(self.py_mean_samples)
         v_sample = np.asarray(self.py_var_samples)
         
-        
         # -- mean
+        # for cross check
         # [B]
         bayes_mean_src = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
         
-        # for cross check
+        # [B]
         bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
         
         # -- variance
@@ -1185,18 +1187,29 @@ class ensemble_inference(object):
         sq_mean = bayes_mean**2
         
         # [A B S]
-        var_plus_sq_mean_src =  v_src_sample + m_src_sample**2
+        var_plus_sq_mean_src = v_src_sample + m_src_sample**2
         # [B]
-        bayes_var = np.sum(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        bayes_var = np.mean(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
         
         # -- nnllk
         # normalized negative log-likelihood
         
+        # [1 B 1]
+        aug_y = np.expand_dims(y, axis=0)
         
+        # [A B S]
+        tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
+        # [B]
+        tmp_lk = np.mean(np.sum(g_src_sample*tmp_lk_src, -1), 0)
+                                                                                                 
+        nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
         
         tmpy = np.squeeze(y)
-        return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
-                rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
+        return [rmse(tmpy, bayes_mean_src), \
+                mae(tmpy, bayes_mean_src), \
+                mape(tmpy, bayes_mean_src), \
+                nnllk, \
+                rmse(tmpy, bayes_mean)]
     
     
     

@@ -453,14 +453,13 @@ def testing(model_snapshots,
                               py_gate_src = py_tuple[4])
     
     
-    # return: [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+    # return: error tuple [rmse, mae, mape, nnllk], prediction tuple [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
     if len(model_snapshots) == 0:
         
         return ["None"], ["None"]
     
     elif len(model_snapshots) == 1:
         
-        # error tuple, prediction tuple 
         return error_tuple, py_tuple
     
     else:
