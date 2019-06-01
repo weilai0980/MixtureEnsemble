@@ -98,9 +98,9 @@ para_var_type = "square" # square, exp
 # -- optimization
 
 para_optimization_mode = "bayesian" # map
-para_burn_in_epoch = 40
+para_burn_in_epoch = 20
 
-para_n_epoch = 60
+para_n_epoch = 80
 para_loss_type = args.loss_type
 
 para_optimizer = "adam" # RMSprop, adam, 'sgmcmc_RMSprop'
@@ -124,7 +124,7 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 
 # model snapshot sample: epoch-wise or step-wise
 para_val_aggreg_num = max(1, int(0.1*para_n_epoch))
-para_test_snapshot_num = 5
+para_test_snapshot_num = 15
 
 para_early_stop_bool = False
 para_early_stop_window = 0
@@ -465,7 +465,7 @@ def testing(model_snapshots,
     else:
         
         # ensemble inference
-        return infer.bayesian_inference(yts), _
+        return infer.bayesian_inference(yts)
     
             
     
@@ -702,11 +702,10 @@ if __name__ == '__main__':
     '''
     
     
-    '''
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
     
-    print('\n ----- testing performance: \n')
-    print('\n testing errors: ', error_tuple, '\n\n') 
-    '''
+    
+    
+    
     

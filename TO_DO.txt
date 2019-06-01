@@ -182,15 +182,22 @@ correlated variable elimination
 ----- Statistic heteroskedasticity mixture
 
 
+* heteroskedasticity and MCMC inference
+
+
 *math operation check
 
 
 Regularization:
 
+  
   latent dependence
   l1
   fine-grained regularization hyper-para 
-
+  
+  
+  imbalanced regularization on mean and variance
+   
 
 Data:
   
