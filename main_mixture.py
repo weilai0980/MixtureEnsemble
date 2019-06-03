@@ -74,7 +74,7 @@ path_log_error = "../results/mixture/log_error_mix.txt"
 
 path_model = "../results/mixture/"
 
-path_py =    "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
+path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
 
 
 # ----- hyper-parameters set-up
@@ -124,7 +124,7 @@ para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 
 # model snapshot sample: epoch-wise or step-wise
 para_val_aggreg_num = max(1, int(0.1*para_n_epoch))
-para_test_snapshot_num = 15
+para_test_snapshot_num = 60
 
 para_early_stop_bool = False
 para_early_stop_window = 0
@@ -133,10 +133,11 @@ para_early_stop_window = 0
 # -- regularization
 
 para_regu_positive = False
-para_regu_gate = False
+para_regu_gate = True
 para_regu_global_gate = False  
 para_regu_latent_dependence = False
 para_regu_weight_on_latent = True
+para_regu_imbalanced_mean_var = False
 
 para_bool_bias_in_mean = True
 para_bool_bias_in_var = True
@@ -172,13 +173,13 @@ def log_train(path):
         text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
         text_file.write("regularization on latent dependence parameters : %s \n"%(para_regu_latent_dependence))
         text_file.write("regularization l2 on latent : %s \n"%(para_regu_weight_on_latent))
+        text_file.write("regularization imbalanced l2 on mean and var. : %s \n"%(para_regu_imbalanced_mean_var))
+        text_file.write("\n")
         
         text_file.write("adding bias terms in mean: %s \n"%(para_bool_bias_in_mean))
         text_file.write("adding bias terms in variance: %s \n"%(para_bool_bias_in_var))
         text_file.write("adding bias terms in gates: %s \n"%(para_bool_bias_in_gate))
         text_file.write("global bias terms : %s \n"%(para_bool_global_bias))
-        
-        
         text_file.write("\n")
         
         text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
@@ -274,7 +275,7 @@ def training_validate(xtr,
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
                                   num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0]
-                                 )
+                                  )
         
         # -- initialize the network
         
@@ -302,7 +303,9 @@ def training_validate(xtr,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size),
                           optimization_mode = para_optimization_mode,
                           burn_in_step = para_burn_in_epoch,
-                          bool_global_bias_src = para_bool_global_bias)
+                          bool_global_bias_src = para_bool_global_bias,
+                          bool_imbalance_l2 = para_regu_imbalanced_mean_var)
+        
                           
         model.train_ini()
         model.inference_ini()
@@ -438,7 +441,8 @@ def testing(model_snapshots,
                                       num_src = num_src)
             
             # restore the model    
-            model.model_restore(tmp_meta, tmp_data)
+            model.model_restore(tmp_meta, 
+                                tmp_data)
             
             # one-shot inference sample
             # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
@@ -598,7 +602,7 @@ if __name__ == '__main__':
         
         # NAN loss exception
         log_null_loss_exception(hp_epoch_error, 
-                                 path_log_error)
+                                path_log_error)
         
         print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
         print('\n Training time: \n', hp_epoch_time, '\n')
@@ -641,13 +645,13 @@ if __name__ == '__main__':
     # -- best one epoch 
     
     
-    error_tuple, py_tuple = testing(model_snapshots = model_snapshots[:1], 
-                                    xts = ts_x, 
-                                    yts = ts_y, 
-                                    file_path = path_model, 
-                                    bool_instance_eval = True,
-                                    loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+    error_tuple, _ = testing(model_snapshots = model_snapshots[:1], 
+                             xts = ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model, 
+                             bool_instance_eval = True,
+                             loss_type = para_loss_type,
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + model_snapshots[:1])
@@ -655,13 +659,13 @@ if __name__ == '__main__':
     
     # -- best epochs 
     
-    error_tuple, py_tuple = testing(model_snapshots = model_snapshots, 
-                                    xts = ts_x, 
-                                    yts = ts_y, 
-                                    file_path = path_model, 
-                                    bool_instance_eval = True,
-                                    loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+    error_tuple, _ = testing(model_snapshots = model_snapshots, 
+                             xts = ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model, 
+                             bool_instance_eval = True,
+                             loss_type = para_loss_type,
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + model_snapshots)

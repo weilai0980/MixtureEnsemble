@@ -146,8 +146,6 @@ design choice:
 ---- Boosting
 
 
----- Diagnostic 
-
 
 ---- Tuning
 
@@ -172,6 +170,9 @@ data inspection
 
 correlated variable elimination
 
+*remove auto-regressive part
+
+
 
 ----- survey
 
@@ -182,28 +183,16 @@ correlated variable elimination
 ----- Statistic heteroskedasticity mixture
 
 
-* heteroskedasticity and MCMC inference
-
-
-*math operation check
-
-
-Regularization:
-
-  
-  latent dependence
-  l1
-  fine-grained regularization hyper-para 
-  
-  
-  imbalanced regularization on mean and variance
-   
 
 Data:
   
   data augments: spikes
   
   discrepency between validation and testing data
+  
+  DATA augmentation
+    *outlier
+    *lag effect 
 
 
 Training:
@@ -211,6 +200,27 @@ Training:
   early stopping: batch-wise, change point detection, exponential moving average 
   
   Cyclical learning rates
+  
+  EM training
+  inference 
+  output wrapper positive
+  
+  
+  ** SG-MCMC:
+
+     thinning
+     * heteroskedasticity and MCMC inference
+     *math operation check
+     
+  
+  Regularization:
+  
+    latent dependence
+    l1
+    fine-grained regularization hyper-para 
+  
+  
+    imbalanced regularization on mean and variance
      
      
 Cross-check:
@@ -218,19 +228,19 @@ Cross-check:
   ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
 
 
-** SG-MCMC:
-
-   thinning
-
-
 Testing:
 
   discrepency between validation and testing data 
 
 
-EM training
-inference 
-output wrapper positive
+Monitoring and diagnostic:
+
+
+
+Inference:
+  
+  remove outliers 
+
 
 
 

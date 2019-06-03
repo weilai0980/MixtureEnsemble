@@ -5,6 +5,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from scipy.stats import truncnorm
+from scipy.optimize import fmin_slsqp
+
 # local packages
 from utils_libs import *
 from utils_linear_units import *
@@ -88,7 +91,8 @@ class mixture_statistic():
                     optimization_lr_decay_steps,
                     optimization_mode,
                     burn_in_step,
-                    bool_global_bias_src):
+                    bool_global_bias_src,
+                    bool_imbalance_l2):
         
 
         
@@ -168,6 +172,8 @@ class mixture_statistic():
         self.x = tf.placeholder(tf.float32, [self.num_src, None, steps_x, dim_x], name = 'x')
         
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
+        self.bool_imbalance_l2 = bool_imbalance_l2
+        
         
         self.optimization_method =   optimization_method
         self.optimization_lr_decay = optimization_lr_decay
@@ -787,8 +793,15 @@ class mixture_statistic():
         # ?
         elif self.loss_type == 'lk_inv':
             
-            self.loss = self.nllk_hetero_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
-                        
+            self.loss = self.nllk_hetero_inv + 0.1*self.l2*self.regularization 
+            
+            
+            if self.bool_imbalance_l2 == True:
+                self.loss += (self.l2*self.regu_mean + 100*self.l2*self.regu_var)
+            else:
+                self.loss += self.l2*(self.regu_mean + self.regu_var)
+            
+            
             if self.bool_regu_l2_on_latent == True:
                 self.loss += self.l2*self.latent_depend
             else:
@@ -1223,15 +1236,27 @@ class ensemble_inference(object):
         # [B S]                 [A B S]
         bayes_gate_src = np.mean(g_src_sample, axis = 0)
         
+        bayes_gate_src_var = np.var(g_src_sample, axis = 0)
+        
+        
+        '''
         # -- gate uncertainty 
         # infer by truncated Gaussian [0.0, 1.0]
         
-        # [1 B S]
-        loc_ini = np.mean(g_src_sample, axis = 0, keepdims = True) 
-        scale_ini = np.std(g_src_sample, axis = 0, keepdims = True)
+        print("-----------------  begin to infer gate uncertainty...\n")
         
-        left_ini = 1.0*(0.0 - loc_ini)/(scale_ini + 1e-5)
-        right_ini = 1.0*(1.0 - loc_ini)/(scale_ini + 1e-5)
+        
+        # [B S]
+        loc_ini = np.mean(g_src_sample, axis = 0) 
+        scale_ini = np.std(g_src_sample, axis = 0)
+        
+        real_left = 0.0
+        real_right = 1.0
+        
+        # [B S]
+        left_ini = 1.0*(real_left - loc_ini)/(scale_ini + 1e-5)
+        right_ini = 1.0*(real_right - loc_ini)/(scale_ini + 1e-5)
+        
         
         # [A B S]
         norm_g_src_sample = 1.0*(g_src_sample - loc_ini)/(scale_ini + 1e-5)
@@ -1243,6 +1268,7 @@ class ensemble_inference(object):
         def constraint(p, r, xa, xb):
             a, b, loc, scale = p
             return np.array([a*scale + loc - xa, b*scale + loc - xb])
+        
 
         # [B S A]       
         batch_src_sample = np.transpose(norm_g_src_sample, [1, 2, 0])
@@ -1261,24 +1287,23 @@ class ensemble_inference(object):
             for tmp_src in range(num_src):
                 
                 tmp_para = fmin_slsqp(func, 
-                                      [left_ini, right_ini, loc_ini, scale_ini], 
+                                      [left_ini[tmp_ins][tmp_src], right_ini[tmp_ins][tmp_src], loc_ini[tmp_ins][tmp_src], scale_ini[tmp_ins][tmp_src]], 
                                       f_eqcons = constraint, 
-                                      args = (r, xa, xb),
+                                      args = (batch_src_sample[tmp_ins][tmp_src], real_left, real_right),
                                       iprint = False, 
                                       iter = 1000)
                 
                 tr_gau_batch_src[-1].append([tmp_para[2], tmp_para[3]])
                 
+        '''
         
         # -- output
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
         return [rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean), nnllk],\
-               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, tr_gau_batch_src]
+               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
-        # bayes_mean, bayes_var, uncertainty, bayes_mean_src, bayes_var_src, bayes_gate_src, gate_src_var 
-    
     
     
     
