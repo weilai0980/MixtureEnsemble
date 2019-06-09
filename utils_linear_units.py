@@ -7,6 +7,39 @@ from utils_libs import *
 
 # ----- utilities functions -----
 
+def multi_src_predictor_linear(x, n_src, steps, dim, bool_bias, bool_scope_reuse, str_scope):
+    
+    # x: [S B T D]
+    # bool_bias, bool_scope_reuse: [3]
+    
+    #[S B]
+    tmp_mean, regu_mean = multi_src_bilinear(x,
+                                             [steps, dim],
+                                             str_scope + "mean",
+                                             bool_bias = bool_bias[0],
+                                             bool_scope_reuse = bool_scope_reuse[0], 
+                                             num_src = n_src)
+        
+    tmp_var, regu_var = multi_src_bilinear(x,
+                                           [steps, dim],
+                                           str_scope + "var",
+                                           bool_bias = bool_bias[1],
+                                           bool_scope_reuse = bool_scope_reuse[1],
+                                           num_src = n_src)
+    
+    tmp_logit, regu_gate = multi_src_bilinear(x,
+                                              [steps, dim],
+                                              str_scope + 'gate',
+                                              bool_bias = bool_bias[2],
+                                              bool_scope_reuse = bool_scope_reuse[2],
+                                              num_src = n_src)
+    
+    
+    return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate
+    
+    
+    
+
 def multi_src_linear(x, 
                      dim_x, 
                      scope, 

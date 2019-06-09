@@ -92,7 +92,10 @@ para_distr_para = [3]
 # student_t: [nu], nu>=3
 
 para_bool_target_seperate = False
+# if yes, the last source corresponds to the auto-regressive target variable
 para_var_type = "square" # square, exp
+para_batch_augment = False
+#para_add_jump = True
 
 
 # -- optimization
@@ -132,8 +135,9 @@ para_early_stop_window = 0
 
 # -- regularization
 
-para_regu_positive = False
-para_regu_gate = True
+para_regu_mean_var = True
+para_regu_mean_positive = False
+para_regu_gate = False
 para_regu_global_gate = False  
 para_regu_latent_dependence = False
 para_regu_weight_on_latent = True
@@ -159,6 +163,7 @@ def log_train(path):
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
         text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
+        text_file.write("data batch augmentation : %s \n"%(para_batch_augment))
         text_file.write("\n")
         
         text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
@@ -166,9 +171,11 @@ def log_train(path):
         text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
         text_file.write("variance calculation type : %s \n"%(para_var_type))
+        #text_file.write("jump component : %s \n"%(para_add_jump))
         text_file.write("\n")
         
-        text_file.write("regularization on positive means : %s \n"%(para_regu_positive))
+        text_file.write("regularization on mean and variance : %s \n"%(para_regu_mean_var))
+        text_file.write("regularization on positive means : %s \n"%(para_regu_mean_positive))
         text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
         text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
         text_file.write("regularization on latent dependence parameters : %s \n"%(para_regu_latent_dependence))
@@ -210,6 +217,32 @@ def log_train(path):
         text_file.write("\n\n")
 
 
+def batch_augment(x, y, num_src):
+    
+    # x: [S B T D], y: [B 1]
+    
+    # [B [1]]
+    idx_y = [[idx, i] for idx, i in enumerate(y)]
+    
+    sort_idx_y = sorted(idx_y, key = lambda x: x[1][0], reverse = True)
+    
+    aug_num = int(0.2*len(y))
+    
+    for i in range(aug_num):
+        
+        tmp_idx = sort_idx_y[i][0]
+        
+        for j in range(num_src):
+            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
+            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
+        
+        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
+        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
+    
+    return x, y
+    
+    
+        
 # ----- training and evalution
     
 def training_validate(xtr, 
@@ -287,7 +320,7 @@ def training_validate(xtr,
                           bool_bilinear = para_bool_bilinear,
                           distr_type = para_distr_type, 
                           distr_para = para_distr_para,
-                          bool_regu_positive_mean = para_regu_positive,
+                          bool_regu_positive_mean = para_regu_mean_positive,
                           bool_regu_gate = para_regu_gate, 
                           bool_regu_global_gate = para_regu_global_gate, 
                           bool_regu_latent_dependence = para_regu_latent_dependence,
@@ -304,7 +337,9 @@ def training_validate(xtr,
                           optimization_mode = para_optimization_mode,
                           burn_in_step = para_burn_in_epoch,
                           bool_global_bias_src = para_bool_global_bias,
-                          bool_imbalance_l2 = para_regu_imbalanced_mean_var)
+                          bool_imbalance_l2 = para_regu_imbalanced_mean_var,
+                          bool_regu_mean_var = para_regu_mean_var,
+                          )
         
                           
         model.train_ini()
@@ -340,8 +375,16 @@ def training_validate(xtr,
                 # batch data
                 batch_idx = total_idx[i*hp_batch_size : (i+1)*hp_batch_size] 
                 
+                # shape: [S B T D]
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
+                # [B 1]
                 batch_y = ytr[batch_idx]
+                
+                if para_batch_augment == True:
+                    
+                    batch_x, batch_y = batch_augment(batch_x, 
+                                                     batch_y, 
+                                                     num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])                
                 
                 # one-step training on the batch of data
                 tmp_loss, tmp_sq_err = model.train_batch(batch_x, 
@@ -492,6 +535,8 @@ if __name__ == '__main__':
     
     # output from the reshape 
     # y [N 1], x [S N T D]    
+    
+    # para_bool_target_seperate = yes, the last source corresponds to the auto-regressive target variable
     
     tr_x, tr_y = data_reshape(tr_dta, 
                               bool_target_seperate = para_bool_target_seperate)
@@ -659,7 +704,7 @@ if __name__ == '__main__':
     
     # -- best epochs 
     
-    error_tuple, _ = testing(model_snapshots = model_snapshots, 
+    error_tuple, py_tuple = testing(model_snapshots = model_snapshots, 
                              xts = ts_x, 
                              yts = ts_y, 
                              file_path = path_model, 
@@ -669,6 +714,10 @@ if __name__ == '__main__':
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + model_snapshots)
+    
+    
+    import pickle
+    pickle.dump(py_tuple, open(path_py, "wb"))
     
     
     # -- ensemble or bayesian
@@ -704,12 +753,6 @@ if __name__ == '__main__':
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + early_stop_id)
     '''
-    
-    
-    import pickle
-    pickle.dump(py_tuple, open(path_py, "wb"))
-    
-    
     
     
     

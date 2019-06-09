@@ -25,12 +25,12 @@ def data_reshape(data,
         tmpx.append(np.asarray([tmp[2][0][:, 1:] for tmp in data]))
         print(np.shape(tmpx[-1]))
     
-        tmpx.append(np.asarray([tmp[2][0][:, 0:1] for tmp in data]))
-        print(np.shape(tmpx[-1]))
-        
         for src_idx in range(1, src_num):
             tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
             print(np.shape(tmpx[-1]))
+            
+        tmpx.append(np.asarray([tmp[2][0][:, 0:1] for tmp in data]))
+        print(np.shape(tmpx[-1]))
     
     else:
         

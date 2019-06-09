@@ -143,9 +143,6 @@ design choice:
 
 --------------- TO DO -------------------
 
----- Boosting
-
-
 
 ---- Tuning
 
@@ -158,10 +155,6 @@ https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learn
 
 https://towardsdatascience.com/checklist-for-debugging-neural-networks-d8b2a9434f21
 
-
------ TRAINING HYPER-PARA:
-
-  train mode:  mse, mle, map, ELBO, EM, bayesian 
 
 
 ----- DATA
@@ -183,7 +176,6 @@ correlated variable elimination
 ----- Statistic heteroskedasticity mixture
 
 
-
 Data:
   
   data augments: spikes
@@ -195,8 +187,26 @@ Data:
     *lag effect 
 
 
+Model:
+
+  feature extractor on time series 
+  
+  mean related bias
+  
+  jump component boosting
+  
+  loss decomposition 
+  
+  Boosting
+  
+
 Training:
 
+  training error 
+
+  boosting
+  data augments: spikes
+  
   early stopping: batch-wise, change point detection, exponential moving average 
   
   Cyclical learning rates
@@ -205,13 +215,15 @@ Training:
   inference 
   output wrapper positive
   
+  train mode:  mse, mle, map, ELBO, EM, bayesian 
   
+
   ** SG-MCMC:
 
      thinning
      * heteroskedasticity and MCMC inference
      *math operation check
-     
+  
   
   Regularization:
   
@@ -223,9 +235,8 @@ Training:
     imbalanced regularization on mean and variance
      
      
-Cross-check:
-
-  ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
+  Cross-check:
+    ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
 
 
 Testing:
@@ -236,11 +247,10 @@ Testing:
 Monitoring and diagnostic:
 
 
-
 Inference:
   
   remove outliers 
-
+  truncated Gaussian on source contribution uncertainty
 
 
 
@@ -254,6 +264,26 @@ hidden transition
 
 ----- bayesian
 
+
+Bayesian:
+  
+  MCMC
+    SG-MCMC: SG-LD, SG-HMC
+    
+  VI 
+    MC-Dropout
+    Posteriro-sharpening
+    
+  SGWA
+
+Sampling methods:
+
+  REINFORCE
+  Importance sampling
+  Re-parameteraization trick 
+  
+  
+  
 
 sgld efficiency
 

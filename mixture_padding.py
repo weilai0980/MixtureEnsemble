@@ -13,6 +13,8 @@ from utils_libs import *
 from utils_linear_units import *
 from utils_training import *
 
+from utils_optimization import *
+
 # reproducibility by fixing the random seed
 # np.random.seed(1)
 # tf.set_random_seed(1)
@@ -92,7 +94,9 @@ class mixture_statistic():
                     optimization_mode,
                     burn_in_step,
                     bool_global_bias_src,
-                    bool_imbalance_l2):
+                    bool_imbalance_l2,
+                    bool_regu_mean_var,
+                    ):
         
 
         
@@ -179,10 +183,12 @@ class mixture_statistic():
         self.optimization_lr_decay = optimization_lr_decay
         self.optimization_lr_decay_steps = optimization_lr_decay_steps 
         
+        self.bool_regu_mean_var = bool_regu_mean_var
         
         self.optimization_mode = optimization_mode
         self.training_step = 0
         self.burn_in_step = burn_in_step
+        
         
         # ----- individual models
         
@@ -194,6 +200,31 @@ class mixture_statistic():
             curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, steps_x - 1, -1])
             
             if bool_bilinear == True:
+                
+                
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
+                multi_src_predictor_linear(x = curr_x, 
+                                           n_src = self.num_src, 
+                                           steps = steps_x - 1, 
+                                           dim = dim_x, 
+                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                           bool_scope_reuse= [False, False, False], 
+                                           str_scope = "")
+                
+                
+                #[S B]
+                _, _, _, _, tmp_pre_logit, _ = \
+                multi_src_predictor_linear(x = pre_x, 
+                                           n_src = self.num_src, 
+                                           steps = steps_x - 1, 
+                                           dim = dim_x, 
+                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                           bool_scope_reuse= [True, True, True], 
+                                           str_scope = "")
+                
+                
+                '''
                 
                 #[S B]
                 tmp_mean, regu_mean = multi_src_bilinear(curr_x,
@@ -223,10 +254,25 @@ class mixture_statistic():
                                                       bool_bias = bool_bias_gate,
                                                       bool_scope_reuse = True, 
                                                       num_src = self.num_src)
+                                                      
+                '''                                      
+                                                      
         else:
             
             if bool_bilinear == True:
                 
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
+                multi_src_predictor_linear(x = self.x, 
+                                           n_src = self.num_src, 
+                                           steps = steps_x, 
+                                           dim = dim_x, 
+                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                           bool_scope_reuse= [False, False, False], 
+                                           str_scope = "")
+                
+                
+                '''
                 #[S B]
                 tmp_mean, regu_mean = multi_src_bilinear(self.x,
                                                          [steps_x, dim_x],
@@ -248,6 +294,49 @@ class mixture_statistic():
                                                           bool_bias = bool_bias_gate,
                                                           bool_scope_reuse = False,
                                                           num_src = self.num_src)
+                
+                '''
+                
+                '''
+                # -- jump component 
+                # firtst source, first element is the target 
+                # decompose the jump component in the loss
+                
+                if bool_add_jump == True:
+                    
+                    # self.x [S B T D]
+                    # [1 B T D]
+                    jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, -1])
+                    
+                    #[1 B]
+                    jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
+                                                                     [steps_x, dim_x],
+                                                                     'jump_mean',
+                                                                     bool_bias = False,
+                                                                     bool_scope_reuse = False,
+                                                                     num_src = 1)
+                    #[1 B]
+                    jump_logit, jump_regu_gate = multi_src_bilinear(jump_src_x,
+                                                                    [steps_x, dim_x],
+                                                                    'jump_gate',
+                                                                    bool_bias = False,
+                                                                    bool_scope_reuse = False,
+                                                                    num_src = 1)
+                    # [1 B]
+                    jump_val = tf.sigmoid(jump_logit)*jump_magni
+                    
+                    # [1 B]
+                    mean_jump = tf.slice(tmp_mean, [0, 0], [1, -1]) + jump_val
+                    # [S-1 B]
+                    mean_rest = tf.slice(tmp_mean, [1, 0], [-1, -1])
+                    
+                    
+                    tmp_mean = tf.concat([mean_jump, mean_rest], axis = 0)
+                    
+                    regu_mean = regu_mean + jump_regu_magni
+                    regu_gate = regu_gate + jump_regu_gate
+                '''
+            
                 
             '''
             else:
@@ -796,16 +885,22 @@ class mixture_statistic():
             self.loss = self.nllk_hetero_inv + 0.1*self.l2*self.regularization 
             
             
-            if self.bool_imbalance_l2 == True:
-                self.loss += (self.l2*self.regu_mean + 100*self.l2*self.regu_var)
-            else:
-                self.loss += self.l2*(self.regu_mean + self.regu_var)
             
+            if self.bool_regu_mean_var == True:
+                
+                if self.bool_imbalance_l2 == True:
+                    self.loss += (self.l2*self.regu_mean + 100*self.l2*self.regu_var)
+                else:
+                    self.loss += self.l2*(self.regu_mean + self.regu_var)
+
+                    
             
             if self.bool_regu_l2_on_latent == True:
                 self.loss += self.l2*self.latent_depend
+                
             else:
                 self.loss += self.latent_depend
+            
             
             self.nllk = self.nllk_hetero_inv
             
@@ -853,7 +948,10 @@ class mixture_statistic():
             
         
         if self.optimization_method == 'adam':
-            tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
+            
+            tmp_train = myAdamOptimizer(learning_rate = tmp_learning_rate)
+            
+            #tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
         
         elif self.optimization_method == 'RMSprop':
             tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
