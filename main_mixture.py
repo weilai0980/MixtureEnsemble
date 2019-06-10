@@ -95,8 +95,7 @@ para_bool_target_seperate = False
 # if yes, the last source corresponds to the auto-regressive target variable
 para_var_type = "square" # square, exp
 para_batch_augment = False
-#para_add_jump = True
-
+para_jump_boosting = True
 
 # -- optimization
 
@@ -122,7 +121,7 @@ para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
 para_hpara_n_trial = 5
 
-para_validation_metric = 'rmse'
+para_validation_metric = 'nnllk'
 para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6}
 
 # model snapshot sample: epoch-wise or step-wise
@@ -171,7 +170,7 @@ def log_train(path):
         text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
         text_file.write("variance calculation type : %s \n"%(para_var_type))
-        #text_file.write("jump component : %s \n"%(para_add_jump))
+        text_file.write("jump boosting : %s \n"%(para_jump_boosting))
         text_file.write("\n")
         
         text_file.write("regularization on mean and variance : %s \n"%(para_regu_mean_var))
@@ -307,8 +306,10 @@ def training_validate(xtr,
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
-                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0]
-                                  )
+                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
+                                  bool_jump_boosting = para_jump_boosting,
+                                 )
+                                 
         
         # -- initialize the network
         
@@ -339,6 +340,7 @@ def training_validate(xtr,
                           bool_global_bias_src = para_bool_global_bias,
                           bool_imbalance_l2 = para_regu_imbalanced_mean_var,
                           bool_regu_mean_var = para_regu_mean_var,
+                          bool_jump_boosting = para_jump_boosting
                           )
         
                           
@@ -368,7 +370,7 @@ def training_validate(xtr,
             
             # loop over all batches
             epoch_loss = 0.0
-            epoch_sq_err = 0.0
+            #epoch_sq_err = 0.0
             
             for i in range(total_batch_num):
                 
@@ -386,12 +388,13 @@ def training_validate(xtr,
                                                      batch_y, 
                                                      num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])                
                 
+                
                 # one-step training on the batch of data
-                tmp_loss, tmp_sq_err = model.train_batch(batch_x, 
+                tmp_loss = model.train_batch(batch_x, 
                                                          batch_y,
                                                          global_step = epoch)
                 epoch_loss += tmp_loss
-                epoch_sq_err += tmp_sq_err
+                #epoch_sq_err += tmp_sq_err
             
             
             # - epoch-wise validation
@@ -402,12 +405,12 @@ def training_validate(xtr,
             val_rmse, val_mae, val_mape, val_nnllk, monitor_metric = model.validation(xval, 
                                                                                       yval)
             
-            tr_rmse = sqrt(1.0*epoch_sq_err/total_cnt)
+            #tr_rmse = sqrt(1.0*epoch_sq_err/total_cnt)
             
             # para_metric_map[] defined on
             epoch_error.append([epoch,
                                 1.0*epoch_loss/total_batch_num,
-                                tr_rmse, 
+                                0, 
                                 val_rmse, 
                                 val_mae, 
                                 val_mape, 
@@ -457,7 +460,8 @@ def testing(model_snapshots,
             file_path, 
             bool_instance_eval,
             loss_type,
-            num_src):
+            num_src,
+            jump_boosting):
     
     # ensemble of model snapshots
     infer = ensemble_inference()
@@ -481,7 +485,9 @@ def testing(model_snapshots,
         
             model = mixture_statistic(session = sess, 
                                       loss_type = para_loss_type,
-                                      num_src = num_src)
+                                      num_src = num_src,
+                                      bool_jump_boosting = jump_boosting
+                                     )
             
             # restore the model    
             model.model_restore(tmp_meta, 
@@ -571,6 +577,7 @@ if __name__ == '__main__':
         
     elif args.data_mode == "src_padding": 
         
+        # padding to normalized feature data
         tr_x = data_padding_x(tr_x, 
                               num_src = len(tr_x))
     
@@ -696,7 +703,9 @@ if __name__ == '__main__':
                              file_path = path_model, 
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
-                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
+                             jump_boosting = para_jump_boosting,
+                             )
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + model_snapshots[:1])
@@ -705,12 +714,14 @@ if __name__ == '__main__':
     # -- best epochs 
     
     error_tuple, py_tuple = testing(model_snapshots = model_snapshots, 
-                             xts = ts_x, 
-                             yts = ts_y, 
-                             file_path = path_model, 
-                             bool_instance_eval = True,
-                             loss_type = para_loss_type,
-                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                                    xts = ts_x, 
+                                    yts = ts_y, 
+                                    file_path = path_model, 
+                                    bool_instance_eval = True,
+                                    loss_type = para_loss_type,
+                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
+                                    jump_boosting = para_jump_boosting,
+                                    )
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + model_snapshots)
@@ -730,29 +741,10 @@ if __name__ == '__main__':
                                     file_path = path_model, 
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
+                                    jump_boosting = para_jump_boosting,
+                                    )
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + list(range(para_burn_in_epoch, para_n_epoch)))
-    
-    '''
-    # -- early-stopping
-    
-    # ? early_stop_id + best one epoch ?
-    
-    print(early_stop_id)
-    
-    error_tuple, py_tuple = testing(model_snapshots = early_stop_id, 
-                                    xts = ts_x, 
-                                    yts = ts_y, 
-                                    file_path = path_model, 
-                                    bool_instance_eval = True,
-                                    loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
-    
-    log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + early_stop_id)
-    '''
-    
-    
     

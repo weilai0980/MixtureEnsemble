@@ -85,7 +85,7 @@ performance optimizatin issue
   l2 on latent dependence faster?
   
 
------ constant variance MSE  
+--- constant variance MSE  
 
 -- ml on single source
 -- ml on multi source 
@@ -111,6 +111,8 @@ Testing:
 
 bias terms for different data sources 
   bias as a constant effect
+
+
 
 
 --------------- POINT LEARNED -------------------
@@ -182,9 +184,9 @@ Data:
   
   discrepency between validation and testing data
   
-  DATA augmentation
-    *outlier
-    *lag effect 
+  ** DATA augmentation
+    * outlier
+    * lag effect 
 
 
 Model:
@@ -193,11 +195,10 @@ Model:
   
   mean related bias
   
-  jump component boosting
+  ** jump component boosting
   
   loss decomposition 
   
-  Boosting
   
 
 Training:
@@ -218,11 +219,11 @@ Training:
   train mode:  mse, mle, map, ELBO, EM, bayesian 
   
 
-  ** SG-MCMC:
+  ** bayeisan SG-MCMC:
 
      thinning
      * heteroskedasticity and MCMC inference
-     *math operation check
+     * math operation check
   
   
   Regularization:
@@ -230,7 +231,6 @@ Training:
     latent dependence
     l1
     fine-grained regularization hyper-para 
-  
   
     imbalanced regularization on mean and variance
      
@@ -250,7 +250,8 @@ Monitoring and diagnostic:
 Inference:
   
   remove outliers 
-  truncated Gaussian on source contribution uncertainty
+  
+  ** truncated Gaussian on source contribution uncertainty
 
 
 

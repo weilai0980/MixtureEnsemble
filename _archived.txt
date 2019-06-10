@@ -1,3 +1,68 @@
+
+
+'''
+                #[S B]
+                tmp_mean, regu_mean = multi_src_bilinear(self.x,
+                                                         [steps_x, dim_x],
+                                                         'mean',
+                                                         bool_bias = bool_bias_mean,
+                                                         bool_scope_reuse = False,
+                                                         num_src = self.num_src)
+                
+                tmp_var, regu_var = multi_src_bilinear(self.x,
+                                                       [steps_x, dim_x],
+                                                       'var',
+                                                       bool_bias = bool_bias_var,
+                                                       bool_scope_reuse = False,
+                                                       num_src = self.num_src)
+                
+                tmp_logit, regu_gate = multi_src_bilinear(self.x,
+                                                          [steps_x, dim_x],
+                                                          'gate',
+                                                          bool_bias = bool_bias_gate,
+                                                          bool_scope_reuse = False,
+                                                          num_src = self.num_src)
+                
+                '''
+                
+                
+'''
+                
+                #[S B]
+                tmp_mean, regu_mean = multi_src_bilinear(curr_x,
+                                                         [steps_x - 1, dim_x],
+                                                         'mean',
+                                                         bool_bias = bool_bias_mean,
+                                                         bool_scope_reuse = False, 
+                                                         num_src = self.num_src)
+                #[S B]    
+                tmp_var, regu_var = multi_src_bilinear(curr_x,
+                                                       [steps_x - 1, dim_x],
+                                                       'var',
+                                                       bool_bias = bool_bias_var,
+                                                       bool_scope_reuse = False,
+                                                       num_src = self.num_src)
+                #[S B]
+                tmp_curr_logit, regu_gate = multi_src_bilinear(curr_x,
+                                                               [steps_x - 1, dim_x],
+                                                               'gate',
+                                                               bool_bias = bool_bias_gate,
+                                                               bool_scope_reuse = False,
+                                                               num_src = self.num_src)
+                #[S B]
+                tmp_pre_logit, _ = multi_src_bilinear(pre_x,
+                                                      [steps_x - 1, dim_x],
+                                                      'gate',
+                                                      bool_bias = bool_bias_gate,
+                                                      bool_scope_reuse = True, 
+                                                      num_src = self.num_src)
+                                                      
+                '''
+
+
+
+
+
 '''
     # hp: hyper-parameter
     for tmp_lr in para_lr_range:

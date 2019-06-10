@@ -74,7 +74,7 @@ def data_padding_x(x,
     return target_x
 
 
-def mape(y, 
+def func_mape(y, 
          yhat):
     
     tmp_list = []
@@ -86,12 +86,12 @@ def mape(y,
     
     return np.mean(tmp_list)
 
-def mae(y, 
+def func_mae(y, 
         yhat):
     
     return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
     
-def rmse(y, 
+def func_rmse(y, 
          yhat):
     
     return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))

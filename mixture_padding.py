@@ -28,7 +28,8 @@ class mixture_statistic():
     def __init__(self, 
                  session, 
                  loss_type,
-                 num_src):
+                 num_src,
+                 bool_jump_boosting):
         
         '''
         Args:
@@ -67,6 +68,8 @@ class mixture_statistic():
         
         self.stored_step_id = []
         
+        self.bool_jump_boosting = bool_jump_boosting
+        
 
     def network_ini(self,
                     lr,
@@ -96,6 +99,7 @@ class mixture_statistic():
                     bool_global_bias_src,
                     bool_imbalance_l2,
                     bool_regu_mean_var,
+                    bool_jump_boosting
                     ):
         
 
@@ -189,6 +193,7 @@ class mixture_statistic():
         self.training_step = 0
         self.burn_in_step = burn_in_step
         
+        self.bool_jump_boosting = bool_jump_boosting
         
         # ----- individual models
         
@@ -200,7 +205,6 @@ class mixture_statistic():
             curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, steps_x - 1, -1])
             
             if bool_bilinear == True:
-                
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
@@ -223,40 +227,6 @@ class mixture_statistic():
                                            bool_scope_reuse= [True, True, True], 
                                            str_scope = "")
                 
-                
-                '''
-                
-                #[S B]
-                tmp_mean, regu_mean = multi_src_bilinear(curr_x,
-                                                         [steps_x - 1, dim_x],
-                                                         'mean',
-                                                         bool_bias = bool_bias_mean,
-                                                         bool_scope_reuse = False, 
-                                                         num_src = self.num_src)
-                #[S B]    
-                tmp_var, regu_var = multi_src_bilinear(curr_x,
-                                                       [steps_x - 1, dim_x],
-                                                       'var',
-                                                       bool_bias = bool_bias_var,
-                                                       bool_scope_reuse = False,
-                                                       num_src = self.num_src)
-                #[S B]
-                tmp_curr_logit, regu_gate = multi_src_bilinear(curr_x,
-                                                               [steps_x - 1, dim_x],
-                                                               'gate',
-                                                               bool_bias = bool_bias_gate,
-                                                               bool_scope_reuse = False,
-                                                               num_src = self.num_src)
-                #[S B]
-                tmp_pre_logit, _ = multi_src_bilinear(pre_x,
-                                                      [steps_x - 1, dim_x],
-                                                      'gate',
-                                                      bool_bias = bool_bias_gate,
-                                                      bool_scope_reuse = True, 
-                                                      num_src = self.num_src)
-                                                      
-                '''                                      
-                                                      
         else:
             
             if bool_bilinear == True:
@@ -271,72 +241,6 @@ class mixture_statistic():
                                            bool_scope_reuse= [False, False, False], 
                                            str_scope = "")
                 
-                
-                '''
-                #[S B]
-                tmp_mean, regu_mean = multi_src_bilinear(self.x,
-                                                         [steps_x, dim_x],
-                                                         'mean',
-                                                         bool_bias = bool_bias_mean,
-                                                         bool_scope_reuse = False,
-                                                         num_src = self.num_src)
-                
-                tmp_var, regu_var = multi_src_bilinear(self.x,
-                                                       [steps_x, dim_x],
-                                                       'var',
-                                                       bool_bias = bool_bias_var,
-                                                       bool_scope_reuse = False,
-                                                       num_src = self.num_src)
-                
-                tmp_logit, regu_gate = multi_src_bilinear(self.x,
-                                                          [steps_x, dim_x],
-                                                          'gate',
-                                                          bool_bias = bool_bias_gate,
-                                                          bool_scope_reuse = False,
-                                                          num_src = self.num_src)
-                
-                '''
-                
-                '''
-                # -- jump component 
-                # firtst source, first element is the target 
-                # decompose the jump component in the loss
-                
-                if bool_add_jump == True:
-                    
-                    # self.x [S B T D]
-                    # [1 B T D]
-                    jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, -1])
-                    
-                    #[1 B]
-                    jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
-                                                                     [steps_x, dim_x],
-                                                                     'jump_mean',
-                                                                     bool_bias = False,
-                                                                     bool_scope_reuse = False,
-                                                                     num_src = 1)
-                    #[1 B]
-                    jump_logit, jump_regu_gate = multi_src_bilinear(jump_src_x,
-                                                                    [steps_x, dim_x],
-                                                                    'jump_gate',
-                                                                    bool_bias = False,
-                                                                    bool_scope_reuse = False,
-                                                                    num_src = 1)
-                    # [1 B]
-                    jump_val = tf.sigmoid(jump_logit)*jump_magni
-                    
-                    # [1 B]
-                    mean_jump = tf.slice(tmp_mean, [0, 0], [1, -1]) + jump_val
-                    # [S-1 B]
-                    mean_rest = tf.slice(tmp_mean, [1, 0], [-1, -1])
-                    
-                    
-                    tmp_mean = tf.concat([mean_jump, mean_rest], axis = 0)
-                    
-                    regu_mean = regu_mean + jump_regu_magni
-                    regu_gate = regu_gate + jump_regu_gate
-                '''
-            
                 
             '''
             else:
@@ -853,12 +757,85 @@ class mixture_statistic():
                                            + tf.maximum(0.0, -1.0*latent_prob_logits))) 
         else:
             self.latent_depend = 0.0
+            
+            
+        # ----- jump boosting 
+        # firtst source, first element is the target 
+        
+        
+        if bool_jump_boosting == True:
+            
+            # shape: [B 1]
+            self.y_jump = tf.placeholder(tf.float32, [None, 1], name = 'y_jump')
+            
+            # self.x [S B T D]
+            # [1 B T D]
+            jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, -1])
+                    
+            #[1 B]
+            jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
+                                                             [steps_x, dim_x],
+                                                             'jump_mean',
+                                                             bool_bias = True,
+                                                             bool_scope_reuse = False,
+                                                             num_src = 1)
+            #[1 B]
+            jump_logit, jump_regu_logit = multi_src_bilinear(jump_src_x,
+                                                            [steps_x, dim_x],
+                                                            'jump_gate',
+                                                            bool_bias = True,
+                                                            bool_scope_reuse = False,
+                                                            num_src = 1)
+            # [1 B] - > [B 1]
+            self.py_jump = tf.transpose(tf.sigmoid(jump_logit)*jump_magni, [1, 0])
+            
+            self.loss_jump_boosting = tf.reduce_sum(tf.square(self.py_jump - self.y_jump)) + \
+                                      self.l2*(jump_regu_magni + jump_regu_logit)
+            
+          
         
         
     #   initialize loss and optimization operations for training
     def train_ini(self):
         
-        self.sq_error = tf.reduce_sum(tf.square(self.y - self.py_mean))
+        
+        # ----- jump boosting
+        
+        if self.bool_jump_boosting == True:
+            
+            
+            if self.optimization_lr_decay == True:
+                
+                global_step_boosting = tf.Variable(0, 
+                                      trainable = False)
+            
+                learning_rate_boosting = tf.train.exponential_decay(self.lr, 
+                                                           global_step_boosting,
+                                                           decay_steps = self.optimization_lr_decay_steps, 
+                                                           decay_rate = 0.96, 
+                                                           staircase = True)
+            else:
+                
+                learning_rate_boosting = self.lr
+            
+            
+            optimizer_jump_boosting = myAdamOptimizer(learning_rate = learning_rate_boosting)
+            
+            
+            if self.optimization_lr_decay == True:
+                
+                self.minimize_ops_boosting = optimizer_jump_boosting.minimize(self.loss_jump_boosting, 
+                                                                              global_step = global_step_boosting)
+            else:
+                self.minimize_ops_boosting = optimizer_jump_boosting.minimize(self.loss_jump_boosting)
+            
+            
+        
+        
+        
+        
+        
+        # ----- loss 
         
         # loss, nllk
         if self.loss_type == 'mse':
@@ -933,6 +910,9 @@ class mixture_statistic():
         '''
         
         
+        
+        # ----- learning decay
+        
         if self.optimization_lr_decay == True:
             
             global_step = tf.Variable(0, 
@@ -946,6 +926,10 @@ class mixture_statistic():
         else:
             tmp_learning_rate = self.lr
             
+        
+        
+        # ----- optimizer
+        
         
         if self.optimization_method == 'adam':
             
@@ -985,10 +969,28 @@ class mixture_statistic():
         # record the global training step 
         self.training_step = global_step
         
-        _, tmp_loss, tmp_sq_err = self.sess.run([self.optimizer, self.loss, self.sq_error],
-                                                    feed_dict = data_dict)
+        _, tmp_loss = self.sess.run([self.optimizer, self.loss],
+                                    feed_dict = data_dict)
         
-        return tmp_loss, tmp_sq_err
+        # ----- alternating optimization for the boosting
+        
+        if self.bool_jump_boosting == True:
+            
+            tmp_py = self.sess.run(tf.get_collection('py_mean')[0],
+                                        feed_dict = data_dict)
+            
+            #print("--------- test", np.shape(y), np.shape(tmp_py))
+            
+            y_jump = y - tmp_py
+            data_dict["y_jump:0"] = y_jump
+            
+            _ = self.sess.run([self.minimize_ops_boosting],
+                               feed_dict = data_dict)
+        
+        
+        
+        
+        return tmp_loss
     
     
     def inference_ini(self):
@@ -1029,7 +1031,10 @@ class mixture_statistic():
         tf.add_to_collection("py_mean_src", self.py_mean_src)
         tf.add_to_collection("py_var_src", self.py_var_src)
         
-    
+        if self.bool_jump_boosting == True:
+            tf.add_to_collection("py_jump", self.py_jump)
+        
+    # epoch-wise
     def validation(self,
                    x,
                    y):
@@ -1051,14 +1056,34 @@ class mixture_statistic():
         
         # monitoring tuple during the training
         # [B S]      [B S]
-        py_gate_src, py_mean_src = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0]],
+        py_gate_src, py_mean_src, py_mean = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0],
+                                                  tf.get_collection('py_mean')[0]],
                                                  feed_dict = data_dict)
+        
+        
+        tmp_rmse, tmp_mae = 0.0, 0.0
+        
+        if self.bool_jump_boosting == True:
+            
+            py_jump = self.sess.run(tf.get_collection('py_jump')[0],
+                                    feed_dict = data_dict)
+            
+            
+            #print("--------- test", np.shape(y), np.shape(py_jump), np.shape(py_mean))
+            
+            tmp_rmse = func_rmse(np.squeeze(y), np.squeeze(py_mean + py_jump))
+            tmp_mae = func_mae(np.squeeze(y), np.squeeze(py_mean + py_jump))
+            
+            # py_gate_src, py_mean_src = tmp_rmse, tmp_mae
+            
+        
         
         # -- validation monitoring
         
         # validation error log for early stopping
         # epoch-wise 
         self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
+        
         
         
         # -- validation for SG-MCMC
@@ -1071,6 +1096,9 @@ class mixture_statistic():
                                                          tf.get_collection('py_var_src')[0],
                                                          ],
                                                          feed_dict = data_dict)
+            
+            
+            
             # for SG-MCMC
             self.py_mean_src_samples.append(py_mean_src)
             self.py_var_src_samples.append(py_var_src)
@@ -1079,18 +1107,18 @@ class mixture_statistic():
             self.py_mean_samples.append(py_mean)
         
         # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-        return rmse, mae, mape, nnllk, [py_gate_src, py_mean_src]
+        return rmse, mae, mape, nnllk, [tmp_rmse, tmp_mae]
     
-    
+    # hyper-para wise
     def validation_bayesian(self,
                             x, 
                             y):
-        # [A B S]
-        # A: number of samples
         
         if len(self.py_mean_src_samples) == 0:
             return None
         
+        # [A B S]
+        # A: number of samples
         m_src_sample = np.asarray(self.py_mean_src_samples)
         v_src_sample = np.asarray(self.py_var_src_samples)
         g_src_sample = np.asarray(self.py_gate_src_samples)
@@ -1108,8 +1136,8 @@ class mixture_statistic():
         
         tmpy = np.squeeze(y)
         
-        return [rmse(tmpy, bayes_mean_src), mae(tmpy, bayes_mean_src), mape(tmpy, bayes_mean_src), \
-                rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean)]
+        return [func_rmse(tmpy, bayes_mean_src), func_mae(tmpy, bayes_mean_src), func_mape(tmpy, bayes_mean_src), \
+                func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean) ]
     
     
     #   infer givn testing data
@@ -1131,6 +1159,8 @@ class mixture_statistic():
                                                 tf.get_collection('mape')[0],
                                                 tf.get_collection('nnllk')[0]],
                                                 feed_dict = data_dict)
+        
+        
         if bool_py_eval == True:
             
             # [B 1]  [B 1]   [B S]
@@ -1141,12 +1171,23 @@ class mixture_statistic():
                                                                                    tf.get_collection('py_var_src')[0]
                                                                                    ],
                                                                                    feed_dict = data_dict)
+            
+            
+            if self.bool_jump_boosting == True:
+                # [B 1]
+                py_jump = self.sess.run(tf.get_collection('py_jump')[0],
+                                        feed_dict = data_dict)
+                
+                py_mean += py_jump
+                
+                
         else:
             py_mean = None
             py_var = None
             py_gate_src = None
             py_mean_src = None
             py_var_src = None
+            
         
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
         return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
@@ -1286,12 +1327,9 @@ class ensemble_inference(object):
         
         
         # -- mean
-        # for cross check
-        # [B S]
-        bayes_mean_src = np.mean(m_src_sample, axis = 0)
-        
         # [B]
-        bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        bayes_mean = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        #bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
         
         
         # -- total variance
@@ -1399,7 +1437,7 @@ class ensemble_inference(object):
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
-        return [rmse(tmpy, bayes_mean), mae(tmpy, bayes_mean), mape(tmpy, bayes_mean), nnllk],\
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
     
