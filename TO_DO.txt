@@ -169,10 +169,8 @@ correlated variable elimination
 
 
 
------ survey
+----- Survey
 
-
------ experiment plan
 
 
 ----- Statistic heteroskedasticity mixture
@@ -185,21 +183,26 @@ Data:
   discrepency between validation and testing data
   
   ** DATA augmentation
-    * outlier
-    * lag effect 
+     outlier
+     lag effect 
 
 
 Model:
-
-  feature extractor on time series 
+  
+  generic feature extractor on time series: pre-augment, end2end augment
   
   mean related bias
   
-  ** jump component boosting
+  ** boosting jump component
+     burn-in phase 
   
   loss decomposition 
   
-  
+  imbalanced target values:
+    data augmentation by sampling
+    boosting
+    weighted loss function
+    
 
 Training:
 
@@ -218,13 +221,14 @@ Training:
   
   train mode:  mse, mle, map, ELBO, EM, bayesian 
   
-
-  ** bayeisan SG-MCMC:
-
-     thinning
-     * heteroskedasticity and MCMC inference
-     * math operation check
   
+  ** bayeisan SG-MCMC:
+  
+     thinning
+     ancestral sampling
+     heteroskedasticity and MCMC inference
+     math operation check
+     
   
   Regularization:
   
@@ -233,7 +237,7 @@ Training:
     fine-grained regularization hyper-para 
   
     imbalanced regularization on mean and variance
-     
+    
      
   Cross-check:
     ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
@@ -282,22 +286,9 @@ Sampling methods:
   REINFORCE
   Importance sampling
   Re-parameteraization trick 
+  Monte Carlo
   
   
-  
-
-sgld efficiency
-
-
-concrete dropout
-
-mc-dropout
-SG-VI
-
-
-SG-MCMC
-  SG-LD
-   
 Random forest 
    http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
 

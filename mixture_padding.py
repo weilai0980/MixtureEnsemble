@@ -98,8 +98,10 @@ class mixture_statistic():
                     burn_in_step,
                     bool_global_bias_src,
                     bool_imbalance_l2,
-                    bool_regu_mean_var,
-                    bool_jump_boosting
+                    bool_regu_mean,
+                    bool_regu_var,
+                    bool_jump_boosting,
+                    para_share_type
                     ):
         
 
@@ -187,7 +189,8 @@ class mixture_statistic():
         self.optimization_lr_decay = optimization_lr_decay
         self.optimization_lr_decay_steps = optimization_lr_decay_steps 
         
-        self.bool_regu_mean_var = bool_regu_mean_var
+        self.bool_regu_mean = bool_regu_mean
+        self.bool_regu_var = bool_regu_var
         
         self.optimization_mode = optimization_mode
         self.training_step = 0
@@ -214,7 +217,8 @@ class mixture_statistic():
                                            dim = dim_x, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
-                                           str_scope = "")
+                                           str_scope = "",
+                                           para_share_logit = para_share_type)
                 
                 
                 #[S B]
@@ -225,7 +229,8 @@ class mixture_statistic():
                                            dim = dim_x, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [True, True, True], 
-                                           str_scope = "")
+                                           str_scope = "",
+                                           para_share_logit = para_share_type)
                 
         else:
             
@@ -239,7 +244,8 @@ class mixture_statistic():
                                            dim = dim_x, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
-                                           str_scope = "")
+                                           str_scope = "", 
+                                           para_share_logit = para_share_type)
                 
                 
             '''
@@ -758,7 +764,10 @@ class mixture_statistic():
         else:
             self.latent_depend = 0.0
             
-            
+        
+        
+        ##### TO DO #####
+        
         # ----- jump boosting 
         # firtst source, first element is the target 
         
@@ -766,9 +775,12 @@ class mixture_statistic():
         if bool_jump_boosting == True:
             
             # shape: [B 1]
+            # y - py
             self.y_jump = tf.placeholder(tf.float32, [None, 1], name = 'y_jump')
             
             # self.x [S B T D]
+            
+            '''
             # [1 B T D]
             jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, -1])
                     
@@ -786,11 +798,44 @@ class mixture_statistic():
                                                             bool_bias = True,
                                                             bool_scope_reuse = False,
                                                             num_src = 1)
-            # [1 B] - > [B 1]
-            self.py_jump = tf.transpose(tf.sigmoid(jump_logit)*jump_magni, [1, 0])
+            '''
             
-            self.loss_jump_boosting = tf.reduce_sum(tf.square(self.py_jump - self.y_jump)) + \
-                                      self.l2*(jump_regu_magni + jump_regu_logit)
+            # [1 B T D]
+            jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, 1])
+                    
+            #[1 B]
+            jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
+                                                             [steps_x, 1],
+                                                             'jump_mean',
+                                                             bool_bias = True,
+                                                             bool_scope_reuse = False,
+                                                             num_src = 1)
+            #[1 B]
+            jump_logit, jump_regu_logit = multi_src_bilinear(jump_src_x,
+                                                            [steps_x, 1],
+                                                            'jump_gate',
+                                                            bool_bias = True,
+                                                            bool_scope_reuse = False,
+                                                            num_src = 1)
+            
+            
+            
+            # [1 B] - > [B 1]
+            #self.py_jump = tf.transpose(tf.sigmoid(jump_logit)*jump_magni, [1, 0])
+            tmp_jump_gate = tf.transpose(tf.sigmoid(jump_logit),[1, 0])
+            tmp_jump = tf.transpose(jump_magni, [1, 0])
+            # [B 1]
+            self.py_jump = tmp_jump_gate*tmp_jump
+            
+            #loss_weight = tf.nn.softmax(tf.square(self.y_jump), axis = 0)
+            loss_weight = tf.sigmoid(tf.square(self.y_jump))
+            
+            
+            #self.loss_jump_boosting = tf.reduce_sum(loss_weight * tf.square(self.py_jump - self.y_jump)) + \
+            #                          self.l2*(jump_regu_magni + jump_regu_logit)
+                
+            self.loss_jump_boosting = tf.reduce_sum(tmp_jump_gate*tf.square(tmp_jump - self.y_jump)) + \
+                                      self.l2*(jump_regu_magni + jump_regu_logit)    
             
           
         
@@ -809,7 +854,7 @@ class mixture_statistic():
                 global_step_boosting = tf.Variable(0, 
                                       trainable = False)
             
-                learning_rate_boosting = tf.train.exponential_decay(self.lr, 
+                learning_rate_boosting = tf.train.exponential_decay(0.005, 
                                                            global_step_boosting,
                                                            decay_steps = self.optimization_lr_decay_steps, 
                                                            decay_rate = 0.96, 
@@ -841,13 +886,13 @@ class mixture_statistic():
         if self.loss_type == 'mse':
             
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + \
-                        0.1*self.l2*self.regularization + self.l2*self.regu_mean
+                        self.l2*self.regularization + self.l2*self.regu_mean
                 
             self.nllk = self.nllk_const
             
         elif self.loss_type == 'lk':
             
-            self.loss = self.nllk_hetero + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
+            self.loss = self.nllk_hetero + self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         
             if self.bool_regu_l2_on_latent == True:
                 self.loss += self.l2*self.latent_depend
@@ -859,20 +904,24 @@ class mixture_statistic():
         # ?
         elif self.loss_type == 'lk_inv':
             
-            self.loss = self.nllk_hetero_inv + 0.1*self.l2*self.regularization 
+            self.loss = self.nllk_hetero_inv + self.l2*self.regularization 
             
             
-            
-            if self.bool_regu_mean_var == True:
+            if self.bool_regu_mean == True:
+                
+                self.loss += (self.l2*self.regu_mean)
+                
+                
+            if self.bool_regu_var == True:
                 
                 if self.bool_imbalance_l2 == True:
-                    self.loss += (self.l2*self.regu_mean + 100*self.l2*self.regu_var)
+                    self.loss += (100*self.l2*self.regu_var)
                 else:
-                    self.loss += self.l2*(self.regu_mean + self.regu_var)
+                    self.loss += (self.l2*self.regu_var)
 
                     
-            
             if self.bool_regu_l2_on_latent == True:
+                
                 self.loss += self.l2*self.latent_depend
                 
             else:
@@ -969,7 +1018,7 @@ class mixture_statistic():
         # record the global training step 
         self.training_step = global_step
         
-        _, tmp_loss = self.sess.run([self.optimizer, self.loss],
+        _ = self.sess.run(self.optimizer,
                                     feed_dict = data_dict)
         
         # ----- alternating optimization for the boosting
@@ -990,7 +1039,7 @@ class mixture_statistic():
         
         
         
-        return tmp_loss
+        return
     
     
     def inference_ini(self):
@@ -1024,6 +1073,9 @@ class mixture_statistic():
         tf.add_to_collection("mape", self.mape)
         tf.add_to_collection("nnllk", self.nnllk)
         
+        tf.add_to_collection("loss", self.loss)
+        
+        
         tf.add_to_collection("py_mean", self.py_mean)
         tf.add_to_collection("py_var", self.py_var)
         tf.add_to_collection("py_gate", self.gates)
@@ -1048,18 +1100,23 @@ class mixture_statistic():
         data_dict["x:0"] = x
         data_dict['y:0'] = y
         
-        rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
-                                                tf.get_collection('mae')[0],
-                                                tf.get_collection('mape')[0],
-                                                tf.get_collection('nnllk')[0]],
-                                                feed_dict = data_dict)
+        rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
+                                                      tf.get_collection('mae')[0],
+                                                      tf.get_collection('mape')[0],
+                                                      tf.get_collection('nnllk')[0],
+                                                      tf.get_collection('loss')[0]
+                                                     ],
+                                                     feed_dict = data_dict)
         
+        '''
         # monitoring tuple during the training
         # [B S]      [B S]
-        py_gate_src, py_mean_src, py_mean = self.sess.run([tf.get_collection('py_gate')[0], tf.get_collection('py_mean_src')[0],
-                                                  tf.get_collection('py_mean')[0]],
-                                                 feed_dict = data_dict)
-        
+        py_gate_src, py_mean_src, py_mean, loss = self.sess.run([tf.get_collection('py_gate')[0], \
+                                                           tf.get_collection('py_mean_src')[0],
+                                                           tf.get_collection('py_mean')[0],
+                                                           tf.get_collection('loss')[0]],
+                                                           feed_dict = data_dict)
+        '''
         
         tmp_rmse, tmp_mae = 0.0, 0.0
         
@@ -1085,7 +1142,7 @@ class mixture_statistic():
         self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
         
         
-        
+        '''
         # -- validation for SG-MCMC
         
         if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
@@ -1105,10 +1162,12 @@ class mixture_statistic():
             self.py_gate_src_samples.append(py_gate_src)
             
             self.py_mean_samples.append(py_mean)
+        '''
         
         # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-        return rmse, mae, mape, nnllk, [tmp_rmse, tmp_mae]
+        return rmse, mae, mape, nnllk, [tmp_rmse, tmp_mae, loss]
     
+    '''
     # hyper-para wise
     def validation_bayesian(self,
                             x, 
@@ -1139,6 +1198,7 @@ class mixture_statistic():
         return [func_rmse(tmpy, bayes_mean_src), func_mae(tmpy, bayes_mean_src), func_mape(tmpy, bayes_mean_src), \
                 func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean) ]
     
+    '''
     
     #   infer givn testing data
     def inference(self, 
@@ -1172,7 +1232,7 @@ class mixture_statistic():
                                                                                    ],
                                                                                    feed_dict = data_dict)
             
-            
+            # ? py_mean different
             if self.bool_jump_boosting == True:
                 # [B 1]
                 py_jump = self.sess.run(tf.get_collection('py_jump')[0],
@@ -1436,9 +1496,18 @@ class ensemble_inference(object):
         # -- output
         tmpy = np.squeeze(y)
         
+        
+        # -- testing for boosting 
+        # boosting_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        
+        
         # error tuple [], prediction tuple []
         return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        
+        
+        #return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
+        #       [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
     
     
