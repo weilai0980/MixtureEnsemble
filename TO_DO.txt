@@ -191,6 +191,8 @@ Model:
   
   generic feature extractor on time series: pre-augment, end2end augment
   
+  statistical boosting
+  
   mean related bias
   
   ** boosting jump component
