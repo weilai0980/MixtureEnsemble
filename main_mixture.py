@@ -87,28 +87,27 @@ para_bool_bilinear = True
 
 para_distr_type = args.target_distr
 # gaussian, student_t
-para_distr_para = [3]
+para_distr_para = []
 # gaussian: [] 
 # student_t: [nu], nu>=3
 
 para_bool_target_seperate = False
 # if yes, the last source corresponds to the auto-regressive target variable
 para_var_type = "square" # square, exp
+# for one-dimensional feature, variance derivation should be re-defined?
 para_batch_augment = False
 para_jump_boosting = False
 para_share_type_gate = "no_share"
 # no_share, share, mix
-
+para_inference_type = ""
+# mixture, dense 
 
 # -- optimization
 
-para_n_epoch = 80
+para_optimization_mode = "bayesian" # map
 para_loss_type = args.loss_type
 
-para_optimization_mode = "bayesian" # map
-para_burn_in_epoch = 20
-
-para_optimizer = "adam" # RMSprop, adam, 'sgmcmc_RMSprop', sgd
+para_optimizer = "sg_mcmc" # RMSprop, adam, sgd, sg_mcmc
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
@@ -124,8 +123,9 @@ para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
 para_hpara_n_trial = 5
 
-para_validation_metric = 'nnllk'
-para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6} 
+para_n_epoch = 80
+para_burn_in_epoch = 20
+
 
 # model snapshot sample: epoch-wise or step-wise
 para_val_aggreg_num = max(1, int(0.05*para_n_epoch))
@@ -133,6 +133,9 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
 para_early_stop_bool = False
 para_early_stop_window = 0
+
+para_validation_metric = 'nnllk'
+para_metric_map = {'rmse':3, 'mae':4, 'mape':5, 'nnllk':6} 
 
 
 # -- regularization
@@ -147,8 +150,8 @@ para_regu_latent_dependence = False
 para_regu_weight_on_latent = True
 
 para_bool_bias_in_mean = True
-para_bool_bias_in_var = False
-para_bool_bias_in_gate = False
+para_bool_bias_in_var = True
+para_bool_bias_in_gate = True
 para_bool_global_bias = False
 
 para_latent_dependence = args.latent_dependence
@@ -200,10 +203,8 @@ def log_train(path):
         text_file.write("\n")
         
         text_file.write("optimization mode : %s \n"%(para_optimization_mode))
-        text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("optimizer : %s \n"%(para_optimizer))
-        text_file.write("number of epochs : %s \n"%(para_n_epoch))
         text_file.write("learning rate decay : %s \n"%(str(para_optimizer_lr_decay)))
         text_file.write("learning rate decay epoch : %s \n"%(str(para_optimizer_lr_decay_epoch)))
         text_file.write("\n")
@@ -212,9 +213,12 @@ def log_train(path):
         text_file.write("hyper-para range : %s \n"%(str(para_hpara_range)))
         text_file.write("hyper-para random search trials : %s \n"%(str(para_hpara_n_trial)))
         
+        text_file.write("epochs in total : %s \n"%(para_n_epoch))
+        text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
+        
+        text_file.write("epoch snapshots in validation : %s \n"%(para_val_aggreg_num))
+        text_file.write("epoch snapshots in testing : %s \n"%(para_test_snapshot_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
-        text_file.write("validation aggreation num. : %s \n"%(para_val_aggreg_num))
-        text_file.write("testing snapshot num. : %s \n"%(para_test_snapshot_num))
         
         text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
         text_file.write("early-stoping look-back window : %s \n"%(para_early_stop_window))
@@ -318,39 +322,50 @@ def training_validate(xtr,
                                  )
                                  
         
+        '''
+        hyper_para_dict = {"lr": 0.0,
+                           "l2": 0.0}
+        
+        hyper_para_dict = {"lr": 0.0,
+                           "l2": 0.0,
+                           "n_dense": 0.0,
+                           "size_lstm": 0.0,
+                           "n_lstm", 0}
+        '''
+        
+        
         # -- initialize the network
         
-        model.network_ini(hp_lr, 
-                          hp_l2, 
-                          dim_x = dim_x,
-                          steps_x = steps_x, 
-                          bool_log = para_y_log, 
+        model.network_ini(lr = hp_lr, 
+                          l2 = hp_l2, 
                           bool_bilinear = para_bool_bilinear,
-                          distr_type = para_distr_type, 
-                          distr_para = para_distr_para,
+                          para_share_type = para_share_type_gate,
+                          x_dim = dim_x,
+                          x_steps = steps_x, 
+                          model_distr_type = para_distr_type, 
+                          model_distr_para = para_distr_para,
+                          model_var_type = para_var_type,
+                          bool_regu_mean = para_regu_mean,
+                          bool_regu_var = para_regu_var,
+                          bool_regu_gate = para_regu_gate,
                           bool_regu_positive_mean = para_regu_mean_positive,
-                          bool_regu_gate = para_regu_gate, 
                           bool_regu_global_gate = para_regu_global_gate, 
                           bool_regu_latent_dependence = para_regu_latent_dependence,
                           bool_regu_l2_on_latent = para_regu_weight_on_latent,
+                          bool_regu_imbalance = para_regu_imbalanced_mean_var,
                           latent_dependence = para_latent_dependence,
                           latent_prob_type = para_latent_prob_type,
-                          var_type = para_var_type,
                           bool_bias_mean = para_bool_bias_in_mean,
                           bool_bias_var = para_bool_bias_in_var,
                           bool_bias_gate = para_bool_bias_in_gate,
+                          bool_bias_global_src = para_bool_global_bias,
                           optimization_method = para_optimizer,
                           optimization_lr_decay = para_optimizer_lr_decay,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size),
                           optimization_mode = para_optimization_mode,
-                          burn_in_step = para_burn_in_epoch,
-                          bool_global_bias_src = para_bool_global_bias,
-                          bool_imbalance_l2 = para_regu_imbalanced_mean_var,
-                          bool_regu_mean = para_regu_mean,
-                          bool_regu_var = para_regu_var,                          
+                          optimization_burn_in_step = para_burn_in_epoch,
                           bool_jump_boosting = para_jump_boosting,
-                          para_share_type = para_share_type_gate
-                          )
+                         )
         
         model.train_ini()
         model.inference_ini()
@@ -683,7 +698,7 @@ if __name__ == '__main__':
                        hpara_tuple = [best_hpara, model_snapshots, best_val_err], 
                        error_tuple = epoch_error[0])
     
-    print('\n----- Best_epoch hyper-parameters: ', best_hpara, model_snapshots, best_val_err, '\n')
+    print('\n----- Best epoch hyper-parameters: ', best_hpara, model_snapshots, best_val_err, '\n')
     print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
     
     

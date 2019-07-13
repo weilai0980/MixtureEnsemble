@@ -123,6 +123,12 @@ Model:
    bias term effect on generalization ability. It is related to the marginal mean of the target. 
    lk_inv is numerical stable
 
+   ensemble
+     mixture
+     average
+     weighted sum 
+     
+
 Training-validation:
    
   hyper-para search: grid random bayesian 
@@ -133,14 +139,26 @@ Training-validation:
   snapshots under one certain hyper-parameter
   
   discrepency between validation and testing data
+  
+  hyper-para:
+    learning rate
+    regularization
+    batch-size
+    epoch 
+    
 
 Testing:
 
   validation and testing data difference
   
 
-design choice:
+** design choice:
   lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
+  
+                 
+  bias: mean    variance   gate
+  l2: mean    variance   gate
+  gate logits:
 
 
 --------------- TO DO -------------------
@@ -171,6 +189,13 @@ correlated variable elimination
 
 ----- Survey
 
+domain transfer learning
+
+multi-task
+
+meta-learning 
+
+AutoML 
 
 
 ----- Statistic heteroskedasticity mixture
@@ -188,17 +213,42 @@ Data:
 
 
 Model:
+
   
-  generic feature extractor on time series: pre-augment, end2end augment
+  *** Versatility
   
-  statistical boosting
+  feature interaction component 
   
-  mean related bias
+  generic feature extractor on time series: 
+    
+    pre-augment
+       mean
+       variance
+       deseasonalized 
+     
+    end2end augment
   
-  ** boosting jump component
-     burn-in phase 
+
+  ** boosting jump component/ statistical boosting
+     integrated learning
+     boosting learning, burn-in phase
+     
+     model snapshot ensemble 
+     
+  
+  ** Neural version
+     
+     normalization:
+       batch
+       layer 
+       
+  
+     hidden transition
+     moving averaging for neural network version
+  
   
   loss decomposition 
+  
   
   imbalanced target values:
     data augmentation by sampling
@@ -221,17 +271,19 @@ Training:
   inference 
   output wrapper positive
   
-  train mode:  mse, mle, map, ELBO, EM, bayesian 
+  train mode:  mse-mix, mse-dense, map, ELBO, EM, bayesian 
   
   
   ** bayeisan SG-MCMC:
   
+     different optimizers
      thinning
      ancestral sampling
      heteroskedasticity and MCMC inference
      math operation check
+     simulated anealing
      
-  
+     
   Regularization:
   
     latent dependence
@@ -241,13 +293,12 @@ Training:
     imbalanced regularization on mean and variance
     
      
-  Cross-check:
-    ** lk > lk_inv > l2 on latent > lr decay > random or grid? > constant, scalar, vec, pos_neg?
-
 
 Testing:
 
-  discrepency between validation and testing data 
+  discrepency between validation and testing data
+  
+  ** supervised jump detection 
 
 
 Monitoring and diagnostic:
@@ -259,13 +310,6 @@ Inference:
   
   ** truncated Gaussian on source contribution uncertainty
 
-
-
-
------ Neural heteroskedasticity mixture
-
-hidden transition
-  moving averaging for neural network version
 
 
 

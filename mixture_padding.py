@@ -12,7 +12,6 @@ from scipy.optimize import fmin_slsqp
 from utils_libs import *
 from utils_linear_units import *
 from utils_training import *
-
 from utils_optimization import *
 
 # reproducibility by fixing the random seed
@@ -46,7 +45,7 @@ class mixture_statistic():
         
         self.sess = session
         
-        self.bool_log = ''
+        #self.bool_log = ''
         self.loss_type = loss_type
         self.distr_type = ''
         
@@ -74,48 +73,55 @@ class mixture_statistic():
     def network_ini(self,
                     lr,
                     l2,
-                    dim_x,
-                    steps_x,
-                    bool_log,
                     bool_bilinear,
-                    distr_type,
-                    distr_para,
-                    bool_regu_positive_mean,
+                    para_share_type,
+                    x_dim,
+                    x_steps,
+                    model_distr_type,
+                    model_distr_para,
+                    model_var_type,
+                    bool_regu_mean,
+                    bool_regu_var,
                     bool_regu_gate,
+                    bool_regu_positive_mean,
                     bool_regu_global_gate,
                     bool_regu_latent_dependence,
                     bool_regu_l2_on_latent,
+                    bool_regu_imbalance,
                     latent_dependence,
                     latent_prob_type,
-                    var_type,
                     bool_bias_mean,
                     bool_bias_var,
                     bool_bias_gate,
+                    bool_bias_global_src,
                     optimization_method,
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
                     optimization_mode,
-                    burn_in_step,
-                    bool_global_bias_src,
-                    bool_imbalance_l2,
-                    bool_regu_mean,
-                    bool_regu_var,
+                    optimization_burn_in_step,
                     bool_jump_boosting,
-                    para_share_type
                     ):
         
-
         
         '''
         Arguments:
         
-        lr: float, learning rate
+        hyper_para_dict:
         
-        l2: float, l2 regularization
+           bool_bilinear: 
+           para_share_type
+           
+           lr: float, learning rate
+           l2: float, l2 regularization
         
-        dim_x:  dimension values for each component in X
+           dense_num: int
+           use_hidden_before_dense: bool
+           
+           
         
-        steps_x: sequence length values for each component in X
+        x_dim:  dimension values for each component in X
+        
+        x_steps: sequence length values for each component in X
         
         bool_log: if log operation is on the targe variable Y
         
@@ -171,18 +177,18 @@ class mixture_statistic():
         self.lr = lr
         self.l2 = l2
         
-        self.bool_log = bool_log
-        self.distr_type = distr_type
+        #self.bool_log = y_bool_log
+        self.distr_type = model_distr_type
         
         # initialize placeholders
         
         self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
 
         # shape: [S B T D]
-        self.x = tf.placeholder(tf.float32, [self.num_src, None, steps_x, dim_x], name = 'x')
+        self.x = tf.placeholder(tf.float32, [self.num_src, None, x_steps, x_dim], name = 'x')
         
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
-        self.bool_imbalance_l2 = bool_imbalance_l2
+        self.bool_regu_imbalance = bool_regu_imbalance
         
         
         self.optimization_method =   optimization_method
@@ -194,7 +200,7 @@ class mixture_statistic():
         
         self.optimization_mode = optimization_mode
         self.training_step = 0
-        self.burn_in_step = burn_in_step
+        self.burn_in_step = optimization_burn_in_step
         
         self.bool_jump_boosting = bool_jump_boosting
         
@@ -203,9 +209,9 @@ class mixture_statistic():
         if latent_dependence != "none" :
             
             # [S B T-1 D]
-            pre_x = tf.slice(self.x, [0, 0, 0, 0], [-1, -1, steps_x - 1, -1])
+            pre_x = tf.slice(self.x, [0, 0, 0, 0], [-1, -1, x_steps - 1, -1])
             # [S B T-1 D]
-            curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, steps_x - 1, -1])
+            curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, x_steps - 1, -1])
             
             if bool_bilinear == True:
                 
@@ -213,8 +219,8 @@ class mixture_statistic():
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
                 multi_src_predictor_linear(x = curr_x, 
                                            n_src = self.num_src, 
-                                           steps = steps_x - 1, 
-                                           dim = dim_x, 
+                                           steps = x_steps - 1, 
+                                           dim = x_dim, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
                                            str_scope = "",
@@ -225,8 +231,8 @@ class mixture_statistic():
                 _, _, _, _, tmp_pre_logit, _ = \
                 multi_src_predictor_linear(x = pre_x, 
                                            n_src = self.num_src, 
-                                           steps = steps_x - 1, 
-                                           dim = dim_x, 
+                                           steps = x_steps - 1, 
+                                           dim = x_dim, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [True, True, True], 
                                            str_scope = "",
@@ -240,8 +246,8 @@ class mixture_statistic():
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
                 multi_src_predictor_linear(x = self.x, 
                                            n_src = self.num_src, 
-                                           steps = steps_x, 
-                                           dim = dim_x, 
+                                           steps = x_steps, 
+                                           dim = x_dim, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
                                            str_scope = "", 
@@ -313,7 +319,7 @@ class mixture_statistic():
         # ----- individual means and variance
         
         # -- mean
-        if bool_global_bias_src == True:
+        if bool_bias_global_src == True:
             
             # global bias term
         
@@ -337,13 +343,13 @@ class mixture_statistic():
         
         
         # -- variance
-        if var_type == "square":
+        if model_var_type == "square":
             
             # square
             var_stack = tf.transpose(tf.square(tmp_var), [1, 0])
             inv_var_stack = tf.transpose(tf.square(tmp_var), [1, 0])
         
-        elif var_type == "exp":
+        elif model_var_type == "exp":
             
             # exp
             var_stack = tf.transpose(tf.exp(tmp_var), [1, 0])
@@ -441,7 +447,7 @@ class mixture_statistic():
         
         # ----- mixture mean, variance and nllk  
         
-        if distr_type == 'gaussian':
+        if model_distr_type == 'gaussian':
             
             # -- mean
             
@@ -578,10 +584,10 @@ class mixture_statistic():
             self.py_std = tf.sqrt(self.py_var)
             
             
-        elif distr_type == 'student_t':
+        elif model_distr_type == 'student_t':
             
             # for negative log likelihood
-            t_distr_constant = 1.0/(np.sqrt(distr_para[0])*sp.special.beta(0.5,distr_para[0]/2.0)+ 1e-5)
+            t_distr_constant = 1.0/(np.sqrt(model_distr_para[0])*sp.special.beta(0.5,model_distr_para[0]/2.0)+ 1e-5)
             
             # -- mean
             
@@ -600,10 +606,10 @@ class mixture_statistic():
                 
                 # component variance
                 # [B S]    
-                self.py_var_src = var_stack*1.0*distr_para[0]/(distr_para[0]-2.0) # "nu"
+                self.py_var_src = var_stack*1.0*model_distr_para[0]/(model_distr_para[0]-2.0) # "nu"
                 
                 # variance
-                sq_mean_stack = var_stack*1.0*distr_para[0]/(distr_para[0]-2.0) + tf.square(mean_stack)
+                sq_mean_stack = var_stack*1.0*model_distr_para[0]/(model_distr_para[0]-2.0) + tf.square(mean_stack)
                 
                 # [B 1]                                   [B S]          [B S]
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1,  keepdims = True)
@@ -619,9 +625,9 @@ class mixture_statistic():
                 normalizer_hetero_src = t_distr_constant/(tf.sqrt(var_stack) + 1e-5)
                 #1.0/(tf.sqrt(distr_para[0]*var_stack)*sp.special.beta(0.5, distr_para[0]/2.0) + 1e-5)
             
-                base_hetero_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/distr_para[0]/(var_stack + 1e-5)
+                base_hetero_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]/(var_stack + 1e-5)
             
-                lk_hetero_src = normalizer_hetero_src*tf.keras.backend.pow(base_hetero_src, -(distr_para[0] + 1)/2)
+                lk_hetero_src = normalizer_hetero_src*tf.keras.backend.pow(base_hetero_src, -(model_distr_para[0] + 1)/2)
         
                 lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
                 self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
@@ -631,7 +637,7 @@ class mixture_statistic():
                 
                 # component variance
                 # [B S]    
-                self.py_var_src = 1.0*distr_para[0]/(distr_para[0]-2.0)/(inv_var_stack + 1e-5) # "nu"
+                self.py_var_src = 1.0*model_distr_para[0]/(model_distr_para[0]-2.0)/(inv_var_stack + 1e-5) # "nu"
                 
                 # variance
                 sq_mean_stack = self.py_var_src + tf.square(mean_stack)
@@ -645,9 +651,9 @@ class mixture_statistic():
                 # [B S]
                 normalizer_hetero_src_inv = t_distr_constant*tf.sqrt(inv_var_stack)
             
-                base_hetero_src_inv = 1.0 + 1.0*tf.square(self.y - mean_stack)/distr_para[0]*inv_var_stack
+                base_hetero_src_inv = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]*inv_var_stack
             
-                lk_hetero_src_inv = normalizer_hetero_src_inv*tf.keras.backend.pow(base_hetero_src_inv, -(distr_para[0] + 1)/2)
+                lk_hetero_src_inv = normalizer_hetero_src_inv*tf.keras.backend.pow(base_hetero_src_inv, -(model_distr_para[0] + 1)/2)
             
             
                 lk_hetero_inv = tf.multiply(lk_hetero_src_inv, self.gates) 
@@ -659,7 +665,7 @@ class mixture_statistic():
                 
                 # component variance
                 # [B S]    
-                self.py_var_src = 1.0*distr_para[0]/(distr_para[0]-2.0)/(inv_var_stack + 1e-5) # "nu"
+                self.py_var_src = 1.0*model_distr_para[0]/(model_distr_para[0]-2.0)/(inv_var_stack + 1e-5) # "nu"
                 
                 sq_mean_stack = self.py_var_src + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), keepdims = True)
@@ -805,14 +811,14 @@ class mixture_statistic():
                     
             #[1 B]
             jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
-                                                             [steps_x, 1],
+                                                             [x_steps, 1],
                                                              'jump_mean',
                                                              bool_bias = True,
                                                              bool_scope_reuse = False,
                                                              num_src = 1)
             #[1 B]
             jump_logit, jump_regu_logit = multi_src_bilinear(jump_src_x,
-                                                            [steps_x, 1],
+                                                            [x_steps, 1],
                                                             'jump_gate',
                                                             bool_bias = True,
                                                             bool_scope_reuse = False,
@@ -914,7 +920,7 @@ class mixture_statistic():
                 
             if self.bool_regu_var == True:
                 
-                if self.bool_imbalance_l2 == True:
+                if self.bool_regu_imbalance == True:
                     self.loss += (100*self.l2*self.regu_var)
                 else:
                     self.loss += (self.l2*self.regu_var)
@@ -959,7 +965,6 @@ class mixture_statistic():
         '''
         
         
-        
         # ----- learning decay
         
         if self.optimization_lr_decay == True:
@@ -974,7 +979,6 @@ class mixture_statistic():
                                                            staircase = True)
         else:
             tmp_learning_rate = self.lr
-            
         
         
         # ----- optimizer
@@ -982,17 +986,31 @@ class mixture_statistic():
         
         if self.optimization_method == 'adam':
             
-            tmp_train = myAdamOptimizer(learning_rate = tmp_learning_rate)
-            
+            tmp_train = myAdamOptimizer(learning_rate = tmp_learning_rate)    
             #tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
+        
+        elif self.optimization_method == 'sg_mcmc':
+            
+            tmp_train = sg_mcmc_adam(learning_rate = tmp_learning_rate)
+            
+        
+        elif self.optimization_method == 'sgd':
+            
+            tmp_train = tf.train.MomentumOptimizer(learning_rate = tmp_learning_rate,
+                                                   momentum = 0.9,
+                                                   use_nesterov = True
+                                                   )
         
         elif self.optimization_method == 'RMSprop':
             tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
         
+        
+        '''
         elif self.optimization_method == 'sgmcmc_RMSprop':
             
             tmp_train = tfp.optimizer.StochasticGradientLangevinDynamics(learning_rate = tmp_learning_rate,
                                                                           preconditioner_decay_rate = 0.99)
+        '''
         
         if self.optimization_lr_decay == True:
             
