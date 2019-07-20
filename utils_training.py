@@ -277,7 +277,7 @@ def hyper_para_selection(hpara_log,
                          metric_idx,
                          ):
     
-    # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
+    # hpara_log - [ [hp1, hp2, ..., burn_in_steps], [[epoch/step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
     
     hp_err = []
     
@@ -286,16 +286,18 @@ def hyper_para_selection(hpara_log,
     
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
-    
-    # -- print out for checking
-    print([(i[0], i[-1]) for i in sorted_hp])
-    
-    # -- snapshot steps
-    snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
+    # sorted_hp[0]: hyper-para with the best validation performance
     
     # -- bayes steps
     full_steps = [k[0] for k in sorted_hp[0][1]]
-    bayes_steps = [i for i in full_steps if i >= sorted_hp[0][0][-1]]
+    
+    tmp_burn_in_step = sorted_hp[0][0][-1]
+    bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
+    
+    
+    # -- snapshot steps
+    snapshot_steps = [k[0] for k in sorted_hp[0][1]][:len(bayes_steps)]
+    #snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
     
     
     # best hp, best validation error, snapshot_steps, bayes_steps

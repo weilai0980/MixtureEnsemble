@@ -82,8 +82,6 @@ path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + 
 
 # -- model
 
-para_bool_bilinear = True
-
 para_distr_type = args.target_distr
 # gaussian, student_t
 para_distr_para = []
@@ -97,6 +95,8 @@ para_share_type_gate = "no_share"
 para_inference_type = ""
 # mixture, dense 
 
+# linear units:
+para_bool_bilinear = True
 
 # -- data
 
@@ -111,7 +111,7 @@ para_batch_augment = False
 para_optimization_mode = "bayesian" # map
 para_loss_type = args.loss_type
 
-para_optimizer = "adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
+para_optimizer = "sg_mcmc_adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
@@ -124,12 +124,17 @@ para_lr_range = [0.001, ]
 para_batch_range = [64, 32, 16, 80, ]
 para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
 
+para_lstm_size = 0
+para_dense_n = 0
+
+# [lr, batch_size, l2]
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
+# [lr, batch_size, l2, rnn_size, dense_n]
+# para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01], [10, 100], [1, 1]]
 para_hpara_n_trial = 5
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
-
 
 # model snapshot sample: epoch-wise or step-wise
 para_val_aggreg_num = max(1, int(0.05*para_n_epoch))
@@ -264,15 +269,14 @@ def batch_augment(x, y, num_src):
         
 # ----- training and evalution
     
-def training_validate(xtr, 
-                      ytr, 
-                      xval, 
-                      yval, 
-                      dim_x, 
-                      steps_x, 
-                      hp_lr,
-                      hp_batch_size,
-                      hp_l2, 
+def training_validate(xtr,
+                      ytr,
+                      xval,
+                      yval,
+                      dim_x,
+                      steps_x,
+                      hyper_para_dict,
+                      training_dict,
                       retrain_snapshot_steps, 
                       retrain_bayes_steps,
                       retrain_bool,
@@ -293,14 +297,21 @@ def training_validate(xtr,
     steps_x: integer, corresponding to T
     
     
-    - hyper-parameters (hp) :
+    hyper_para_dict: 
+       "lr": float,
+       "l2": float,
+       "batch_size": int
+       "bool_bilinear": bool 
+       "para_share_type": bool
+                           
+       "size_lstm": int,
+       "n_dense": int,
     
-       hp_l2: float, l2 regularization
     
-       hp_lr: float, learning rate
-    
-       hp_batch_size: int
-    
+    training_dict:
+       "batch_per_epoch": int
+       "tr_idx": list of integer
+       
     '''
     
     # clear the graph in the current session 
@@ -327,28 +338,17 @@ def training_validate(xtr,
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
-                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
-                                 )
+                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
                                  
-        
         '''
-        hyper_para_dict = {"lr": 0.0,
-                           "l2": 0.0}
         
-        hyper_para_dict = {"lr": 0.0,
-                           "l2": 0.0,
-                           "n_dense": 0.0,
-                           "size_lstm": 0.0,
-                           "n_lstm", 0}
+        
         '''
         
         
         # -- initialize the network
         
-        model.network_ini(lr = hp_lr, 
-                          l2 = hp_l2, 
-                          bool_bilinear = para_bool_bilinear,
-                          para_share_type = para_share_type_gate,
+        model.network_ini(hyper_para_dict,
                           x_dim = dim_x,
                           x_steps = steps_x, 
                           model_distr_type = para_distr_type, 
@@ -370,7 +370,7 @@ def training_validate(xtr,
                           bool_bias_global_src = para_bool_global_bias,
                           optimization_method = para_optimizer,
                           optimization_lr_decay = para_optimizer_lr_decay,
-                          optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size),
+                          optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hyper_para_dict["batch_size"]),
                           optimization_mode = para_optimization_mode,
                           optimization_burn_in_step = para_burn_in_epoch,
                          )
@@ -380,10 +380,8 @@ def training_validate(xtr,
         
         # -- set up training batch parameters
         
-        tr_cnt = len(xtr[0])
-        tr_batch_num = int(np.ceil(1.0*tr_cnt/hp_batch_size))
-        tr_idx = list(range(tr_cnt))
-        
+        tr_batch_num = training_dict["batch_per_epoch"] 
+        tr_idx = training_dict["tr_idx"]
         
         # -- begin training
         
@@ -403,7 +401,7 @@ def training_validate(xtr,
             for i in range(tr_batch_num):
                 
                 # batch data
-                batch_idx = tr_idx[i*hp_batch_size : (i+1)*hp_batch_size] 
+                batch_idx = tr_idx[ i*hyper_para_dict["batch_size"] : (i+1)*hyper_para_dict["batch_size"] ] 
                 
                 # shape: [S B T D]
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
@@ -434,17 +432,17 @@ def training_validate(xtr,
                                                               snapshot_Bernoulli = para_snapshot_Bernoulli,
                                                               step = global_step,
                                                               bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
+                
+                #tr_rmse, tr_mae, tr_mape, tr_nnllk
+                tr_metric, _ = model.validation(xtr,
+                                                ytr,
+                                                snapshot_type = para_snapshot_type,
+                                                snapshot_Bernoulli = para_snapshot_Bernoulli,
+                                                step = global_step,
+                                                bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
+                    
                 if val_metric:
                     
-                    #tr_rmse, tr_mae, tr_mape, tr_nnllk
-                    tr_metric, _ = model.validation(xtr,
-                                                    ytr,
-                                                    snapshot_type = para_snapshot_type,
-                                                    snapshot_Bernoulli = para_snapshot_Bernoulli,
-                                                    step = global_step,
-                                                    bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
-            
-            
                     # para_metric_map[] defined on
                     step_error.append([global_step,
                                        monitor_metric[-1],
@@ -452,27 +450,26 @@ def training_validate(xtr,
                                        val_metric[0], 
                                        val_metric[1], 
                                        val_metric[2], 
-                                       val_metric[3]])
+                                       val_metric[3],
+                                       epoch])
                 
                 
                 # - model saver 
                 
-                if retrain_bool == True:
-                    
-                    if model.model_saver(path = path_model + method_str + '_' + str(global_step),
+                if retrain_bool == True and model.model_saver(path = path_model + method_str + '_' + str(global_step),
                                          epoch = epoch,
                                          step = global_step,
                                          snapshot_steps = retrain_snapshot_steps,
                                          bayes_steps = retrain_bayes_steps,
                                          early_stop_bool = para_early_stop_bool,
                                          early_stop_window = para_early_stop_window) == True:
+                    
+                    print("\n    [MODEL SAVED] \n " + path_model + method_str + '_' + str(global_step))
                         
-                        print("\n    [MODEL SAVED] \n " + path_model + method_str + '_' + str(global_step))
-                        
-                  
                 
                 global_step += 1
                 
+            
             
             print("\n --- At epoch %d : \n  %s "%(epoch, str(step_error[-1])))
             print("\n gates : \n", monitor_metric[0])
@@ -538,57 +535,20 @@ def testing(model_snapshots,
             error_tuple, py_tuple = model.inference(xts,
                                                     yts, 
                                                     bool_py_eval = bool_instance_eval)
-            # store the samples
-            infer.add_samples(py_mean = py_tuple[0],
-                              py_var = py_tuple[1],
-                              py_mean_src = py_tuple[2],
-                              py_var_src = py_tuple[3],
-                              py_gate_src = py_tuple[4])
-    
-    
-    '''
-    for tmp_model_id in model_snapshots:
-        
-        # path of the stored models 
-        tmp_meta = file_path + method_str + '_' + str(tmp_model_id) + '.meta'
-        tmp_data = file_path + method_str + '_' + str(tmp_model_id)
-        
-        # clear graph
-        tf.reset_default_graph()
-        
-        with tf.device('/device:GPU:0'):
             
-            config = tf.ConfigProto()
-            config.allow_soft_placement = True
-            config.gpu_options.allow_growth = True
-        
-            sess = tf.Session(config = config)
-        
-            model = mixture_statistic(session = sess, 
-                                      loss_type = para_loss_type,
-                                      num_src = num_src,
-                                     )
+            if bool_instance_eval == True:
+                
+                # store the samples
+                infer.add_samples(py_mean = py_tuple[0],
+                                  py_var = py_tuple[1],
+                                  py_mean_src = py_tuple[2],
+                                  py_var_src = py_tuple[3],
+                                  py_gate_src = py_tuple[4])
             
-            # restore the model
-            model.model_restore(tmp_meta, 
-                                tmp_data)
-            
-            # one-shot inference sample
-            # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
-            error_tuple, py_tuple = model.inference(xts,
-                                                    yts, 
-                                                    bool_py_eval = bool_instance_eval)
-            # store the samples
-            infer.add_samples(py_mean = py_tuple[0],
-                              py_var = py_tuple[1],
-                              py_mean_src = py_tuple[2],
-                              py_var_src = py_tuple[3],
-                              py_gate_src = py_tuple[4])
-    
-    '''
     
     # return: error tuple [rmse, mae, mape, nnllk], 
     #         prediction tuple []
+    
     if len(model_snapshots) == 0:
         
         return ["None"], ["None"]
@@ -692,33 +652,47 @@ if __name__ == '__main__':
         
     # -- begin hyper-para search
     
-    # hp_: stands for hyper-parameter
-    
     hpara_log = []
+    
+    hpara_dict = {}
+    tr_dict = {}
     
     # sample one set-up of hyper-para
     tmp_hpara = hpara_generator.one_trial()
     
     while tmp_hpara != None:
         
-        # [ [epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk] ]
-        hp_step_error, hp_step_time = training_validate(tr_x, 
-                                                          tr_y,
-                                                          val_x,
-                                                          val_y,
-                                                          dim_x = para_dim_x,
-                                                          steps_x = para_steps_x,
-                                                          hp_lr = tmp_hpara[0],
-                                                          hp_batch_size = int(tmp_hpara[1]),
-                                                          hp_l2 = tmp_hpara[2],
-                                                          retrain_snapshot_steps = [], 
-                                                          retrain_bayes_steps = [],
-                                                          retrain_bool = False, 
-                                                          )
+        hpara_dict["lr"] = tmp_hpara[0]
+        hpara_dict["batch_size"] = int(tmp_hpara[1])
+        hpara_dict["l2"] = tmp_hpara[2]
+        hpara_dict["bool_bilinear"] = para_bool_bilinear
+        hpara_dict["para_share_type"] = para_share_type_gate
+        
+        ''' ? np.ceil ? '''
+        tr_dict["batch_per_epoch"] = int(np.ceil(1.0*len(tr_x[0])/hpara_dict["batch_size"]))
+        tr_dict["tr_idx"] = list(range(len(tr_x[0])))
         
         
-        #[[tmp_lr, tmp_batch, tmp_l2, tmp_burn_in_steps], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
-        hpara_log.append([tmp_hpara + [para_burn_in_epoch * int(np.ceil(1.0*len(tr_x[0])/tmp_hpara[1]))], hp_step_error])
+        # hp_: stands for hyper-parameter
+        # hp_step_error: [ [step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk] ]
+        
+        hp_step_error, hp_epoch_time = training_validate(tr_x, 
+                                                         tr_y,
+                                                         val_x,
+                                                         val_y,
+                                                         dim_x = para_dim_x,
+                                                         steps_x = para_steps_x,
+                                                         hyper_para_dict = hpara_dict,
+                                                         training_dict = tr_dict,
+                                                         retrain_bool = False,
+                                                         retrain_snapshot_steps = [], 
+                                                         retrain_bayes_steps = [])
+        
+        
+        #[[lr, batch, l2, ..., burn_in_steps], [[step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]]
+        
+        ''' ? '''
+        hpara_log.append([tmp_hpara + [para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1], hp_step_error])
         
         # sample the next hyper-para
         tmp_hpara = hpara_generator.one_trial()
@@ -729,7 +703,7 @@ if __name__ == '__main__':
         log_train_val_performance(path_log_error, 
                                   hpara = hpara_log[-1][0], 
                                   hpara_error = hpara_log[-1][1][0],
-                                  train_time = hp_step_time)
+                                  train_time = hp_epoch_time)
         
         
         # NAN loss exception
@@ -737,37 +711,39 @@ if __name__ == '__main__':
                                 path_log_error)
         
         print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
-        print('\n Training time: \n', hp_step_time, '\n')
+        print('\n Training time: \n', hp_epoch_time, '\n')
             
         
     # ----- re-train
     
-    # hp_lr = tmp_hpara[0],
-    # hp_batch_size = int(tmp_hpara[1]),
-    # hp_l2 = tmp_hpara[2]
-    
     # best hyper-para and epoch set 
     best_hpara, best_val_err, snapshot_steps, bayes_steps = hyper_para_selection(hpara_log, 
-                                                                     val_aggreg_num = para_val_aggreg_num, 
-                                                                     test_snapshot_num = para_test_snapshot_num,
-                                                                     metric_idx = para_metric_map[para_validation_metric],
-                                                                     )
+                                                                                 val_aggreg_num = para_val_aggreg_num, 
+                                                                                 test_snapshot_num = para_test_snapshot_num,
+                                                                          metric_idx = para_metric_map[para_validation_metric])
     
+    
+    hpara_dict["lr"] = best_hpara[0]
+    hpara_dict["batch_size"] = int(best_hpara[1])
+    hpara_dict["l2"] = best_hpara[2]
+        
+    
+    ''' ? np.ceil ? '''
+    tr_dict["batch_per_epoch"] = int(np.ceil(1.0*len(tr_x[0])/hpara_dict["batch_size"]))
+    tr_dict["tr_idx"] = list(range(len(tr_x[0])))
     
     
     step_error, _ = training_validate(tr_x, 
-                                       tr_y,
-                                       val_x, 
-                                       val_y,
-                                       dim_x = para_dim_x,
-                                       steps_x = para_steps_x,
-                                       hp_lr = best_hpara[0],
-                                       hp_batch_size = int(best_hpara[1]),
-                                       hp_l2 = best_hpara[2],
-                                       retrain_snapshot_steps = snapshot_steps, 
-                                       retrain_bayes_steps = bayes_steps,
-                                       retrain_bool = True,
-                                       )
+                                      tr_y,
+                                      val_x, 
+                                      val_y,
+                                      dim_x = para_dim_x,
+                                      steps_x = para_steps_x,                                      
+                                      hyper_para_dict = hpara_dict,
+                                      training_dict = tr_dict,
+                                      retrain_bool = True,
+                                      retrain_snapshot_steps = snapshot_steps, 
+                                      retrain_bayes_steps = bayes_steps)
     
     
     log_val_hyper_para(path = path_log_error, 
@@ -785,15 +761,13 @@ if __name__ == '__main__':
     
     # -- best one epoch 
     
-    
     error_tuple, _ = testing(model_snapshots = snapshot_steps[:1], 
                              xts = ts_x, 
                              yts = ts_y, 
                              file_path = path_model, 
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
-                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                             )
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + snapshot_steps[:1])
@@ -801,21 +775,17 @@ if __name__ == '__main__':
     
     # -- best epochs 
     
-    error_tuple, py_tuple = testing(model_snapshots = snapshot_steps, 
-                                    xts = ts_x, 
-                                    yts = ts_y, 
-                                    file_path = path_model, 
-                                    bool_instance_eval = True,
-                                    loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                                    )
+    error_tuple, _ = testing(model_snapshots = snapshot_steps, 
+                             xts = ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model, 
+                             bool_instance_eval = True,
+                             loss_type = para_loss_type,
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + snapshot_steps)
     
-    
-    import pickle
-    pickle.dump(py_tuple, open(path_py, "wb"))
     
     
     # -- ensemble or bayesian
@@ -826,9 +796,14 @@ if __name__ == '__main__':
                                     file_path = path_model, 
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                                    )
+                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
                          error_tuple = error_tuple + bayes_steps)
+    
+    
+    # -- dump predictions
+    
+    import pickle
+    pickle.dump(py_tuple, open(path_py, "wb"))
     

@@ -69,10 +69,7 @@ class mixture_statistic():
         
 
     def network_ini(self,
-                    lr,
-                    l2,
-                    bool_bilinear,
-                    para_share_type,
+                    hyper_para_dict,
                     x_dim,
                     x_steps,
                     model_distr_type,
@@ -105,31 +102,29 @@ class mixture_statistic():
         
         hyper_para_dict:
         
-           bool_bilinear: 
-           para_share_type
-           
            lr: float, learning rate
            l2: float, l2 regularization
+           batch_size: int
+           bool_bilinear:
+           para_share_type: 
         
            dense_num: int
            use_hidden_before_dense: bool
-           
-           
         
         x_dim:  dimension values for each component in X
         
         x_steps: sequence length values for each component in X
+                
         
-        bool_log: if log operation is on the targe variable Y
+        model_distr_type: string, type of the distribution of the target variable
         
-        bool_bilinear: if bilinear function is used on the components in X
-        
-        distr_type: string, type of the distribution of the target variable
-        
-        distr_para: set of parameters of the associated distribution
+        model_distr_para: set of parameters of the associated distribution
         
                     "gaussian": []
                     "student_t": [nu] >= 3
+                    
+        model_var_type: square or exponential
+        
         
         bool_regu_positive_mean: if regularization of positive mean 
         
@@ -141,7 +136,6 @@ class mixture_statistic():
         
         latent_prob_type: string, probability calculation of latent logits, "none", "scalar", "vector", "matrix"
         
-        var_type: square or exponential   
         
         bool_bias_mean: have bias in mean prediction
         
@@ -163,7 +157,6 @@ class mixture_statistic():
         #   py: predicted y
         #   src: source
         #   var: variance
-        
         # 
         #   A: number of samples
         #   S: source 
@@ -180,8 +173,8 @@ class mixture_statistic():
         # ----- ini
         
         # build the network graph 
-        self.lr = lr
-        self.l2 = l2
+        self.lr = hyper_para_dict["lr"]
+        self.l2 = hyper_para_dict["l2"]
         
         #self.bool_log = y_bool_log
         self.distr_type = model_distr_type
@@ -206,7 +199,8 @@ class mixture_statistic():
         
         self.optimization_mode = optimization_mode
         self.training_step = 0
-        self.burn_in_step = optimization_burn_in_step
+        
+        #self.burn_in_step = optimization_burn_in_step
         
         
         # ----- individual models
@@ -218,7 +212,7 @@ class mixture_statistic():
             # [S B T-1 D]
             curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, x_steps - 1, -1])
             
-            if bool_bilinear == True:
+            if hyper_para_dict["bool_bilinear"] == True:
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
@@ -229,8 +223,7 @@ class mixture_statistic():
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
                                            str_scope = "",
-                                           para_share_logit = para_share_type)
-                
+                                           para_share_logit = hyper_para_dict["para_share_type"])
                 
                 #[S B]
                 _, _, _, _, tmp_pre_logit, _ = \
@@ -241,11 +234,11 @@ class mixture_statistic():
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [True, True, True], 
                                            str_scope = "",
-                                           para_share_logit = para_share_type)
+                                           para_share_logit = hyper_para_dict["para_share_type"])
                 
         else:
             
-            if bool_bilinear == True:
+            if hyper_para_dict["bool_bilinear"] == True:
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
@@ -256,7 +249,7 @@ class mixture_statistic():
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
                                            str_scope = "", 
-                                           para_share_logit = para_share_type)
+                                           para_share_logit = hyper_para_dict["para_share_type"])
                 
                 
             '''
@@ -591,10 +584,6 @@ class mixture_statistic():
                 self.nllk_var_mix_inv = tf.reduce_sum(tmp_nllk_mix_inv)
             ''' 
                 
-            # -- standard deviation
-            # [B 1]
-            self.py_std = tf.sqrt(self.py_var)
-            
             
         elif model_distr_type == 'student_t':
             
@@ -841,7 +830,7 @@ class mixture_statistic():
         '''
         
         
-        # ----- learning decay
+        # ----- learning rate decay
         
         if self.optimization_lr_decay == True:
             
@@ -999,73 +988,9 @@ class mixture_statistic():
             # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
             return [rmse, mae, mape, nnllk], [tmp_rmse, tmp_mae, loss]
         
+        
         return None, None
         
-        
-        '''
-        # monitoring tuple during the training
-        # [B S]      [B S]
-        py_gate_src, py_mean_src, py_mean, loss = self.sess.run([tf.get_collection('py_gate')[0], \
-                                                           tf.get_collection('py_mean_src')[0],
-                                                           tf.get_collection('py_mean')[0],
-                                                           tf.get_collection('loss')[0]],
-                                                           feed_dict = data_dict)
-        
-        # -- validation for SG-MCMC
-        
-        if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
-            
-            # [B 1]          [B S]
-            py_mean, py_var, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
-                                                         tf.get_collection('py_var')[0],
-                                                         tf.get_collection('py_var_src')[0],
-                                                         ],
-                                                         feed_dict = data_dict)
-            
-            
-            
-            # for SG-MCMC
-            self.py_mean_src_samples.append(py_mean_src)
-            self.py_var_src_samples.append(py_var_src)
-            self.py_gate_src_samples.append(py_gate_src)
-            
-            self.py_mean_samples.append(py_mean)
-        '''
-        
-        
-    
-    '''
-    # hyper-para wise
-    def validation_bayesian(self,
-                            x, 
-                            y):
-        
-        if len(self.py_mean_src_samples) == 0:
-            return None
-        
-        # [A B S]
-        # A: number of samples
-        m_src_sample = np.asarray(self.py_mean_src_samples)
-        v_src_sample = np.asarray(self.py_var_src_samples)
-        g_src_sample = np.asarray(self.py_gate_src_samples)
-        
-        # [A B 1]
-        m_sample = np.asarray(self.py_mean_samples)
-        
-        # [B]
-        bayes_mean_src = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
-        
-        bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
-        
-        #tmp_m_src_sample = m_src_sample**2
-        #py_var = 
-        
-        tmpy = np.squeeze(y)
-        
-        return [func_rmse(tmpy, bayes_mean_src), func_mae(tmpy, bayes_mean_src), func_mape(tmpy, bayes_mean_src), \
-                func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean) ]
-    
-    '''
     
     #   infer givn testing data
     def inference(self, 
@@ -1098,7 +1023,6 @@ class mixture_statistic():
                                                                                    tf.get_collection('py_var_src')[0]
                                                                                    ],
                                                                                    feed_dict = data_dict)
-            
         else:
             py_mean = None
             py_var = None
@@ -1167,7 +1091,7 @@ class mixture_statistic():
         
         # -- bayesian ensembles
         
-        elif self.optimization_mode == "bayesian" and step in bayes_steps:
+        elif self.optimization_mode == "bayesian" and len(bayes_steps) != 0 and step in bayes_steps:
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
@@ -1187,6 +1111,7 @@ class mixture_statistic():
         saver.restore(self.sess, 
                       path_data)
         return
+    
     
     #   collect the optimized variable values
     def collect_coeff_values(self, 
@@ -1356,12 +1281,9 @@ class ensemble_inference(object):
         # -- output
         tmpy = np.squeeze(y)
         
-        
         # error tuple [], prediction tuple []
         return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
         
-    
-    
-    
+       
