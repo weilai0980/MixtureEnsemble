@@ -28,7 +28,7 @@ class mixture_statistic():
                  session, 
                  loss_type,
                  num_src,
-                 bool_jump_boosting):
+                 ):
         
         '''
         Args:
@@ -67,8 +67,6 @@ class mixture_statistic():
         
         self.stored_step_id = []
         
-        self.bool_jump_boosting = bool_jump_boosting
-        
 
     def network_ini(self,
                     lr,
@@ -99,7 +97,6 @@ class mixture_statistic():
                     optimization_lr_decay_steps,
                     optimization_mode,
                     optimization_burn_in_step,
-                    bool_jump_boosting,
                     ):
         
         
@@ -156,7 +153,8 @@ class mixture_statistic():
         
         '''
         
-        # Dictionary of abbreviation
+        # Dictionary of abbreviation:
+        #
         #   nllk: negative log likelihood
         #   hetero: heteroskedasticity
         #   inv: inversed
@@ -165,6 +163,14 @@ class mixture_statistic():
         #   py: predicted y
         #   src: source
         #   var: variance
+        
+        # 
+        #   A: number of samples
+        #   S: source 
+        #   B: batch size
+        #   T: time steps
+        #   D: data dimensionality at each time step
+        
         
         # ----- fix the random seed to reproduce the results
         
@@ -202,7 +208,6 @@ class mixture_statistic():
         self.training_step = 0
         self.burn_in_step = optimization_burn_in_step
         
-        self.bool_jump_boosting = bool_jump_boosting
         
         # ----- individual models
         
@@ -476,10 +481,10 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # [B S]
-                lk_hetero_src = tf.exp(-0.5*tf.square(self.y-mean_stack)/(var_stack+1e-5))/(tf.sqrt(2.0*np.pi*var_stack)+1e-5)
+                lk_src = tf.exp(-0.5*tf.square(self.y-mean_stack)/(var_stack+1e-5))/(tf.sqrt(2.0*np.pi*var_stack)+1e-5)
                                                                                                  
-                lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
-                self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 #self.nllk_loss
                 #self.nllk
@@ -498,10 +503,10 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # [B S]
-                lk_hetero_src_inv = tf.exp(-0.5*tf.square(self.y-mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
+                lk_src = tf.exp(-0.5*tf.square(self.y-mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
             
-                lk_hetero_inv = tf.multiply(lk_hetero_src_inv, self.gates) 
-                self.nllk_hetero_inv = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero_inv, axis = -1) + 1e-5))
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
             
             
             # elbo: evidence lower bound optimization    
@@ -519,11 +524,18 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # based on lk_inv
+                
+                # [B S]
+                lk_src = tf.exp(-0.5*tf.square(self.y-mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
+            
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
+                
         
                 # [B 1] - [B S]
-                tmp_nllk_inv = 0.5*tf.square(self.y - mean_stack)*inv_var_stack - 0.5*tf.log(inv_var_stack + 1e-5) + 0.5*tf.log(2*np.pi)
+                tmp_nllk_bound = .5*tf.square(self.y - mean_stack)*inv_var_stack - 0.5*tf.log(inv_var_stack + 1e-5) + 0.5*tf.log(2*np.pi)
         
-                self.nllk_elbo = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_inv, -1)) 
+                self.nllk_bound = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_bound, -1)) 
                 
                 
                 
@@ -542,12 +554,12 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # [B S]
-                tmp_lk_const_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
+                lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
             
-                lk_const = tf.multiply(tmp_lk_const_src, self.gates) 
-                self.nllk_const = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_const, axis = -1) + 1e-5))
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
             
-                
+            ''' 
             elif self.loss_type == 'lk_var_mix':
                 
                 # mixed variance
@@ -577,7 +589,7 @@ class mixture_statistic():
                                + 0.5*tf.log(2*np.pi)
             
                 self.nllk_var_mix_inv = tf.reduce_sum(tmp_nllk_mix_inv)
-                
+            ''' 
                 
             # -- standard deviation
             # [B 1]
@@ -622,15 +634,15 @@ class mixture_statistic():
                 # self.x: [S B T D]
             
                 # [B S]
-                normalizer_hetero_src = t_distr_constant/(tf.sqrt(var_stack) + 1e-5)
+                normalizer_src = t_distr_constant/(tf.sqrt(var_stack) + 1e-5)
                 #1.0/(tf.sqrt(distr_para[0]*var_stack)*sp.special.beta(0.5, distr_para[0]/2.0) + 1e-5)
             
-                base_hetero_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]/(var_stack + 1e-5)
+                base_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]/(var_stack + 1e-5)
             
-                lk_hetero_src = normalizer_hetero_src*tf.keras.backend.pow(base_hetero_src, -(model_distr_para[0] + 1)/2)
+                lk_src = normalizer_src*tf.keras.backend.pow(base_src, -(model_distr_para[0] + 1)/2)
         
-                lk_hetero = tf.multiply(lk_hetero_src, self.gates) 
-                self.nllk_hetero = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero, axis = -1) + 1e-5))
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
             
             elif self.loss_type == 'lk_inv' :
@@ -649,15 +661,15 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # [B S]
-                normalizer_hetero_src_inv = t_distr_constant*tf.sqrt(inv_var_stack)
+                normalizer_src = t_distr_constant*tf.sqrt(inv_var_stack)
             
-                base_hetero_src_inv = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]*inv_var_stack
+                base_src = 1.0 + 1.0*tf.square(self.y - mean_stack)/model_distr_para[0]*inv_var_stack
             
-                lk_hetero_src_inv = normalizer_hetero_src_inv*tf.keras.backend.pow(base_hetero_src_inv, -(model_distr_para[0] + 1)/2)
+                lk_src = normalizer_src*tf.keras.backend.pow(base_src, -(model_distr_para[0] + 1)/2)
             
             
-                lk_hetero_inv = tf.multiply(lk_hetero_src_inv, self.gates) 
-                self.nllk_hetero_inv = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk_hetero_inv, axis = -1) + 1e-5))
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 
             '''     
@@ -699,10 +711,6 @@ class mixture_statistic():
                 self.py_var = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)
             '''
             
-            
-            # -- standard deviation
-            # [B 1]
-            self.py_std = tf.sqrt(self.py_var)
             
 
         # ----- regularization
@@ -772,118 +780,9 @@ class mixture_statistic():
             
         
         
-        ##### TO DO #####
-        
-        # ----- jump boosting 
-        # firtst source, first element is the target 
-        
-        
-        if bool_jump_boosting == True:
-            
-            # shape: [B 1]
-            # y - py
-            self.y_jump = tf.placeholder(tf.float32, [None, 1], name = 'y_jump')
-            
-            # self.x [S B T D]
-            
-            '''
-            # [1 B T D]
-            jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, -1])
-                    
-            #[1 B]
-            jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
-                                                             [steps_x, dim_x],
-                                                             'jump_mean',
-                                                             bool_bias = True,
-                                                             bool_scope_reuse = False,
-                                                             num_src = 1)
-            #[1 B]
-            jump_logit, jump_regu_logit = multi_src_bilinear(jump_src_x,
-                                                            [steps_x, dim_x],
-                                                            'jump_gate',
-                                                            bool_bias = True,
-                                                            bool_scope_reuse = False,
-                                                            num_src = 1)
-            '''
-            
-            # [1 B T D]
-            jump_src_x = tf.slice(self.x, [0, 0, 0, 0], [1, -1, -1, 1])
-                    
-            #[1 B]
-            jump_magni, jump_regu_magni = multi_src_bilinear(jump_src_x,
-                                                             [x_steps, 1],
-                                                             'jump_mean',
-                                                             bool_bias = True,
-                                                             bool_scope_reuse = False,
-                                                             num_src = 1)
-            #[1 B]
-            jump_logit, jump_regu_logit = multi_src_bilinear(jump_src_x,
-                                                            [x_steps, 1],
-                                                            'jump_gate',
-                                                            bool_bias = True,
-                                                            bool_scope_reuse = False,
-                                                            num_src = 1)
-            
-            
-            
-            # [1 B] - > [B 1]
-            #self.py_jump = tf.transpose(tf.sigmoid(jump_logit)*jump_magni, [1, 0])
-            tmp_jump_gate = tf.transpose(tf.sigmoid(jump_logit),[1, 0])
-            tmp_jump = tf.transpose(jump_magni, [1, 0])
-            # [B 1]
-            self.py_jump = tmp_jump_gate*tmp_jump
-            
-            #loss_weight = tf.nn.softmax(tf.square(self.y_jump), axis = 0)
-            loss_weight = tf.sigmoid(tf.square(self.y_jump))
-            
-            
-            #self.loss_jump_boosting = tf.reduce_sum(loss_weight * tf.square(self.py_jump - self.y_jump)) + \
-            #                          self.l2*(jump_regu_magni + jump_regu_logit)
-                
-            self.loss_jump_boosting = tf.reduce_sum(tmp_jump_gate*tf.square(tmp_jump - self.y_jump)) + \
-                                      self.l2*(jump_regu_magni + jump_regu_logit)    
-            
-          
-        
         
     #   initialize loss and optimization operations for training
     def train_ini(self):
-        
-        
-        # ----- jump boosting
-        
-        if self.bool_jump_boosting == True:
-            
-            
-            if self.optimization_lr_decay == True:
-                
-                global_step_boosting = tf.Variable(0, 
-                                      trainable = False)
-            
-                learning_rate_boosting = tf.train.exponential_decay(0.005, 
-                                                           global_step_boosting,
-                                                           decay_steps = self.optimization_lr_decay_steps, 
-                                                           decay_rate = 0.96, 
-                                                           staircase = True)
-            else:
-                
-                learning_rate_boosting = self.lr
-            
-            
-            optimizer_jump_boosting = myAdamOptimizer(learning_rate = learning_rate_boosting)
-            
-            
-            if self.optimization_lr_decay == True:
-                
-                self.minimize_ops_boosting = optimizer_jump_boosting.minimize(self.loss_jump_boosting, 
-                                                                              global_step = global_step_boosting)
-            else:
-                self.minimize_ops_boosting = optimizer_jump_boosting.minimize(self.loss_jump_boosting)
-            
-            
-        
-        
-        
         
         
         # ----- loss 
@@ -894,27 +793,13 @@ class mixture_statistic():
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + \
                         self.l2*self.regularization + self.l2*self.regu_mean
                 
-            self.nllk = self.nllk_const
+                
+        elif self.loss_type in ['lk', 'lk_inv']:
             
-        elif self.loss_type == 'lk':
-            
-            self.loss = self.nllk_hetero + self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
-                        
-            if self.bool_regu_l2_on_latent == True:
-                self.loss += self.l2*self.latent_depend
-            else:
-                self.loss += self.latent_depend
-            
-            self.nllk = self.nllk_hetero
-            
-        # ?
-        elif self.loss_type == 'lk_inv':
-            
-            self.loss = self.nllk_hetero_inv + self.l2*self.regularization 
+            self.loss = self.nllk + self.l2*self.regularization 
             
             
             if self.bool_regu_mean == True:
-                
                 self.loss += (self.l2*self.regu_mean)
                 
                 
@@ -927,22 +812,16 @@ class mixture_statistic():
 
                     
             if self.bool_regu_l2_on_latent == True:
-                
                 self.loss += self.l2*self.latent_depend
-                
             else:
                 self.loss += self.latent_depend
             
-            
-            self.nllk = self.nllk_hetero_inv
             
         '''
         elif self.loss_type == 'elbo':
             
             self.loss = self.nllk_elbo + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
             
-            # negative log likelihood calculated through nllk_hetero_inv
-            self.nllk = self.nllk_hetero_inv
             
         elif self.loss_type == 'simple_mix':
             
@@ -950,15 +829,12 @@ class mixture_statistic():
             self.loss = self.nllk_mix + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
                         
-            self.nllk = self.nllk_mix
          
         elif self.loss_type == 'simple_mix_inv':
             
             # ?
             self.loss = self.nllk_mix_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
-            
-            self.nllk = self.nllk_mix_inv
             
         else:
             print('[ERROR] loss type')
@@ -989,9 +865,13 @@ class mixture_statistic():
             tmp_train = myAdamOptimizer(learning_rate = tmp_learning_rate)    
             #tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
         
-        elif self.optimization_method == 'sg_mcmc':
+        elif self.optimization_method == 'sg_mcmc_adam':
             
             tmp_train = sg_mcmc_adam(learning_rate = tmp_learning_rate)
+            
+        elif self.optimization_method == 'sg_mcmc_RMSprop':
+            
+            tmp_train = sg_mcmc_RMSprop(learning_rate = tmp_learning_rate)
             
         
         elif self.optimization_method == 'sgd':
@@ -1005,12 +885,6 @@ class mixture_statistic():
             tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
         
         
-        '''
-        elif self.optimization_method == 'sgmcmc_RMSprop':
-            
-            tmp_train = tfp.optimizer.StochasticGradientLangevinDynamics(learning_rate = tmp_learning_rate,
-                                                                          preconditioner_decay_rate = 0.99)
-        '''
         
         if self.optimization_lr_decay == True:
             
@@ -1029,6 +903,9 @@ class mixture_statistic():
                     y,
                     global_step):
         
+        # global_step: in epoch 
+        
+        
         data_dict = {}
         data_dict["x:0"] = x
         data_dict['y:0'] = y
@@ -1037,25 +914,7 @@ class mixture_statistic():
         self.training_step = global_step
         
         _ = self.sess.run(self.optimizer,
-                                    feed_dict = data_dict)
-        
-        # ----- alternating optimization for the boosting
-        
-        if self.bool_jump_boosting == True:
-            
-            tmp_py = self.sess.run(tf.get_collection('py_mean')[0],
-                                        feed_dict = data_dict)
-            
-            #print("--------- test", np.shape(y), np.shape(tmp_py))
-            
-            y_jump = y - tmp_py
-            data_dict["y_jump:0"] = y_jump
-            
-            _ = self.sess.run([self.minimize_ops_boosting],
-                               feed_dict = data_dict)
-        
-        
-        
+                          feed_dict = data_dict)
         
         return
     
@@ -1100,31 +959,48 @@ class mixture_statistic():
         
         tf.add_to_collection("py_mean_src", self.py_mean_src)
         tf.add_to_collection("py_var_src", self.py_var_src)
-        
-        if self.bool_jump_boosting == True:
-            tf.add_to_collection("py_jump", self.py_jump)
-        
-    # epoch-wise
+    
+    
+    # step-wise
     def validation(self,
                    x,
-                   y):
+                   y,
+                   snapshot_type,
+                   snapshot_Bernoulli,
+                   step,
+                   bool_end_of_epoch):
     
         # x: shape [S B T D]
         # y: [B 1]
         
-        # -- validation inference
+        if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
+            
+            # -- validation inference
         
-        data_dict = {}
-        data_dict["x:0"] = x
-        data_dict['y:0'] = y
+            data_dict = {}
+            data_dict["x:0"] = x
+            data_dict['y:0'] = y
         
-        rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
-                                                      tf.get_collection('mae')[0],
-                                                      tf.get_collection('mape')[0],
-                                                      tf.get_collection('nnllk')[0],
-                                                      tf.get_collection('loss')[0]
-                                                     ],
-                                                     feed_dict = data_dict)
+            rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
+                                                          tf.get_collection('mae')[0],
+                                                          tf.get_collection('mape')[0],
+                                                          tf.get_collection('nnllk')[0],
+                                                          tf.get_collection('loss')[0]
+                                                         ],
+                                                         feed_dict = data_dict)
+            tmp_rmse, tmp_mae = 0.0, 0.0
+        
+        
+            # -- validation monitoring
+        
+            # validation error log for early stopping
+            self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
+            
+            # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
+            return [rmse, mae, mape, nnllk], [tmp_rmse, tmp_mae, loss]
+        
+        return None, None
+        
         
         '''
         # monitoring tuple during the training
@@ -1134,33 +1010,7 @@ class mixture_statistic():
                                                            tf.get_collection('py_mean')[0],
                                                            tf.get_collection('loss')[0]],
                                                            feed_dict = data_dict)
-        '''
         
-        tmp_rmse, tmp_mae = 0.0, 0.0
-        
-        if self.bool_jump_boosting == True:
-            
-            py_jump = self.sess.run(tf.get_collection('py_jump')[0],
-                                    feed_dict = data_dict)
-            
-            
-            #print("--------- test", np.shape(y), np.shape(py_jump), np.shape(py_mean))
-            
-            tmp_rmse = func_rmse(np.squeeze(y), np.squeeze(py_mean + py_jump))
-            tmp_mae = func_mae(np.squeeze(y), np.squeeze(py_mean + py_jump))
-            
-            # py_gate_src, py_mean_src = tmp_rmse, tmp_mae
-            
-        
-        
-        # -- validation monitoring
-        
-        # validation error log for early stopping
-        # epoch-wise 
-        self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
-        
-        
-        '''
         # -- validation for SG-MCMC
         
         if self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
@@ -1182,8 +1032,7 @@ class mixture_statistic():
             self.py_mean_samples.append(py_mean)
         '''
         
-        # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-        return rmse, mae, mape, nnllk, [tmp_rmse, tmp_mae, loss]
+        
     
     '''
     # hyper-para wise
@@ -1250,15 +1099,6 @@ class mixture_statistic():
                                                                                    ],
                                                                                    feed_dict = data_dict)
             
-            # ? py_mean different
-            if self.bool_jump_boosting == True:
-                # [B 1]
-                py_jump = self.sess.run(tf.get_collection('py_jump')[0],
-                                        feed_dict = data_dict)
-                
-                py_mean += py_jump
-                
-                
         else:
             py_mean = None
             py_var = None
@@ -1278,11 +1118,13 @@ class mixture_statistic():
     
     def model_saver(self, 
                     path,
-                    step_id_to_store,
+                    epoch,
+                    step,
+                    snapshot_steps,
+                    bayes_steps,
                     early_stop_bool,
                     early_stop_window,
                     ):
-        
         
         # -- early stopping
         
@@ -1315,7 +1157,7 @@ class mixture_statistic():
         
         # -- best snapshots
         
-        if len(step_id_to_store) != 0 and self.training_step in step_id_to_store:
+        if len(snapshot_steps) != 0 and step in snapshot_steps:
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
@@ -1325,7 +1167,7 @@ class mixture_statistic():
         
         # -- bayesian ensembles
         
-        elif self.optimization_mode == "bayesian" and self.training_step >= self.burn_in_step:
+        elif self.optimization_mode == "bayesian" and step in bayes_steps:
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
@@ -1426,7 +1268,7 @@ class ensemble_inference(object):
         bayes_vola = np.mean(np.sum(g_src_sample*v_src_sample, -1), 0)
         
         
-        # -- uncertainty 
+        # -- uncertainty on predicted mean
         # without heteroskedasticity
         # [B]                       [A B S]
         bayes_unc = np.mean(np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
@@ -1515,21 +1357,11 @@ class ensemble_inference(object):
         tmpy = np.squeeze(y)
         
         
-        # -- testing for boosting 
-        # boosting_mean = np.squeeze(np.mean(m_sample, axis = 0))
-        
-        
         # error tuple [], prediction tuple []
         return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
         
-        #return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk],\
-        #       [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
-        
-    
-    
-    
     
     
     

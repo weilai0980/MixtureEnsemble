@@ -126,7 +126,7 @@ Model:
    ensemble
      mixture
      average
-     weighted sum 
+     weighted sum/ linear combination
      
 
 Training-validation:
@@ -152,8 +152,16 @@ Testing:
   validation and testing data difference
   
 
-** design choice:
-  lk -> lk_inv -> l2 on latent -> lr decay -> random or grid? -> constant, scalar, vec, pos_neg
+** Design choice:
+  
+  lk -> lk_inv -> 
+  l2 on latent -> 
+  
+  lr decay in Bayesian setting
+  
+  random or grid? -> 
+
+  constant, scalar, vec, pos_neg
   
                  
   bias: mean    variance   gate
@@ -241,6 +249,7 @@ Model:
      normalization:
        batch
        layer 
+       weight normalization
        
   
      hidden transition
@@ -276,20 +285,24 @@ Training:
   
   ** bayeisan SG-MCMC:
   
+     epoch-wise or batch-wise
+  
      different optimizers
      thinning
      ancestral sampling
+     simulated anealing
+     
      heteroskedasticity and MCMC inference
      math operation check
-     simulated anealing
+     
      
      
   Regularization:
   
-    latent dependence
     l1
-    fine-grained regularization hyper-para 
-  
+    fine-grained regularization hyper-para
+    
+    latent dependence     
     imbalanced regularization on mean and variance
     
      
@@ -323,24 +336,30 @@ Bayesian:
     
   VI 
     MC-Dropout
-    Posteriro-sharpening
+    Posterior-sharpening
     
   SGWA
 
-Sampling methods:
 
-  REINFORCE
-  Importance sampling
-  Re-parameteraization trick 
+Variational inference and sampling methods:
+
+  REINFORCE from gradient
+  Importance Sampling from gradient
+  
+  Re-parameteraization Trick 
   Monte Carlo
   
   
 Random forest 
-   http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
+  http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
+
 
 
 ----- baselines
 
+
+  stochvol and fGarch
+  
   regression, constant terms
   
   lstm + att

@@ -17,6 +17,8 @@ def data_reshape(data,
     # D: dimensionality at each step
     
     # data: [yi, ti, [xi_src1, xi_src2, ...]]
+    # by default, the first element in the xi_src1 is the auto-regressive target
+    
     src_num = len(data[0][2])
     tmpx = []
     
@@ -245,6 +247,8 @@ class hyper_para_random_search(object):
         
     def trial_search(self):
         
+        # return a list of hyper-para
+        
         bool_duplicate = True
         
         while bool_duplicate == True:
@@ -261,7 +265,7 @@ class hyper_para_random_search(object):
                 bool_duplicate = False
                 self.hpara_set.add(tmp_hpara)
                 
-                return tmp_hpara
+                return list(tmp_hpara)
                 
         return
         
@@ -270,7 +274,8 @@ class hyper_para_random_search(object):
 def hyper_para_selection(hpara_log, 
                          val_aggreg_num, 
                          test_snapshot_num,
-                         metric_idx):
+                         metric_idx,
+                         ):
     
     # hpara_log - [ [hp1, hp2, ...], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
     
@@ -285,11 +290,20 @@ def hyper_para_selection(hpara_log,
     # -- print out for checking
     print([(i[0], i[-1]) for i in sorted_hp])
     
+    # -- snapshot steps
+    snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
     
-    # best hp, epoch_sample, best validation error
+    # -- bayes steps
+    full_steps = [k[0] for k in sorted_hp[0][1]]
+    bayes_steps = [i for i in full_steps if i >= sorted_hp[0][0][-1]]
+    
+    
+    # best hp, best validation error, snapshot_steps, bayes_steps
     return sorted_hp[0][0],\
-           [k[0] for k in sorted_hp[0][1]][:test_snapshot_num],\
-           min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]])
+           min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]]),\
+           snapshot_steps,\
+           bayes_steps
+           
     
         
         

@@ -80,9 +80,8 @@ path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + 
 # ----- hyper-parameters set-up
 
 
-# -- model and data
+# -- model
 
-para_y_log = False
 para_bool_bilinear = True
 
 para_distr_type = args.target_distr
@@ -90,24 +89,29 @@ para_distr_type = args.target_distr
 para_distr_para = []
 # gaussian: [] 
 # student_t: [nu], nu>=3
-
-para_bool_target_seperate = False
-# if yes, the last source corresponds to the auto-regressive target variable
 para_var_type = "square" # square, exp
-# for one-dimensional feature, variance derivation should be re-defined?
-para_batch_augment = False
-para_jump_boosting = False
+# for one-dimensional feature, variance derivation should be re-defined? 
+# always positive correlation of the feature to the variance
 para_share_type_gate = "no_share"
 # no_share, share, mix
 para_inference_type = ""
 # mixture, dense 
+
+
+# -- data
+
+para_y_log = False
+para_bool_target_seperate = False
+# if yes, the last source corresponds to the auto-regressive target variable
+para_batch_augment = False
+
 
 # -- optimization
 
 para_optimization_mode = "bayesian" # map
 para_loss_type = args.loss_type
 
-para_optimizer = "sg_mcmc" # RMSprop, adam, sgd, sg_mcmc
+para_optimizer = "adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
@@ -130,6 +134,9 @@ para_burn_in_epoch = 20
 # model snapshot sample: epoch-wise or step-wise
 para_val_aggreg_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
+
+para_snapshot_type = "epoch_wise"
+para_snapshot_Bernoulli = 0.001
 
 para_early_stop_bool = False
 para_early_stop_window = 0
@@ -158,6 +165,7 @@ para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
 
 
+
 def log_train(path):
     
     with open(path, "a") as text_file:
@@ -177,7 +185,6 @@ def log_train(path):
         text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
         text_file.write("variance calculation type : %s \n"%(para_var_type))
-        text_file.write("jump boosting : %s \n"%(para_jump_boosting))
         text_file.write("para. sharing in gate logit : %s \n"%(para_share_type_gate))
         text_file.write("\n")
         
@@ -216,8 +223,10 @@ def log_train(path):
         text_file.write("epochs in total : %s \n"%(para_n_epoch))
         text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
         
-        text_file.write("epoch snapshots in validation : %s \n"%(para_val_aggreg_num))
-        text_file.write("epoch snapshots in testing : %s \n"%(para_test_snapshot_num))
+        text_file.write("snapshot type : %s \n"%(para_snapshot_type))
+        text_file.write("snapshot_Bernoulli : %s \n"%(para_snapshot_Bernoulli))
+        text_file.write("num. snapshots in validation : %s \n"%(para_val_aggreg_num))
+        text_file.write("num. snapshots in testing : %s \n"%(para_test_snapshot_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
         
         text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
@@ -264,7 +273,8 @@ def training_validate(xtr,
                       hp_lr,
                       hp_batch_size,
                       hp_l2, 
-                      retrain_epoch_set, 
+                      retrain_snapshot_steps, 
+                      retrain_bayes_steps,
                       retrain_bool,
                       ):
     
@@ -318,7 +328,6 @@ def training_validate(xtr,
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
                                   num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
-                                  bool_jump_boosting = para_jump_boosting,
                                  )
                                  
         
@@ -364,7 +373,6 @@ def training_validate(xtr,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hp_batch_size),
                           optimization_mode = para_optimization_mode,
                           optimization_burn_in_step = para_burn_in_epoch,
-                          bool_jump_boosting = para_jump_boosting,
                          )
         
         model.train_ini()
@@ -372,16 +380,16 @@ def training_validate(xtr,
         
         # -- set up training batch parameters
         
-        total_cnt = len(xtr[0])
-        total_batch_num = int(total_cnt/hp_batch_size)
-        total_idx = list(range(total_cnt))
+        tr_cnt = len(xtr[0])
+        tr_batch_num = int(np.ceil(1.0*tr_cnt/hp_batch_size))
+        tr_idx = list(range(tr_cnt))
         
         
-        # -- begin training on epochs
+        # -- begin training
         
-        # training and validation error log over epoches
-        epoch_error = []
-        
+        # training and validation error log
+        step_error = []
+        global_step = 0
         
         # training time counter
         st_time = time.time()
@@ -389,13 +397,13 @@ def training_validate(xtr,
         for epoch in range(para_n_epoch):
             
             # shuffle traning instances each epoch
-            np.random.shuffle(total_idx)
+            np.random.shuffle(tr_idx)
             
             # loop over all batches            
-            for i in range(total_batch_num):
+            for i in range(tr_batch_num):
                 
                 # batch data
-                batch_idx = total_idx[i*hp_batch_size : (i+1)*hp_batch_size] 
+                batch_idx = tr_idx[i*hp_batch_size : (i+1)*hp_batch_size] 
                 
                 # shape: [S B T D]
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
@@ -415,44 +423,60 @@ def training_validate(xtr,
                                   batch_y,
                                   global_step = epoch)
                 
+                # - validation
             
-            # - epoch-wise validation
+                # val_rmse, val_mae, val_mape, val_nnllk
+                # nnllk: normalized negative log likelihood
+                
+                val_metric, monitor_metric = model.validation(xval,
+                                                              yval,
+                                                              snapshot_type = para_snapshot_type,
+                                                              snapshot_Bernoulli = para_snapshot_Bernoulli,
+                                                              step = global_step,
+                                                              bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
+                if val_metric:
+                    
+                    #tr_rmse, tr_mae, tr_mape, tr_nnllk
+                    tr_metric, _ = model.validation(xtr,
+                                                    ytr,
+                                                    snapshot_type = para_snapshot_type,
+                                                    snapshot_Bernoulli = para_snapshot_Bernoulli,
+                                                    step = global_step,
+                                                    bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
             
-            # nnllk: normalized negative log likelihood
-            # monitor_metric = [tmp_rmse, tmp_mae, loss]
             
-            val_rmse, val_mae, val_mape, val_nnllk, monitor_metric = model.validation(xval, 
-                                                                                      yval)
-            tr_rmse, tr_mae, tr_mape, tr_nnllk, _ = model.validation(xtr,
-                                                                     ytr)
+                    # para_metric_map[] defined on
+                    step_error.append([global_step,
+                                       monitor_metric[-1],
+                                       tr_metric[0], 
+                                       val_metric[0], 
+                                       val_metric[1], 
+                                       val_metric[2], 
+                                       val_metric[3]])
+                
+                
+                # - model saver 
+                
+                if retrain_bool == True:
+                    
+                    if model.model_saver(path = path_model + method_str + '_' + str(global_step),
+                                         epoch = epoch,
+                                         step = global_step,
+                                         snapshot_steps = retrain_snapshot_steps,
+                                         bayes_steps = retrain_bayes_steps,
+                                         early_stop_bool = para_early_stop_bool,
+                                         early_stop_window = para_early_stop_window) == True:
+                        
+                        print("\n    [MODEL SAVED] \n " + path_model + method_str + '_' + str(global_step))
+                        
+                  
+                
+                global_step += 1
+                
             
-            
-            # para_metric_map[] defined on
-            epoch_error.append([epoch,
-                                monitor_metric[-1],
-                                tr_rmse, 
-                                val_rmse, 
-                                val_mae, 
-                                val_mape, 
-                                val_nnllk])
-            
-            print("\n --- At epoch %d : \n  %s "%(epoch, str(epoch_error[-1][1:])))
+            print("\n --- At epoch %d : \n  %s "%(epoch, str(step_error[-1])))
             print("\n gates : \n", monitor_metric[0])
             print("\n py_mean_src : \n", monitor_metric[1])
-            
-            
-            # - model saver 
-            
-            tmp_path = path_model + method_str + '_' + str(epoch)
-            
-            if retrain_bool == True:
-
-                if model.model_saver(path = tmp_path,
-                                     step_id_to_store = retrain_epoch_set,
-                                     early_stop_bool = para_early_stop_bool,
-                                     early_stop_window = para_early_stop_window) == True:
-                    
-                    print("\n    [MODEL SAVED] \n " + tmp_path)
             
             
             # NAN value exception 
@@ -466,9 +490,8 @@ def training_validate(xtr,
     
     # ? the epoch with the lowest para_validation_metric ?
     # 
-    return sorted(epoch_error, key = lambda x:x[para_metric_map[para_validation_metric]]),\
+    return sorted(step_error, key = lambda x:x[para_metric_map[para_validation_metric]]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
-           # bayes_error_tuple
     
 
 def testing(model_snapshots, 
@@ -478,11 +501,52 @@ def testing(model_snapshots,
             bool_instance_eval,
             loss_type,
             num_src,
-            jump_boosting):
+            ):
     
     # ensemble of model snapshots
     infer = ensemble_inference()
     
+    
+    with tf.device('/device:GPU:0'):
+        
+        for tmp_model_id in model_snapshots:
+            
+            # path of the stored models 
+            tmp_meta = file_path + method_str + '_' + str(tmp_model_id) + '.meta'
+            tmp_data = file_path + method_str + '_' + str(tmp_model_id)
+        
+            # clear graph
+            tf.reset_default_graph()
+            
+            config = tf.ConfigProto()
+            config.allow_soft_placement = True
+            config.gpu_options.allow_growth = True
+        
+            sess = tf.Session(config = config)
+        
+            model = mixture_statistic(session = sess, 
+                                      loss_type = para_loss_type,
+                                      num_src = num_src,
+                                     )
+            
+            # restore the model
+            model.model_restore(tmp_meta, 
+                                tmp_data)
+            
+            # one-shot inference sample
+            # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+            error_tuple, py_tuple = model.inference(xts,
+                                                    yts, 
+                                                    bool_py_eval = bool_instance_eval)
+            # store the samples
+            infer.add_samples(py_mean = py_tuple[0],
+                              py_var = py_tuple[1],
+                              py_mean_src = py_tuple[2],
+                              py_var_src = py_tuple[3],
+                              py_gate_src = py_tuple[4])
+    
+    
+    '''
     for tmp_model_id in model_snapshots:
         
         # path of the stored models 
@@ -503,7 +567,6 @@ def testing(model_snapshots,
             model = mixture_statistic(session = sess, 
                                       loss_type = para_loss_type,
                                       num_src = num_src,
-                                      bool_jump_boosting = jump_boosting
                                      )
             
             # restore the model
@@ -522,6 +585,7 @@ def testing(model_snapshots,
                               py_var_src = py_tuple[3],
                               py_gate_src = py_tuple[4])
     
+    '''
     
     # return: error tuple [rmse, mae, mape, nnllk], 
     #         prediction tuple []
@@ -638,7 +702,7 @@ if __name__ == '__main__':
     while tmp_hpara != None:
         
         # [ [epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk] ]
-        hp_epoch_error, hp_epoch_time = training_validate(tr_x, 
+        hp_step_error, hp_step_time = training_validate(tr_x, 
                                                           tr_y,
                                                           val_x,
                                                           val_y,
@@ -647,12 +711,14 @@ if __name__ == '__main__':
                                                           hp_lr = tmp_hpara[0],
                                                           hp_batch_size = int(tmp_hpara[1]),
                                                           hp_l2 = tmp_hpara[2],
-                                                          retrain_epoch_set = [],
+                                                          retrain_snapshot_steps = [], 
+                                                          retrain_bayes_steps = [],
                                                           retrain_bool = False, 
                                                           )
         
-        # [ [tmp_lr, tmp_batch, tmp_l2], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
-        hpara_log.append([tmp_hpara, hp_epoch_error])
+        
+        #[[tmp_lr, tmp_batch, tmp_l2, tmp_burn_in_steps], [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
+        hpara_log.append([tmp_hpara + [para_burn_in_epoch * int(np.ceil(1.0*len(tr_x[0])/tmp_hpara[1]))], hp_step_error])
         
         # sample the next hyper-para
         tmp_hpara = hpara_generator.one_trial()
@@ -663,25 +729,33 @@ if __name__ == '__main__':
         log_train_val_performance(path_log_error, 
                                   hpara = hpara_log[-1][0], 
                                   hpara_error = hpara_log[-1][1][0],
-                                  train_time = hp_epoch_time)
+                                  train_time = hp_step_time)
         
         
         # NAN loss exception
-        log_null_loss_exception(hp_epoch_error, 
+        log_null_loss_exception(hp_step_error, 
                                 path_log_error)
         
         print('\n Validation performance under the hyper-parameters: \n', hpara_log[-1][0], hpara_log[-1][1][0])
-        print('\n Training time: \n', hp_epoch_time, '\n')
+        print('\n Training time: \n', hp_step_time, '\n')
             
         
     # ----- re-train
     
+    # hp_lr = tmp_hpara[0],
+    # hp_batch_size = int(tmp_hpara[1]),
+    # hp_l2 = tmp_hpara[2]
+    
     # best hyper-para and epoch set 
-    best_hpara, model_snapshots, best_val_err = hyper_para_selection(hpara_log, 
+    best_hpara, best_val_err, snapshot_steps, bayes_steps = hyper_para_selection(hpara_log, 
                                                                      val_aggreg_num = para_val_aggreg_num, 
                                                                      test_snapshot_num = para_test_snapshot_num,
-                                                                     metric_idx = para_metric_map[para_validation_metric])
-    epoch_error, _ = training_validate(tr_x, 
+                                                                     metric_idx = para_metric_map[para_validation_metric],
+                                                                     )
+    
+    
+    
+    step_error, _ = training_validate(tr_x, 
                                        tr_y,
                                        val_x, 
                                        val_y,
@@ -690,16 +764,18 @@ if __name__ == '__main__':
                                        hp_lr = best_hpara[0],
                                        hp_batch_size = int(best_hpara[1]),
                                        hp_l2 = best_hpara[2],
-                                       retrain_epoch_set = model_snapshots, 
+                                       retrain_snapshot_steps = snapshot_steps, 
+                                       retrain_bayes_steps = bayes_steps,
                                        retrain_bool = True,
                                        )
     
-    log_val_hyper_para(path = path_log_error, 
-                       hpara_tuple = [best_hpara, model_snapshots, best_val_err], 
-                       error_tuple = epoch_error[0])
     
-    print('\n----- Best epoch hyper-parameters: ', best_hpara, model_snapshots, best_val_err, '\n')
-    print('\n----- Re-training validation performance: ', epoch_error[0], '\n')
+    log_val_hyper_para(path = path_log_error, 
+                       hpara_tuple = [best_hpara, snapshot_steps, best_val_err], 
+                       error_tuple = step_error[0])
+    
+    print('\n----- Best epoch hyper-parameters: ', best_hpara, snapshot_steps, best_val_err, '\n')
+    print('\n----- Re-training validation performance: ', step_error[0], '\n')
     
     
     # ----- testing
@@ -710,34 +786,32 @@ if __name__ == '__main__':
     # -- best one epoch 
     
     
-    error_tuple, _ = testing(model_snapshots = model_snapshots[:1], 
+    error_tuple, _ = testing(model_snapshots = snapshot_steps[:1], 
                              xts = ts_x, 
                              yts = ts_y, 
                              file_path = path_model, 
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                             jump_boosting = para_jump_boosting,
                              )
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + model_snapshots[:1])
+                         error_tuple = error_tuple + snapshot_steps[:1])
     
     
     # -- best epochs 
     
-    error_tuple, py_tuple = testing(model_snapshots = model_snapshots, 
+    error_tuple, py_tuple = testing(model_snapshots = snapshot_steps, 
                                     xts = ts_x, 
                                     yts = ts_y, 
                                     file_path = path_model, 
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                                    jump_boosting = para_jump_boosting,
                                     )
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + model_snapshots)
+                         error_tuple = error_tuple + snapshot_steps)
     
     
     import pickle
@@ -746,18 +820,15 @@ if __name__ == '__main__':
     
     # -- ensemble or bayesian
     
-    print(list(range(para_burn_in_epoch, para_n_epoch)))
-    
-    error_tuple, py_tuple = testing(model_snapshots = list(range(para_burn_in_epoch, para_n_epoch)), 
+    error_tuple, py_tuple = testing(model_snapshots = bayes_steps, 
                                     xts = ts_x, 
                                     yts = ts_y, 
                                     file_path = path_model, 
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0],
-                                    jump_boosting = para_jump_boosting,
                                     )
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + list(range(para_burn_in_epoch, para_n_epoch)))
+                         error_tuple = error_tuple + bayes_steps)
     
