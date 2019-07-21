@@ -107,7 +107,8 @@ class mixture_statistic():
            batch_size: int
            bool_bilinear:
            para_share_type: 
-        
+           
+           lstm_size: int
            dense_num: int
            use_hidden_before_dense: bool
         

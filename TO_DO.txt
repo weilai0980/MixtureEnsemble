@@ -220,6 +220,7 @@ Data:
      lag effect 
 
 
+
 Model:
 
   
@@ -284,6 +285,9 @@ Training:
   
   
   ** bayeisan SG-MCMC:
+  
+     asymptotic analysis
+     convergence analysis
   
      epoch-wise or batch-wise
   

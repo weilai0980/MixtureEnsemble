@@ -77,7 +77,7 @@ def data_padding_x(x,
 
 
 def func_mape(y, 
-         yhat):
+              yhat):
     
     tmp_list = []
     
@@ -89,14 +89,43 @@ def func_mape(y,
     return np.mean(tmp_list)
 
 def func_mae(y, 
-        yhat):
+             yhat):
     
     return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
     
 def func_rmse(y, 
-         yhat):
+              yhat):
     
     return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
+
+
+def batch_augment(x, 
+                  y, 
+                  num_src):
+    
+    # x: [S B T D], 
+    # y: [B 1]
+    
+    # [B [1]]
+    idx_y = [[idx, i] for idx, i in enumerate(y)]
+    
+    sort_idx_y = sorted(idx_y, key = lambda x: x[1][0], reverse = True)
+    
+    aug_num = int(0.2*len(y))
+    
+    for i in range(aug_num):
+        
+        tmp_idx = sort_idx_y[i][0]
+        
+        for j in range(num_src):
+            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
+            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
+        
+        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
+        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
+    
+    return x, y
+
 
 
 # ----- logging
@@ -112,8 +141,7 @@ def log_train_val_performance(path,
         
         
 def log_train_val_bayesian_error(path, 
-                                 error, 
-                                 ):
+                                 error):
     
     with open(path, "a") as text_env:
         text_env.write("          %s\n\n"%(str(error)))
@@ -150,7 +178,27 @@ def log_null_loss_exception(epoch_errors,
     return
 
 
+
+
 # ----- hyper-parameter searching 
+
+
+def parameter_manager(shape_x_dict, 
+                      hyper_para_names, 
+                      hyper_para_sample):
+    
+    hpara_dict = dict(zip(hyper_para_names, hyper_para_sample))
+    hpara_dict["batch_size"] = int(hpara_dict["batch_size"])
+    
+    tr_dict = {}
+    
+    ''' ? np.ceil ? '''
+    tr_dict["batch_per_epoch"] = int(np.ceil(1.0*shape_x_dict["N"]/hpara_dict["batch_size"]))
+    tr_dict["tr_idx"] = list(range(shape_x_dict["N"]))
+        
+    
+    return hpara_dict, tr_dict
+
 
 # hpara: hyper-parameter
     
@@ -269,7 +317,6 @@ class hyper_para_random_search(object):
                 
         return
         
-        
     
 def hyper_para_selection(hpara_log, 
                          val_aggreg_num, 
@@ -300,12 +347,11 @@ def hyper_para_selection(hpara_log,
     #snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
     
     
+    best_hyper_para = sorted_hp[0][0][:-1]
+    
     # best hp, best validation error, snapshot_steps, bayes_steps
-    return sorted_hp[0][0],\
+    return best_hyper_para,\
            min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]]),\
            snapshot_steps,\
            bayes_steps
            
-    
-        
-        
