@@ -1,8 +1,0 @@
-{
-  "interval_len": 2160,
-  "roll_len": 4,
-  "para_step_ahead": 0,
-  "para_order_minu": 30,
-  "para_order_hour": 16,
-  "bool_feature_selection": "False"
-}

@@ -112,7 +112,7 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 para_optimization_mode = "bayesian" # map
 para_loss_type = args.loss_type
 
-para_optimizer = "adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
+para_optimizer = "sg_mcmc_adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
@@ -138,12 +138,15 @@ para_hpara_n_trial = 5
 para_n_epoch = 80
 para_burn_in_epoch = 20
 
-# model snapshot sample: epoch-wise or step-wise
+para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
+para_snapshot_Bernoulli = 0.001
+
+# model snapshot sample: epoch_wise or batch_wise
+#   epoch_wise: vali. test snapshot numbers are explicited determined 
+#   batch_wise: vali. test snapshot numbers are arbitary 
 para_val_aggreg_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
-para_snapshot_type = "epoch_wise"
-para_snapshot_Bernoulli = 0.001
 
 para_early_stop_bool = False
 para_early_stop_window = 0
@@ -246,18 +249,17 @@ def log_train(path):
         
 # ----- training and evalution
     
-def training_validate(xtr,
-                      ytr,
-                      xval,
-                      yval,
-                      dim_x,
-                      steps_x,
-                      hyper_para_dict,
-                      training_dict,
-                      retrain_snapshot_steps, 
-                      retrain_bayes_steps,
-                      retrain_bool,
-                      ):
+def training_validating(xtr,
+                        ytr,
+                        xval,
+                        yval,
+                        dim_x,
+                        steps_x,
+                        hyper_para_dict,
+                        training_dict,
+                        retrain_snapshot_steps, 
+                        retrain_bayes_steps,
+                        retrain_bool):
     
     '''
     Args:
@@ -409,15 +411,12 @@ def training_validate(xtr,
                                                               step = global_step,
                                                               bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
                 
-                #tr_rmse, tr_mae, tr_mape, tr_nnllk
-                tr_metric, _ = model.validation(xtr,
-                                                ytr,
-                                                snapshot_type = para_snapshot_type,
-                                                snapshot_Bernoulli = para_snapshot_Bernoulli,
-                                                step = global_step,
-                                                bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
-                
                 if val_metric:
+                    
+                    #tr_rmse, tr_mae, tr_mape, tr_nnllk
+                    tr_metric, _ = model.inference(xtr,
+                                                   ytr, 
+                                                   bool_py_eval = False)
                     
                     # para_metric_map[] defined on
                     step_error.append([global_step,
@@ -471,8 +470,7 @@ def testing(model_snapshots,
             file_path, 
             bool_instance_eval,
             loss_type,
-            num_src,
-            ):
+            num_src):
     
     # ensemble of model snapshots
     infer = ensemble_inference()
@@ -652,7 +650,7 @@ if __name__ == '__main__':
         # hp_: stands for hyper-parameter
         # hp_step_error: [[step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk, epoch]]
         
-        hp_step_error, hp_epoch_time = training_validate(tr_x, 
+        hp_step_error, hp_epoch_time = training_validating(tr_x, 
                                                          tr_y,
                                                          val_x,
                                                          val_y,
@@ -668,6 +666,13 @@ if __name__ == '__main__':
         #[[lr, batch, l2, ..., burn_in_steps], [[step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk, epoch]]]
         ''' ? '''
         hpara_log.append([tmp_hpara + [para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1], hp_step_error])
+        
+        
+        # -- prepare for the next trial
+        
+        # stabilize the network by fixing random seeds
+        #np.random.seed(1)
+        #tf.set_random_seed(1)
         
         # sample the next hyper-para
         tmp_hpara = hpara_generator.one_trial()
@@ -701,8 +706,11 @@ if __name__ == '__main__':
                                             hyper_para_names = para_hpara_list, 
                                             hyper_para_sample = best_hpara)
     
+    hpara_dict["bool_bilinear"] = para_bool_bilinear
+    hpara_dict["para_share_type"] = para_share_type_gate
     
-    step_error, _ = training_validate(tr_x, 
+    
+    step_error, _ = training_validating(tr_x, 
                                       tr_y,
                                       val_x, 
                                       val_y,

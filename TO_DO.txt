@@ -113,6 +113,60 @@ bias terms for different data sources
   bias as a constant effect
 
 
+     model snapshot ensemble 
+     
+     hidden transition
+     moving averaging for neural network version
+  
+  
+
+  training error 
+
+  boosting
+  
+  early stopping: batch-wise, change point detection, exponential moving average 
+  
+  
+  inference 
+  output wrapper positive
+  
+  train mode:  mse-mix, mse-dense, map, ELBO, EM, bayesian 
+  
+  
+  ** bayeisan SG-MCMC:
+  
+     
+     heteroskedasticity and MCMC inference
+     math operation check
+     
+     
+  Regularization:
+  
+    fine-grained regularization hyper-para
+    
+    latent dependence     
+    imbalanced regularization on mean and variance
+    
+
+Testing:
+
+  discrepency between validation and testing data
+  
+
+model snapshot ensemble 
+
+fine-grained regularization hyper-para
+    
+    latent dependence     
+    imbalanced regularization on mean and variance
+
+
+training error 
+  early stopping: batch-wise, change point detection, exponential moving average
+  epoch-wise or batch-wise
+  different optimizers
+  heteroskedasticity and MCMC inference
+  discrepency between validation and testing data
 
 
 --------------- POINT LEARNED -------------------
@@ -151,6 +205,45 @@ Testing:
 
   validation and testing data difference
   
+
+Interpretation of uncertainty and volatility:
+
+   uncertainty: rareness of x 
+   
+   
+   uncertainty high, volatility high
+   
+   uncertainty high, volatility low
+   
+   uncertainty low, volatility high -> jump
+   
+   uncertainty low, volatility low
+   
+
+Bayesian:
+  
+  MCMC
+    SG-MCMC: SG-LD, SG-HMC
+    
+  VI 
+    MC-Dropout
+    Posterior-sharpening
+    
+  SGWA
+
+
+Variational inference and sampling methods:
+
+  REINFORCE from gradient
+  Importance Sampling from gradient
+  
+  Re-parameteraization Trick 
+  Monte Carlo
+  
+  
+
+
+
 
 ** Design choice:
   
@@ -242,7 +335,7 @@ Model:
      integrated learning
      boosting learning, burn-in phase
      
-     model snapshot ensemble 
+     
      
   
   ** Neural version
@@ -268,12 +361,11 @@ Model:
 
 Training:
 
-  training error 
-
   boosting
   data augments: spikes
   
-  early stopping: batch-wise, change point detection, exponential moving average 
+  
+  
   
   Cyclical learning rates
   
@@ -289,31 +381,26 @@ Training:
      asymptotic analysis
      convergence analysis
   
-     epoch-wise or batch-wise
-  
-     different optimizers
      thinning
      ancestral sampling
      simulated anealing
      
-     heteroskedasticity and MCMC inference
+     
      math operation check
+     
+     
+     
+  ** Add metrics "within confidence interval"   
      
      
      
   Regularization:
   
     l1
-    fine-grained regularization hyper-para
     
-    latent dependence     
-    imbalanced regularization on mean and variance
-    
-     
 
 Testing:
 
-  discrepency between validation and testing data
   
   ** supervised jump detection 
 
@@ -328,38 +415,21 @@ Inference:
   ** truncated Gaussian on source contribution uncertainty
 
 
-
-
------ bayesian
-
-
 Bayesian:
+
+  random seed level 
   
-  MCMC
-    SG-MCMC: SG-LD, SG-HMC
-    
-  VI 
-    MC-Dropout
-    Posterior-sharpening
-    
-  SGWA
 
 
-Variational inference and sampling methods:
 
-  REINFORCE from gradient
-  Importance Sampling from gradient
-  
-  Re-parameteraization Trick 
-  Monte Carlo
-  
-  
-Random forest 
-  http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
+
 
 
 
 ----- baselines
+
+  Random forest 
+  http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
 
 
   stochvol and fGarch

@@ -548,6 +548,7 @@ class mixture_statistic():
                 
                 # negative log likelihood
                 # [B S]
+                # ? variance of constant 1 
                 lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
             
                 lk = tf.multiply(lk_src, self.gates) 
@@ -997,8 +998,7 @@ class mixture_statistic():
     def inference(self, 
                   x, 
                   y, 
-                  bool_py_eval, 
-                  ):
+                  bool_py_eval):
         
         # x: shape [S B T D]
         # y: [B 1]

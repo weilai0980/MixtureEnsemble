@@ -6,6 +6,12 @@ import numpy as np
 from utils_libs import *
 
 
+import tensorflow as tf
+# fix random seed
+np.random.seed(1)
+tf.set_random_seed(1)
+
+
 # ----- data preparation 
 
 def data_reshape(data, 
@@ -331,9 +337,10 @@ def hyper_para_selection(hpara_log,
     for hp_epoch_err in hpara_log:
         hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
     
-    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
     # sorted_hp[0]: hyper-para with the best validation performance
+    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
+    
     
     # -- bayes steps
     full_steps = [k[0] for k in sorted_hp[0][1]]
