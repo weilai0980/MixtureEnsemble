@@ -19,7 +19,7 @@ from utils_libs import *
 from utils_training import *
 
 
-# ----- hyper-parameters from command line
+# ----- arguments from command line
 
 import argparse
 
@@ -55,19 +55,12 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 
-# ----- hyper-parameters from config
 
-'''
-import json
-with open('config.json') as f:
-    para_dict = json.load(f)
-    print(para_dict) 
-'''
+
 
 # ----- data and log paths
 
 path_data = "../dataset/bitcoin/double_trx_ob_tar5_len10/"
-#"../dataset/bitcoin/double_trx_ob_10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 
@@ -77,7 +70,6 @@ path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + 
 
 
 # ----- hyper-parameters set-up
-
 
 # -- model
 
@@ -128,12 +120,22 @@ para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
 para_lstm_size = 0
 para_dense_n = 0
 
+'''
+para_hpara_search = {}
+
+para_hpara_search['linear'] = {}
+para_hpara_search['linear']['range'] = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
+para_hpara_search['linear']['names'] = ["lr", "batch_size", "l2"]
+
+para_hpara_search['rnn'] = {}
+para_hpara_search['rnn']['range'] = [[0.001, 0.001], [10, 80], [1e-7, 0.01], [10, 100], [1, 1]]
+para_hpara_search['rnn']['names'] = ["lr", "batch_size", "l2", "rnn_size", "dense_num"]
+'''
+
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
 para_hpara_list = ["lr", "batch_size", "l2"]
 para_hpara_n_trial = 5
 
-#para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01], [10, 100], [1, 1]]
-#para_hpara_list = ["lr", "batch_size", "l2", "rnn_size", "dense_num"]
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
@@ -173,6 +175,9 @@ para_bool_global_bias = False
 
 para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
+
+
+
 
 
 
@@ -651,16 +656,16 @@ if __name__ == '__main__':
         # hp_step_error: [[step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk, epoch]]
         
         hp_step_error, hp_epoch_time = training_validating(tr_x, 
-                                                         tr_y,
-                                                         val_x,
-                                                         val_y,
-                                                         dim_x = para_dim_x,
-                                                         steps_x = para_steps_x,
-                                                         hyper_para_dict = hpara_dict,
-                                                         training_dict = tr_dict,
-                                                         retrain_bool = False,
-                                                         retrain_snapshot_steps = [], 
-                                                         retrain_bayes_steps = [])
+                                                           tr_y,
+                                                           val_x,
+                                                           val_y,
+                                                           dim_x = para_dim_x,
+                                                           steps_x = para_steps_x,
+                                                           hyper_para_dict = hpara_dict,
+                                                           training_dict = tr_dict,
+                                                           retrain_bool = False,
+                                                           retrain_snapshot_steps = [], 
+                                                           retrain_bayes_steps = [])
         
         
         #[[lr, batch, l2, ..., burn_in_steps], [[step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk, epoch]]]
@@ -711,16 +716,16 @@ if __name__ == '__main__':
     
     
     step_error, _ = training_validating(tr_x, 
-                                      tr_y,
-                                      val_x, 
-                                      val_y,
-                                      dim_x = para_dim_x,
-                                      steps_x = para_steps_x,                                      
-                                      hyper_para_dict = hpara_dict,
-                                      training_dict = tr_dict,
-                                      retrain_bool = True,
-                                      retrain_snapshot_steps = snapshot_steps, 
-                                      retrain_bayes_steps = bayes_steps)
+                                        tr_y,
+                                        val_x, 
+                                        val_y,
+                                        dim_x = para_dim_x,
+                                        steps_x = para_steps_x,                                      
+                                        hyper_para_dict = hpara_dict,
+                                        training_dict = tr_dict,
+                                        retrain_bool = True,
+                                        retrain_snapshot_steps = snapshot_steps, 
+                                        retrain_bayes_steps = bayes_steps)
     
     
     log_val_hyper_para(path = path_log_error, 

@@ -190,6 +190,7 @@ Training-validation:
   early stopping using change-point detection for generalization ability
 
   set of optimal hyper-parameters
+  
   snapshots under one certain hyper-parameter
   
   discrepency between validation and testing data
@@ -199,7 +200,12 @@ Training-validation:
     regularization
     batch-size
     epoch 
+  
+  evaluation metric: 
+    rmse, mae, mape, nnllk
     
+    nnllk leads to generalization on all metrics
+  
 
 Testing:
 
@@ -222,12 +228,22 @@ Interpretation of uncertainty and volatility:
 
 Bayesian:
   
+  Monte Carlo
+    importance sampling
+  
   MCMC
+    
+    Gibs, Metropolis-hasting
+    
     SG-MCMC: SG-LD, SG-HMC
     
-  VI 
+  VI
+    
+    black-box VI 
+    
     MC-Dropout
     Posterior-sharpening
+    
     
   SGWA
 
@@ -313,10 +329,8 @@ Data:
      lag effect 
 
 
-
 Model:
 
-  
   *** Versatility
   
   feature interaction component 
@@ -334,8 +348,6 @@ Model:
   ** boosting jump component/ statistical boosting
      integrated learning
      boosting learning, burn-in phase
-     
-     
      
   
   ** Neural version
@@ -365,8 +377,6 @@ Training:
   data augments: spikes
   
   
-  
-  
   Cyclical learning rates
   
   EM training
@@ -374,7 +384,6 @@ Training:
   output wrapper positive
   
   train mode:  mse-mix, mse-dense, map, ELBO, EM, bayesian 
-  
   
   ** bayeisan SG-MCMC:
   
@@ -385,24 +394,25 @@ Training:
      ancestral sampling
      simulated anealing
      
-     
      math operation check
-     
-     
      
   ** Add metrics "within confidence interval"   
      
-     
-     
   Regularization:
   
-    l1
+  l1
+  
+  Optimization:
+   
+    LookAhead
+    AMSgrad 
+    
     
 
 Testing:
 
-  
   ** supervised jump detection 
+     extream value theory KDD paper
 
 
 Monitoring and diagnostic:
@@ -416,14 +426,13 @@ Inference:
 
 
 Bayesian:
+  epoch/batch level
+  random seed level model averaging
+  hyper-para level 
 
-  random seed level 
+Boosting:
   
-
-
-
-
-
+  boosing bayesian models
 
 
 ----- baselines
@@ -431,25 +440,27 @@ Bayesian:
   Random forest 
   http://contrib.scikit-learn.org/forest-confidence-interval/installation_guide.html
 
-
-  stochvol and fGarch
-  
   regression, constant terms
   
-  lstm + att
-  cnn + lstm
+  lstm + att: deep AR
+  cnn + lstm: 
   dual rnn
   
   Gradient boosted tree
-  LightGBM
+    sub-sample in gradient boosted tree 
+    
   Random forest
+  
+  LightGBM
+  XGboost
    
-  XGboosted
+  ARMA_GARCH
   
-  sub-sample in gradient boosted tree 
-
-  further check of ARCH series 
+  ARMAX_GARCH
   
+  ARMAX_GARCHX  
+  
+  stochvol and fGarch
   
   
   
