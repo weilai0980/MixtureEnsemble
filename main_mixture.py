@@ -707,12 +707,17 @@ if __name__ == '__main__':
                                                                                  test_snapshot_num = para_test_snapshot_num,
                                                                           metric_idx = para_metric_map[para_validation_metric])
     
-    hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
-                                            hyper_para_names = para_hpara_list, 
+    
+    
+    hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict,
+                                            hyper_para_names = para_hpara_list,
                                             hyper_para_sample = best_hpara)
+    
     
     hpara_dict["bool_bilinear"] = para_bool_bilinear
     hpara_dict["para_share_type"] = para_share_type_gate
+    
+    
     
     
     step_error, _ = training_validating(tr_x, 

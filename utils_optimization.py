@@ -416,6 +416,9 @@ class sg_mcmc_adam(optimizer.Optimizer):
     """ ? 1.0*lr leads to inferior performance ? """
     inject_noise = rnd * math_ops.sqrt(lr * (1.0 - beta1_t)/(v_sqrt + epsilon_t))
     
+    ''' beta1 on noise '''
+    
+    
     
     # -----
     """ ? 1.0 """

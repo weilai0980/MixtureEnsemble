@@ -910,6 +910,18 @@ class mixture_statistic():
         return
     
     
+    
+    def train_batch_variable_weight_statistic(self):
+        
+        
+        #tf.trainable_variables
+        
+        
+        
+        return
+    
+    
+    
     def inference_ini(self):
         
         # evaluation metric
