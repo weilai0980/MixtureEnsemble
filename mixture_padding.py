@@ -480,8 +480,8 @@ class mixture_statistic():
                 lk = tf.multiply(lk_src, self.gates) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
-                #self.nllk_loss
-                #self.nllk
+                self.nllk_bound = self.nllk
+                
             
             elif self.loss_type == 'lk_inv':
                 
@@ -501,8 +501,9 @@ class mixture_statistic():
             
                 lk = tf.multiply(lk_src, self.gates) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
-            
-            
+                
+                self.nllk_bound = self.nllk
+                
             # elbo: evidence lower bound optimization    
             elif self.loss_type == 'elbo':
                 
@@ -860,6 +861,12 @@ class mixture_statistic():
             
             tmp_train = sg_mcmc_adam(learning_rate = tmp_learning_rate)
             
+            
+        elif self.optimization_method == 'RMSprop':
+            
+            tmp_train = myRMSprop(learning_rate = tmp_learning_rate)    
+            #tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+            
         elif self.optimization_method == 'sg_mcmc_RMSprop':
             
             tmp_train = sg_mcmc_RMSprop(learning_rate = tmp_learning_rate)
@@ -872,13 +879,8 @@ class mixture_statistic():
                                                    use_nesterov = True
                                                    )
         
-        elif self.optimization_method == 'RMSprop':
-            tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
-        
-        
         
         if self.optimization_lr_decay == True:
-            
             self.optimizer = tmp_train.minimize(self.loss, 
                                                 global_step = global_step)
         else:
@@ -886,6 +888,7 @@ class mixture_statistic():
             
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
+        
         
         
     #   training on batch of data

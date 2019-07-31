@@ -195,11 +195,15 @@ Training-validation:
   
   discrepency between validation and testing data
   
-  hyper-para:
+  
+  hyper-para search:
+    
     learning rate
     regularization
     batch-size
+    
     epoch 
+    
   
   evaluation metric: 
     rmse, mae, mape, nnllk
@@ -408,6 +412,9 @@ Training:
     AMSgrad 
     
   ** every N epoch to sample 
+  
+  epoch/batch ensembling
+    difference between training and validation 
     
     
 

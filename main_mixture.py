@@ -60,7 +60,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # ----- data and log paths
 
-path_data = "../dataset/bitcoin/double_trx_ob_tar5_len10/"
+path_data = "../dataset/bitcoin/market1_tar5_len10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 
@@ -104,7 +104,7 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 para_optimization_mode = "bayesian" # map
 para_loss_type = args.loss_type
 
-para_optimizer = "sg_mcmc_adam" # RMSprop, adam, sgd, sg_mcmc_adam, sg_mcmc_RMSprop
+para_optimizer = "sg_mcmc_RMSprop" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
