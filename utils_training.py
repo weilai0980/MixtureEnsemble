@@ -172,10 +172,11 @@ def log_test_performance(path,
 def log_null_loss_exception(epoch_errors, 
                             log_path):
     
-    # epoch_errors: [[epoch, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]]    
+    
+    # epoch_errors: [ [step, tr_metric, val_metric, epoch] ]    
     for i in epoch_errors:
         
-        if np.isnan(i[1]) == True:
+        if np.isnan(i[1][0]) == True:
             
             with open(log_path, "a") as text_file:
                 text_file.write("\n  NULL loss exception at: %s \n"%(str(i[0])))
@@ -330,12 +331,13 @@ def hyper_para_selection(hpara_log,
                          metric_idx,
                          ):
     
-    # hpara_log - [ [hp1, hp2, ..., burn_in_steps], [[epoch/step, loss, train_rmse, val_rmse, val_mae, val_mape, val_nnllk]] ]
+    # hpara_log - [ [lr, batch, l2, ..., burn_in_steps], [[step, tr_metric, val_metric, epoch]] ]
+    
     
     hp_err = []
     
     for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
     
     
     # sorted_hp[0]: hyper-para with the best validation performance
@@ -350,7 +352,7 @@ def hyper_para_selection(hpara_log,
     
     
     # -- snapshot steps
-    snapshot_steps = [k[0] for k in sorted_hp[0][1]][:len(bayes_steps)]
+    snapshot_steps = full_steps[:len(bayes_steps)]
     #snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
     
     
@@ -358,7 +360,6 @@ def hyper_para_selection(hpara_log,
     
     # best hp, best validation error, snapshot_steps, bayes_steps
     return best_hyper_para,\
-           min([tmp_epoch[3] for tmp_epoch in sorted_hp[0][1]]),\
            snapshot_steps,\
            bayes_steps
            
