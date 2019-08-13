@@ -32,6 +32,9 @@ parser.add_argument('--latent_dependence', '-d', help = "latent_dependence", typ
 parser.add_argument('--data_mode', '-m', help = "source specific data or with paddning", type = str, default = "src_padding")
 # "src_raw", "src_padding"
 
+parser.add_argument('--dataset', '-a', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
+# "src_raw", "src_padding"
+
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
 parser.add_argument('--target_distr', '-p', help = "target_probability_distribution", type = str, default = "gaussian")
 
@@ -98,7 +101,7 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 
 para_loss_type = args.loss_type
 
-para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
+para_optimizer = "sg_mcmc_adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
@@ -114,28 +117,28 @@ para_lstm_size = 0
 para_dense_n = 0
 
 '''
-para_hpara_search = {}
+para_hpara_range = {}
 
-para_hpara_search['linear'] = {}
-para_hpara_search['linear']['lr'] = [0.001, 0.001]  
-para_hpara_search['linear']['batch_size'] = [10, 80]
-para_hpara_search['linear']['l2'] = [1e-7, 0.01]
-para_hpara_search['linear']['bool_bilinear'] = para_bool_bilinear
-para_hpara_search['linear']['para_share_type'] = para_share_type_gate
+para_hpara_range['linear'] = {}
+para_hpara_range['linear']['lr'] = [0.001, 0.001]  
+para_hpara_range['linear']['batch_size'] = [10, 80]
+para_hpara_range['linear']['l2'] = [1e-7, 0.01]
+para_hpara_range['linear']['bool_bilinear'] = para_bool_bilinear
+para_hpara_range['linear']['para_share_type'] = para_share_type_gate
 
-para_hpara_search['rnn'] = {}
-para_hpara_search['rnn']['lr'] = [0.001, 0.001]
-para_hpara_search['rnn']['batch_size'] = [10, 80]
-para_hpara_search['rnn']['l2'] = [1e-7, 0.01]
-para_hpara_search['rnn']['rnn_size'] =  [10, 100]
-para_hpara_search['rnn']['dense_num'] = [1, 1]
+para_hpara_range['rnn'] = {}
+para_hpara_range['rnn']['lr'] = [0.001, 0.001]
+para_hpara_range['rnn']['batch_size'] = [10, 80]
+para_hpara_range['rnn']['l2'] = [1e-7, 0.01]
+para_hpara_range['rnn']['rnn_size'] =  [10, 100]
+para_hpara_range['rnn']['dense_num'] = [1, 1]
 
 para_hpara_search_list = ['lr', 'batch_size', 'l2']
 '''
 
 para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
 para_hpara_list = ["lr", "batch_size", "l2"]
-para_hpara_n_trial = 1
+para_hpara_n_trial = 5
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
@@ -152,7 +155,7 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 para_early_stop_bool = False
 para_early_stop_window = 0
 
-para_validation_metric = 'nnllk'
+para_validation_metric = 'rmse'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 # -- regularization
@@ -426,8 +429,8 @@ def training_validating(xtr,
             # -- epoch-wise
             
             print("\n --- At epoch %d : \n  %s "%(epoch, str(step_error[-1])))
-            print("\n gates : \n", monitor_metric[0])
-            print("\n py_mean_src : \n", monitor_metric[1])
+            print("\n gates : \n", monitor_metric)
+            print("\n py_mean_src : \n", monitor_metric)
             
             # NAN value exception 
             if np.isnan(monitor_metric[-1]) == True:
@@ -612,7 +615,7 @@ if __name__ == '__main__':
         hpara_dict["para_share_type"] = para_share_type_gate
  
         # hp_: stands for hyper-parameter
-        # hp_step_error: [[step, train_metric, val_metric, epoch]]
+        # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
         
         hp_step_error, hp_epoch_time = training_validating(tr_x, 
                                                            tr_y,
@@ -702,7 +705,7 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + snapshot_steps[:1])
+                         error_tuple = [error_tuple, snapshot_steps[:1]])
     
     # -- best snapshot steps 
     
@@ -715,7 +718,7 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + snapshot_steps)
+                         error_tuple = [error_tuple, snapshot_steps])
     
     # -- bayesian steps
     
@@ -728,7 +731,7 @@ if __name__ == '__main__':
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = error_tuple + bayes_steps)
+                         error_tuple = [error_tuple, bayes_steps])
     
     # -- dump predictions on testing data
     

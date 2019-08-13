@@ -21,7 +21,6 @@ from utils_optimization import *
 
 # ----- Mixture statistic -----
 
-
 class mixture_statistic():
     
     def __init__(self, 
@@ -436,7 +435,7 @@ class mixture_statistic():
             
             # -- variance
             
-            if self.loss_type == 'lk':
+            if self.loss_type == 'heter_lk':
                 
                 # component variance
                 self.py_var_src = var_stack
@@ -445,7 +444,6 @@ class mixture_statistic():
                 sq_mean_stack = var_stack + tf.square(mean_stack)
                 # [B 1]                                   [B S]          [B S]
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
-                
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
@@ -458,7 +456,7 @@ class mixture_statistic():
                 
                 self.nllk_bound = self.nllk
                 
-            elif self.loss_type == 'lk_inv':
+            elif self.loss_type == 'heter_lk_inv':
                 
                 # component variance
                 self.py_var_src = 1.0/(inv_var_stack + 1e-5)
@@ -466,7 +464,6 @@ class mixture_statistic():
                 # variance
                 sq_mean_stack = 1.0/(inv_var_stack + 1e-5) + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
-                
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
@@ -479,8 +476,39 @@ class mixture_statistic():
                 
                 self.nllk_bound = self.nllk
                 
+            elif self.loss_type == 'homo_lk_inv':
+                
+                # variance as trainable parameter
+                # [1 S]
+                inv_var_homo = tf.get_variable('homo_var_src', 
+                                               [1, num_src],
+                                               initializer = tf.contrib.layers.xavier_initializer())
+                
+                # re-set regularization on variance terms
+                # regu_var
+                
+                
+                # component variance
+                self.py_var_src = 1.0/(inv_var_homo + 1e-5)
+                
+                # variance
+                sq_mean_stack = 1.0/(inv_var_homo + 1e-5) + tf.square(mean_stack)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
+                # [B 1]
+                self.py_var = mix_sq_mean - tf.square(self.py_mean)
+                
+                # negative log likelihood
+                # [B S]
+                lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack)*inv_var_homo)*tf.sqrt(0.5/np.pi*inv_var_homo)
+            
+                lk = tf.multiply(lk_src, self.gates) 
+                self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
+                
+                self.nllk_bound = self.nllk
+            
+            
             # elbo: evidence lower bound optimization    
-            elif self.loss_type == 'elbo':
+            elif self.loss_type == 'heter_elbo':
                 
                 # component variance
                 self.py_var_src = 1.0/(inv_var_stack + 1e-5)
@@ -488,7 +516,6 @@ class mixture_statistic():
                 # variance
                 sq_mean_stack = 1.0/(inv_var_stack + 1e-5) + tf.square(mean_stack)
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
-                
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
@@ -506,16 +533,16 @@ class mixture_statistic():
         
                 self.nllk_bound = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_bound, -1)) 
             
+            
             elif self.loss_type == 'mse':
                 
                 # component variance
-                self.py_var_src = 1.0
+                self.py_var_src = tf.constant(1.0, shape = [1, self.num_src])
                 
                 # variance
                 sq_mean_stack = 1.0 + tf.square(mean_stack)
                 # [B 1]
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
-                
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
@@ -526,6 +553,7 @@ class mixture_statistic():
             
                 lk = tf.multiply(lk_src, self.gates) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
+            
             
             # elif self.loss_type == 'stacking':
             
@@ -743,7 +771,7 @@ class mixture_statistic():
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + \
                         self.l2*self.regularization + self.l2*self.regu_mean
                 
-        elif self.loss_type in ['lk', 'lk_inv']:
+        elif self.loss_type in ['heter_lk', 'heter_lk_inv']:
             
             self.loss = self.nllk + self.l2*self.regularization 
             
@@ -981,8 +1009,7 @@ class mixture_statistic():
                     snapshot_steps,
                     bayes_steps,
                     early_stop_bool,
-                    early_stop_window,
-                    ):
+                    early_stop_window):
         
         # -- early stopping
         
