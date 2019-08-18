@@ -2,15 +2,13 @@
 
 import numpy as np
 
-# local 
-from utils_libs import *
-
-
 import tensorflow as tf
 # fix random seed
 np.random.seed(1)
 tf.set_random_seed(1)
 
+# local 
+from utils_libs import *
 
 # ----- data preparation 
 
@@ -163,15 +161,15 @@ def log_val_hyper_para(path,
      
     
 def log_test_performance(path, 
-                         error_tuple):
+                         error_tuple,
+                         ensemble_str):
     
     with open(path, "a") as text_file:
-        text_file.write("\n  test performance: %s \n"%(str(error_tuple)))
+        text_file.write("\n  test performance %s : %s \n"%(ensemble_str, str(error_tuple)))
         
         
 def log_null_loss_exception(epoch_errors, 
                             log_path):
-    
     
     # epoch_errors: [ [step, tr_metric, val_metric, epoch] ]    
     for i in epoch_errors:
@@ -185,33 +183,27 @@ def log_null_loss_exception(epoch_errors,
     return
 
 
-
-
 # ----- hyper-parameter searching 
 
 
 def parameter_manager(shape_x_dict, 
-                      hyper_para_names, 
-                      hyper_para_sample):
+                      hpara_dict):
     
-    hpara_dict = dict(zip(hyper_para_names, hyper_para_sample))
-    hpara_dict["batch_size"] = int(hpara_dict["batch_size"])
+    #hpara_dict = dict(zip(hyper_para_names, hyper_para_sample))
+    #hpara_dict["batch_size"] = int(hpara_dict["batch_size"])
     
     tr_dict = {}
     
     ''' ? np.ceil ? '''
-    tr_dict["batch_per_epoch"] = int(np.ceil(1.0*shape_x_dict["N"]/hpara_dict["batch_size"]))
+    tr_dict["batch_per_epoch"] = int(np.ceil(1.0*shape_x_dict["N"]/int(hpara_dict["batch_size"])))
     tr_dict["tr_idx"] = list(range(shape_x_dict["N"]))
         
-    
-    return hpara_dict, tr_dict
+    return tr_dict
 
 
-# hpara: hyper-parameter
-    
+# hpara: hyper-parameter    
 class hyper_para_grid_search(object):
     
-
     def __init__(self, 
                  hpara_range):
         
@@ -234,7 +226,6 @@ class hyper_para_grid_search(object):
         else:
             return None
         
-    
     def trial_search(self, 
                      idx, 
                      cur_n, 
@@ -270,19 +261,25 @@ class hyper_para_grid_search(object):
 class hyper_para_random_search(object):
     
     def __init__(self, 
-                 hpara_range, 
+                 hpara_range_dict, 
                  n_trial):
         # ?
         # np.random.seed(1)
         
-        self.n_hpara = len(hpara_range)
-        # lr_range, batch_size_range, l2_range
-        
         self.n_trial = n_trial
         self.cur_trial = 0
         
+        # lr_range, batch_size_range, l2_range        
         # [[lower_boud, up_bound]]
-        self.hpara_range = hpara_range
+        # self.hpara_range = hpara_range
+        
+        self.hpara_names = []
+        self.hpara_range = []
+        for tmp_name in hpara_range_dict:
+            self.hpara_range.append(hpara_range_dict[tmp_name])
+            self.hpara_names.append(tmp_name)
+            
+        self.n_hpara = len(self.hpara_range)
         
         # no duplication
         self.hpara_set = set()
@@ -299,10 +296,10 @@ class hyper_para_random_search(object):
         else:
             return None
         
-        
     def trial_search(self):
         
-        # return a list of hyper-para
+        # Return:
+        # a name-value hyper-para dictionary
         
         bool_duplicate = True
         
@@ -313,14 +310,17 @@ class hyper_para_random_search(object):
                 
                 tmp_hpara = tmp_hpara + (i[0] + (i[1] - i[0])*np.random.random(), )
             
-            
-            # 
+            # -- reconstruct the name-value hyper-para dictionary
             if tmp_hpara not in self.hpara_set:
                 
                 bool_duplicate = False
                 self.hpara_set.add(tmp_hpara)
                 
-                return list(tmp_hpara)
+                hpara_instance = {} # {hpara names: values}
+                for idx, tmp_hpara_val in enumerate(list(tmp_hpara)):
+                    hpara_instance[self.hpara_names[idx]] = tmp_hpara_val
+                
+                return hpara_instance
                 
         return
         
@@ -331,8 +331,7 @@ def hyper_para_selection(hpara_log,
                          metric_idx,
                          ):
     
-    # hpara_log - [ [lr, batch, l2, ..., burn_in_steps], [[step, tr_metric, val_metric, epoch]] ]
-    
+    # hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
     
     hp_err = []
     
@@ -347,19 +346,20 @@ def hyper_para_selection(hpara_log,
     # -- bayes steps
     full_steps = [k[0] for k in sorted_hp[0][1]]
     
-    tmp_burn_in_step = sorted_hp[0][0][-1]
+    tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
     bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
     
     
     # -- snapshot steps
     snapshot_steps = full_steps[:len(bayes_steps)]
     #snapshot_steps = [k[0] for k in sorted_hp[0][1]][:test_snapshot_num]
+
+                                                    
+    best_hyper_para_dict = sorted_hp[0][0]
+    #best_hyper_para = sorted_hp[0][0][:-1]
     
-    
-    best_hyper_para = sorted_hp[0][0][:-1]
-    
-    # best hp, best validation error, snapshot_steps, bayes_steps
-    return best_hyper_para,\
+    # best hp, snapshot_steps, bayes_steps
+    return best_hyper_para_dict,\
            snapshot_steps,\
            bayes_steps
            

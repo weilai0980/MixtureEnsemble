@@ -60,7 +60,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # ----- data and log paths
 
-path_data = "../dataset/bitcoin/market2_tar5_len10/"
+path_data = args.dataset
+#"../dataset/bitcoin/market2_tar5_len10/"
 
 path_log_error = "../results/mixture/log_error_mix.txt"
 
@@ -83,11 +84,7 @@ para_var_type = "square" # square, exp
 # always positive correlation of the feature to the variance
 para_share_type_gate = "no_share"
 # no_share, share, mix
-para_inference_type = ""
-# mixture, dense 
-
-# linear units:
-para_bool_bilinear = True
+para_bool_bilinear = True # for linear units
 
 # -- data
 
@@ -101,43 +98,14 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 
 para_loss_type = args.loss_type
 
-para_optimizer = "sg_mcmc_adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
+para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
 
 # -- training and validation
 
+para_model_type = 'linear'
 para_hpara_search = "random" # random, grid 
-
-para_lr_range = [0.001, ]
-para_batch_range = [64, 32, 16, 80, ]
-para_l2_range = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
-
-para_lstm_size = 0
-para_dense_n = 0
-
-'''
-para_hpara_range = {}
-
-para_hpara_range['linear'] = {}
-para_hpara_range['linear']['lr'] = [0.001, 0.001]  
-para_hpara_range['linear']['batch_size'] = [10, 80]
-para_hpara_range['linear']['l2'] = [1e-7, 0.01]
-para_hpara_range['linear']['bool_bilinear'] = para_bool_bilinear
-para_hpara_range['linear']['para_share_type'] = para_share_type_gate
-
-para_hpara_range['rnn'] = {}
-para_hpara_range['rnn']['lr'] = [0.001, 0.001]
-para_hpara_range['rnn']['batch_size'] = [10, 80]
-para_hpara_range['rnn']['l2'] = [1e-7, 0.01]
-para_hpara_range['rnn']['rnn_size'] =  [10, 100]
-para_hpara_range['rnn']['dense_num'] = [1, 1]
-
-para_hpara_search_list = ['lr', 'batch_size', 'l2']
-'''
-
-para_hpara_range = [[0.001, 0.001], [10, 80], [1e-7, 0.01]]
-para_hpara_list = ["lr", "batch_size", "l2"]
 para_hpara_n_trial = 5
 
 para_n_epoch = 80
@@ -145,6 +113,36 @@ para_burn_in_epoch = 20
 
 para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
 para_snapshot_Bernoulli = 0.001
+
+para_hpara_range = {}
+
+para_hpara_range['grid'] = {}
+para_hpara_range['grid']['linear'] = {}
+para_hpara_range['grid']['rnn'] = {}
+
+para_hpara_range['grid']['linear']['lr'] = [0.001, ] 
+para_hpara_range['grid']['linear']['batch_size'] = [64, 32, 16, 80, ]
+para_hpara_range['grid']['linear']['l2'] = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
+
+para_hpara_range['grid']['rnn']['lr'] = [0.001, ]
+para_hpara_range['grid']['rnn']['batch_size'] = [10, 20, 30, 40, 50, 60, 70, 80]
+para_hpara_range['grid']['rnn']['l2'] = [1e-7, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, ]
+para_hpara_range['grid']['rnn']['rnn_size'] =  [16, 32, 64, 128]
+para_hpara_range['grid']['rnn']['dense_num'] = [1, 2]
+
+para_hpara_range['random'] = {}
+para_hpara_range['random']['linear'] = {}
+para_hpara_range['random']['rnn'] = {}
+
+para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
+para_hpara_range['random']['linear']['batch_size'] = [10, 80]
+para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
+
+para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
+para_hpara_range['random']['rnn']['batch_size'] = [10, 80]
+para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.01]
+para_hpara_range['random']['rnn']['rnn_size'] =  [10, 100]
+para_hpara_range['random']['rnn']['dense_num'] = [1, 1]
 
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. test snapshot numbers are explicited determined 
@@ -155,7 +153,7 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 para_early_stop_bool = False
 para_early_stop_window = 0
 
-para_validation_metric = 'rmse'
+para_validation_metric = 'rmse' if args.loss_type == "mse" else 'nnllk'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 # -- regularization
@@ -192,6 +190,7 @@ def log_train(path):
         text_file.write("data batch augmentation : %s \n"%(para_batch_augment))
         text_file.write("\n")
         
+        text_file.write("model type : %s \n"%(para_model_type))
         text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
         text_file.write("target distribution type : %s \n"%(para_distr_type))
         text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
@@ -228,9 +227,10 @@ def log_train(path):
         text_file.write("\n")
         
         text_file.write("hyper-para search : %s \n"%(para_hpara_search))
-        text_file.write("hyper-para range : %s \n"%(str(para_hpara_range)))
+        text_file.write("hyper-para range : %s \n"%(str(para_hpara_range[para_hpara_search][para_model_type])))
         text_file.write("hyper-para random search trials : %s \n"%(str(para_hpara_n_trial)))
         
+        text_file.write("\n")
         text_file.write("epochs in total : %s \n"%(para_n_epoch))
         text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
         
@@ -263,6 +263,7 @@ def training_validating(xtr,
     Args:
     
     xtr: [num_src, N, T, D]
+         S: num_src
          N: number of data samples
          T: number of steps
          D: dimension at each time step
@@ -277,9 +278,6 @@ def training_validating(xtr,
        "lr": float,
        "batch_size": int
        "l2": float,
-       
-       "bool_bilinear": bool 
-       "para_share_type": bool
                            
        "lstm_size": int,
        "dense_num": int,
@@ -323,6 +321,8 @@ def training_validating(xtr,
                           model_distr_type = para_distr_type,
                           model_distr_para = para_distr_para,
                           model_var_type = para_var_type,
+                          model_bool_bilinear = para_bool_bilinear,
+                          model_para_share_type = para_share_type_gate,
                           bool_regu_mean = para_regu_mean,
                           bool_regu_var = para_regu_var,
                           bool_regu_gate = para_regu_gate,
@@ -369,9 +369,10 @@ def training_validating(xtr,
             for i in range(tr_batch_num):
                 
                 # batch data
-                batch_idx = tr_idx[ i*hyper_para_dict["batch_size"] : (i+1)*hyper_para_dict["batch_size"] ] 
+                batch_idx = tr_idx[ i*int(hyper_para_dict["batch_size"]) : (i+1)*int(hyper_para_dict["batch_size"]) ] 
                 
                 # shape: [S B T D]
+                # B: number of data instances in one batch
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
                 # [B 1]
                 batch_y = ytr[batch_idx]
@@ -390,7 +391,7 @@ def training_validating(xtr,
                 
                 # - batch-wise validation
             
-                # val_rmse, val_mae, val_mape, val_nnllk
+                # val_metric: [val_rmse, val_mae, val_mape, val_nnllk]
                 # nnllk: normalized negative log likelihood
                 
                 val_metric, monitor_metric = model.validation(xval,
@@ -401,7 +402,7 @@ def training_validating(xtr,
                                                               bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
                 if val_metric:
                     
-                    #tr_rmse, tr_mae, tr_mape, tr_nnllk
+                    # tr_metric [tr_rmse, tr_mae, tr_mape, tr_nnllk]
                     tr_metric, _ = model.inference(xtr,
                                                    ytr, 
                                                    bool_py_eval = False)
@@ -531,7 +532,6 @@ if __name__ == '__main__':
     # y [N 1], x [S [N T D]]    
     
     # if para_bool_target_seperate = yes, the last source corresponds to the auto-regressive target variable
-    
     tr_x, tr_y = data_reshape(tr_dta, 
                               bool_target_seperate = para_bool_target_seperate)
     
@@ -589,32 +589,31 @@ if __name__ == '__main__':
     
     if para_hpara_search == "random":
         
-        hpara_generator = hyper_para_random_search(para_hpara_range, 
+        hpara_generator = hyper_para_random_search(para_hpara_range[para_hpara_search][para_model_type], 
                                                    para_hpara_n_trial)
     elif para_hpara_search == "grid":
 
-        hpara_generator = hyper_para_grid_search([para_lr_range, para_batch_range, para_l2_range])
-        
+        hpara_generator = hyper_para_grid_search(para_hpara_range[para_hpara_search][para_model_type])
+            
     # -- begin hyper-para search
     
     hpara_log = []
     
-    hpara_dict = {} # hyper-para dictionary
-    tr_dict = {} # training para dictionary 
+    #hpara_dict = {} # hyper-para dictionary
     
     # sample one set-up of hyper-para
-    tmp_hpara = hpara_generator.one_trial()
-    
-    while tmp_hpara != None:
+    hpara_dict = hpara_generator.one_trial()
+    tr_dict = {} # training para dictionary 
+                                                 
+    while hpara_dict != None:
         
-        hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
-                                                hyper_para_names = para_hpara_list, 
-                                                hyper_para_sample = tmp_hpara)
+        tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
+                                    hpara_dict = hpara_dict)
         
-        hpara_dict["bool_bilinear"] = para_bool_bilinear
-        hpara_dict["para_share_type"] = para_share_type_gate
+        #hpara_dict["bool_bilinear"] = para_bool_bilinear
+        #hpara_dict["para_share_type"] = para_share_type_gate
  
-        # hp_: stands for hyper-parameter
+        # hp_: hyper-parameter
         # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
         
         hp_step_error, hp_epoch_time = training_validating(tr_x, 
@@ -629,9 +628,10 @@ if __name__ == '__main__':
                                                            retrain_snapshot_steps = [], 
                                                            retrain_bayes_steps = [])
         
-        #[ [lr, batch, l2, ..., burn_in_steps], [[step, tr_metric, val_metric, epoch]] ]
+        #[ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
         ''' ? '''
-        hpara_log.append([tmp_hpara + [para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1], hp_step_error])
+        hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
+        hpara_log.append([hpara_dict, hp_step_error])
         
         # -- prepare for the next trial
         
@@ -640,7 +640,7 @@ if __name__ == '__main__':
         #tf.set_random_seed(1)
         
         # sample the next hyper-para
-        tmp_hpara = hpara_generator.one_trial()
+        hpara_dict = hpara_generator.one_trial()
         
         # -- logging
         
@@ -664,12 +664,15 @@ if __name__ == '__main__':
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
     
-    hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict,
-                                            hyper_para_names = para_hpara_list,
-                                            hyper_para_sample = best_hpara)
+    tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
+                                hpara_dict = best_hpara)
     
-    hpara_dict["bool_bilinear"] = para_bool_bilinear
-    hpara_dict["para_share_type"] = para_share_type_gate
+    #hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict,
+    #                                        hyper_para_names = para_hpara_list,
+    #                                        hyper_para_sample = best_hpara)
+    
+    #hpara_dict["bool_bilinear"] = para_bool_bilinear
+    #hpara_dict["para_share_type"] = para_share_type_gate
     
     step_error, _ = training_validating(tr_x, 
                                         tr_y,
@@ -677,7 +680,7 @@ if __name__ == '__main__':
                                         val_y,
                                         dim_x = para_dim_x,
                                         steps_x = para_steps_x,                                      
-                                        hyper_para_dict = hpara_dict,
+                                        hyper_para_dict = best_hpara,
                                         training_dict = tr_dict,
                                         retrain_bool = True,
                                         retrain_snapshot_steps = snapshot_steps, 
@@ -705,7 +708,8 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, snapshot_steps[:1]])
+                         error_tuple = [error_tuple, snapshot_steps[:1]],
+                         ensemble_str = "One-shot")
     
     # -- best snapshot steps 
     
@@ -718,7 +722,8 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, snapshot_steps])
+                         error_tuple = [error_tuple, snapshot_steps],
+                         ensemble_str = "Top-rank")
     
     # -- bayesian steps
     
@@ -731,7 +736,8 @@ if __name__ == '__main__':
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, bayes_steps])
+                         error_tuple = [error_tuple, bayes_steps],
+                         ensemble_str = "Bayesian")
     
     # -- dump predictions on testing data
     

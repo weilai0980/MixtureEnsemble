@@ -15,7 +15,6 @@ def multi_src_predictor_linear(x,
                                bool_scope_reuse, 
                                str_scope,
                                para_share_logit):
-    
     # x: [S B T D]
     # bool_bias, bool_scope_reuse: [3]
     
@@ -80,7 +79,6 @@ def multi_src_logit_bilinear(x,
             
             # [S B D]*[S 1 D] - > [S B]
             h = tf.reduce_sum(tmp_h * w_r, 2)
-            
         
         elif para_share_type == "share":
             
@@ -97,13 +95,11 @@ def multi_src_logit_bilinear(x,
                                 shape = [1, 1], 
                                 initializer = tf.zeros_initializer())
             
-            
             # [S B T D] * [1 1 T 1] -> [S B D]
             tmp_h = tf.reduce_sum(x * w_l, 2)
             
             # [S B D]*[1 1 D] - > [S B]
             h = tf.reduce_sum(tmp_h * w_r, 2)
-            
             
         elif para_share_type == "mix":
             
@@ -126,25 +122,19 @@ def multi_src_logit_bilinear(x,
                                 shape = [num_src, 1], 
                                 initializer = tf.zeros_initializer())
             
-            
             # [B T D*S] * [1 T 1] -> [B S*D]
             tmp_h = tf.reduce_sum(tmpx_mix * w_l, 1)
             
             # [B S*D]*[S*D S] - > [S B]
             h = tf.transpose(tf.matmul(tmp_h, w_r), [1,0])
             
-        
         if bool_bias == True:
             
             # [S B]
             h = h + b
             
-        #else:
-        #    h = tf.reduce_sum(tmp_h * w_r, 2)
-            
            # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
-
 
 
 def multi_src_linear(x, 
@@ -153,7 +143,6 @@ def multi_src_linear(x,
                      bool_bias,
                      bool_scope_reuse, 
                      num_src):
-    
     # x: [S, B, T*D]
     # dim_x: T*D
     with tf.variable_scope(scope, 
@@ -186,7 +175,6 @@ def multi_src_bilinear(x,
                        bool_bias,
                        bool_scope_reuse,
                        num_src):
-    
     # x: [S, B, T, D]
     # shape_x: [T, D]
     with tf.variable_scope(scope, 
@@ -217,8 +205,6 @@ def multi_src_bilinear(x,
             
            # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
-
-
 
 
 def linear(x, 
@@ -283,4 +269,3 @@ def bilinear(x,
             
            # [B] 
     return tf.squeeze(h), tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r)) 
-

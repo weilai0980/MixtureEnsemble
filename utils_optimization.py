@@ -392,9 +392,7 @@ class sg_mcmc_adam(optimizer.Optimizer):
     v_t = state_ops.assign(v, v_scaled_g_values + v * beta2_t, use_locking = self._use_locking)
     
     v_sqrt = math_ops.sqrt(v_t)
-    
     #var_update = state_ops.assign_sub(var, 1.0*lr * m_t / (v_sqrt + epsilon_t), use_locking = self._use_locking)
-    
     
     # ----- inject noise
     
@@ -414,16 +412,13 @@ class sg_mcmc_adam(optimizer.Optimizer):
     #inject_noise = rnd * math_ops.sqrt(1.0 * lr/(v_sqrt + epsilon_t))
     
     """ ? 1.0*lr leads to inferior performance ? """
-    inject_noise = rnd * math_ops.sqrt(lr * (1.0 - beta1_t) * (1.0-beta1_t)/(v_sqrt + epsilon_t))
+    inject_noise = rnd * math_ops.sqrt(lr * (1.0 - beta1_t) * (1.0 - beta1_t)/(v_sqrt + epsilon_t))
     
     ''' beta1 on noise '''
-    
-    
     
     # -----
     """ ? 1.0 """
     var_update = state_ops.assign_sub(var, lr * m_t/(v_sqrt + epsilon_t) - inject_noise, use_locking = self._use_locking)
-    
     
     return control_flow_ops.group(*[var_update, m_t, v_t]) 
     
