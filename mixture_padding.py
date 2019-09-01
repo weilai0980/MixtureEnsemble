@@ -69,6 +69,7 @@ class mixture_statistic():
                     hyper_para_dict,
                     x_dim,
                     x_steps,
+                    model_type,
                     model_distr_type,
                     model_distr_para,
                     model_var_type,
@@ -92,6 +93,7 @@ class mixture_statistic():
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
                     optimization_burn_in_step,
+                    optimization_warmup_step
                     ):
         
         '''
@@ -182,9 +184,10 @@ class mixture_statistic():
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
         self.bool_regu_imbalance = bool_regu_imbalance
         
-        self.optimization_method =   optimization_method
+        self.optimization_method = optimization_method
         self.optimization_lr_decay = optimization_lr_decay
         self.optimization_lr_decay_steps = optimization_lr_decay_steps 
+        self.optimization_warmup_step = optimization_warmup_step
         
         self.bool_regu_mean = bool_regu_mean
         self.bool_regu_var = bool_regu_var
@@ -201,7 +204,8 @@ class mixture_statistic():
             # [S B T-1 D]
             curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, x_steps - 1, -1])
             
-            if model_bool_bilinear == True:
+            # model_bool_bilinear
+            if model_type == "linear":
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
@@ -223,9 +227,15 @@ class mixture_statistic():
                                            bool_scope_reuse= [True, True, True], 
                                            str_scope = "",
                                            para_share_logit = model_para_share_type)
+            
+            elif model_type == "rnn":
+                
+                a = 1
+                
         else:
             
-            if model_bool_bilinear == True:
+            if model_type == "linear":
+            #if model_bool_bilinear == True:
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
@@ -235,8 +245,25 @@ class mixture_statistic():
                                            dim = x_dim, 
                                            bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                            bool_scope_reuse= [False, False, False], 
-                                           str_scope = "", 
+                                           str_scope = "linear", 
                                            para_share_logit = model_para_share_type)
+                
+            elif model_type == "rnn":
+                
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
+                multi_src_predictor_rnn(x = self.x, 
+                                        n_src = self.num_src,
+                                        n_step = x_steps, 
+                                        n_dim = x_dim, 
+                                        bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
+                                        bool_scope_reuse = [False, False, False],
+                                        str_scope = "rnn"
+                                        rnn_size_layers = [hyper_para_dict['rnn_size']],
+                                        rnn_cell_type = "gru",
+                                        dropout_keep = hyper_para_dict['dropout_keep_prob'],
+                                        dense_num = hyper_para_dict['dense_num'])
+                
             '''
             else:
             
@@ -555,6 +582,7 @@ class mixture_statistic():
             
             # elif self.loss_type == 'stacking':
             
+            
             ''' 
             elif self.loss_type == 'lk_var_mix':
                 
@@ -815,14 +843,42 @@ class mixture_statistic():
         
         if self.optimization_lr_decay == True:
             
-            global_step = tf.Variable(0, 
-                                      trainable = False)
+            #global_step = tf.Variable(0, 
+            #                          trainable = False)
+            
+            global_step = tf.train.get_or_create_global_step()
             
             tmp_learning_rate = tf.train.exponential_decay(self.lr, 
                                                            global_step,
                                                            decay_steps = self.optimization_lr_decay_steps, 
                                                            decay_rate = 0.96, 
                                                            staircase = True)
+            
+            '''
+            learning_rate = tf.train.polynomial_decay(learning_rate,
+                                                      global_step,
+                                                      num_train_steps,
+                                                      end_learning_rate=0.0,
+                                                      power=1.0,
+                                                      cycle=False)
+            '''
+            
+            if self.optimization_warmup_step > 0:
+                
+                global_steps_int = tf.cast(global_step, tf.int32)
+                warmup_steps_int = tf.constant(self.optimization_warmup_step, dtype=tf.int32)
+
+                global_steps_float = tf.cast(global_steps_int, tf.float32)
+                warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
+
+                warmup_percent_done = global_steps_float / warmup_steps_float
+                warmup_learning_rate = self.lr * warmup_percent_done
+                
+                is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
+                
+                tmp_learning_rate = ((1.0 - is_warmup) * tmp_learning_rate + is_warmup * warmup_learning_rate)
+            
+            
         else:
             tmp_learning_rate = self.lr
         
@@ -845,7 +901,13 @@ class mixture_statistic():
                                                    momentum = 0.9,
                                                    use_nesterov = True)
             
-        # -- stochastic gradient Monto-Carlo Markov Chain
+        elif self.optimization_method == 'adamW':
+            
+            tmp_train = tf.contrib.opt.AdamWOptimizer(weight_decay = 0.001,
+                                                      learning_rate = tmp_learning_rate)
+            
+        # -- SG-MCMC
+        # stochastic gradient Monto-Carlo Markov Chain
         elif self.optimization_method == 'sg_mcmc_adam':
             
             tmp_train = sg_mcmc_adam(learning_rate = tmp_learning_rate)

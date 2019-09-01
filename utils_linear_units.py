@@ -15,8 +15,13 @@ def multi_src_predictor_linear(x,
                                bool_scope_reuse, 
                                str_scope,
                                para_share_logit):
-    # x: [S B T D]
-    # bool_bias, bool_scope_reuse: [3]
+    '''
+    Argu.:
+      x: [S B T D]
+      bool_bias: [bool_bias_mean, bool_bias_var, bool_bias_gate]
+      bool_scope_reuse: [mean, var, gate]
+    
+    '''
     
     #[S B]
     tmp_mean, regu_mean = multi_src_bilinear(x,
@@ -203,7 +208,7 @@ def multi_src_bilinear(x,
         else:
             h = tf.reduce_sum(tmp_h * w_r, 2)
             
-           # [S B] 
+         # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
 

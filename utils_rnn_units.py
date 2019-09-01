@@ -12,10 +12,125 @@ import tensorflow as tf
 from utils_libs import *
 
 
-# ---- mv dense layers ---- 
+def multi_src_predictor_rnn(x, 
+                            n_src, 
+                            n_step, 
+                            n_dim, 
+                            bool_bias, 
+                            bool_scope_reuse, 
+                            str_scope
+                            rnn_size_layers,
+                            rnn_cell_type,
+                            dropout_keep,
+                            dense_num
+                            ):
+    
+    # shape: [S B T D]
+    x_list = tf.split(x, 
+                      num_or_size_splits = n_src, 
+                      axis = 0)
+    h_list = []
+    
+    for i in range(n_src):
+        
+        h, _  = plain_rnn(x,
+                          dim_layers = rnn_size_layers,
+                          scope = str_scope + "_rnn_" + str(i),
+                          dropout_keep_prob = dropout_keep,
+                          rnn_cell_type = cell_type)
+        
+        # obtain the last hidden state
+        # [B T D] -> [T B D]
+        tmp_h = tf.transpose(h, [1,0,2])
+        # [S B d]
+        h_list.append(tmp_h[-1])
+    
+    # [S B d]
+    h_src = tf.stack(h_list, 0)
+    
+    # --- mean
+    
+    # [S B d]
+    h_mean, reg_mean_h, dim_src_mean = multi_mv_dense(num_layers = dense_num,
+                                                      keep_prob = dropout_keep,
+                                                      h_vari = h_src,
+                                                      dim_vari = rnn_size_layers[-1],
+                                                      scope = str_scope + "_mean_h",
+                                                      num_vari = n_src,
+                                                      bool_activation = True,
+                                                      max_norm_regul = max_norm_regul,
+                                                      regul_type = "l2")
+    # [S B 1]        
+    tmp_mean, regu_mean_pred = mv_dense(h_vari = h_mean, 
+                                        dim_vari = dim_src_mean, 
+                                        scope = str_scope + "_mean_pred", 
+                                        num_vari = n_src, 
+                                        dim_to = 1, 
+                                        bool_activation = False, 
+                                        max_norm_regul = max_norm_regul, 
+                                        regul_type = "l2")
+    
+    regu_mean = reg_mean_h + regu_mean_pred
+    
+    # --- variance
+    
+    # [S B d]
+    h_var, reg_var_h, dim_src_var = multi_mv_dense(num_layers = dense_num,
+                                                   keep_prob = dropout_keep,
+                                                   h_vari = h_src,
+                                                   dim_vari = rnn_size_layers[-1],
+                                                   scope = str_scope + "_var_h",
+                                                   num_vari = n_src,
+                                                   bool_activation = True,
+                                                   max_norm_regul = max_norm_regul,
+                                                   regul_type = "l2")
+    # [S B 1]         
+    tmp_var, regu_var_pred = mv_dense(h_vari = h_var, 
+                                      dim_vari = dim_src_var, 
+                                      scope = str_scope + "_var_pred", 
+                                      num_vari = n_src, 
+                                      dim_to = 1, 
+                                      bool_activation = False, 
+                                      max_norm_regul = max_norm_regul, 
+                                      regul_type = "l2")
+    
+    regu_var = reg_var_h + regu_var_pred
+    
+    # --- gate
+    
+    # [S B d] -> [S B 1]         
+    tmp_logit, regu_logit = mv_dense(h_vari = h_src, 
+                                     dim_vari = rnn_size_layers[-1], 
+                                     scope = str_scope + "_logit", 
+                                     num_vari = n_src, 
+                                     dim_to = 1, 
+                                     bool_activation = True, 
+                                     max_norm_regul = max_norm_regul, 
+                                     regul_type = "l2")
+    
+    return tf.squeeze(tmp_mean), tf.squeeze(regu_mean), tf.squeeze(tmp_var), regu_var, tmp_logit, regu_logit
 
-def multi_mv_dense( num_layers, keep_prob, h_vari, dim_vari, scope, num_vari, \
-                   bool_no_activation, max_norm_regul, regul_type ):
+# ---- Multi variable dense layers ---- 
+
+def multi_mv_dense(num_layers,
+                   keep_prob,
+                   h_vari,
+                   dim_vari,
+                   scope,
+                   num_vari,
+                   bool_activation,
+                   max_norm_regul,
+                   regul_type):
+    
+    '''
+    h_vari: [V B D] -> [V B d] 
+
+    Argu.:
+      h_vari: [V B D]
+      dim_vari: int
+      num_vari: int
+      dim_to: int
+    '''
     
     in_dim_vari = dim_vari
     out_dim_vari = int(dim_vari/2)
@@ -31,12 +146,14 @@ def multi_mv_dense( num_layers, keep_prob, h_vari, dim_vari, scope, num_vari, \
             h_mv_input = tf.nn.dropout(h_mv_input, tf.gather(keep_prob, 0))
             # h_mv [V B d]
             # ? max norm constrains
-            h_mv_input, tmp_regu_dense = mv_dense(h_mv_input, 
-                                                  in_dim_vari,
-                                                  scope+str(i),
-                                                  num_vari,
-                                                  out_dim_vari,
-                                                  False, max_norm_regul, regul_type)
+            h_mv_input, tmp_regu_dense = mv_dense(h_vari = h_mv_input, 
+                                                  dim_vari = in_dim_vari,
+                                                  scope = scope + str(i),
+                                                  num_vari = num_vari,
+                                                  dim_to = out_dim_vari,
+                                                  bool_activation = False, 
+                                                  max_norm_regul, 
+                                                  regul_type)
             
             reg_mv_dense += tmp_regu_dense
             
@@ -45,24 +162,40 @@ def multi_mv_dense( num_layers, keep_prob, h_vari, dim_vari, scope, num_vari, \
             
     return h_mv_input, reg_mv_dense, in_dim_vari
             
-
 # with max-norm regularization 
-def mv_dense( h_vari, dim_vari, scope, num_vari, dim_to, bool_no_activation, max_norm_regul, regul_type ):
+def mv_dense(h_vari, 
+             dim_vari, 
+             scope, 
+             num_vari, 
+             dim_to, 
+             bool_activation, 
+             max_norm_regul, 
+             regul_type):
     
-    # argu [V B D]
+    '''
+    h_vari: [V B D] -> [V B d] 
+
+    Argu.:
+      h_vari: [V B D]
+      dim_vari: int
+      num_vari: int
+      dim_to: int
+    '''
     
     with tf.variable_scope(scope):
         
         # [V 1 D d]
-        w = tf.get_variable('w', [ num_vari, 1, dim_vari, dim_to ], initializer=tf.contrib.layers.xavier_initializer())
+        w = tf.get_variable('w', [num_vari, 1, dim_vari, dim_to], initializer=tf.contrib.layers.xavier_initializer())
         # [V 1 1 d]
-        b = tf.Variable( tf.random_normal([ num_vari, 1, 1, dim_to ]) )
+        b = tf.Variable(tf.random_normal([num_vari, 1, 1, dim_to]))
         
         # [V B D 1]
         h_expand = tf.expand_dims(h_vari, -1)
         
         if max_norm_regul > 0:
-            clipped = tf.clip_by_norm(w, clip_norm = max_norm_regul, axes = 2)
+            clipped = tf.clip_by_norm(w, 
+                                      clip_norm = max_norm_regul, 
+                                      axes = 2)
             clip_w = tf.assign(w, clipped)
             
             tmp_h =  tf.reduce_sum(h_expand * clip_w + b, 2)
@@ -72,22 +205,29 @@ def mv_dense( h_vari, dim_vari, scope, num_vari, dim_to, bool_no_activation, max
             
         # [V B D 1] * [V 1 D d] -> [V B d]
         # ?
-        if bool_no_activation == True:
-            h = tmp_h
+        if bool_activation == True:
+            h = tf.nn.relu(tmp_h)
         else:
-            h = tf.nn.relu( tmp_h ) 
+            h = tmp_h
             
         if regul_type == 'l2':
             return h, tf.nn.l2_loss(w) 
         
         elif regul_type == 'l1':
-            return h, tf.reduce_sum( tf.abs(w) ) 
+            return h, tf.reduce_sum(tf.abs(w)) 
         
         else:
             return '[ERROR] regularization type'
 
 # with max-norm regularization 
-def mv_dense_share( h_vari, dim_vari, scope, num_vari, dim_to, bool_no_activation, max_norm_regul, regul_type ):
+def mv_dense_share(h_vari, 
+                   dim_vari, 
+                   scope, 
+                   num_vari, 
+                   dim_to, 
+                   bool_no_activation, 
+                   max_norm_regul, 
+                   regul_type):
     
     # argu [V B D]
     
@@ -100,6 +240,7 @@ def mv_dense_share( h_vari, dim_vari, scope, num_vari, dim_to, bool_no_activatio
         
         
         if max_norm_regul > 0:
+            
             clipped = tf.clip_by_norm(w, clip_norm = max_norm_regul, axes = 0)
             clip_w = tf.assign(w, clipped)
             
@@ -127,11 +268,13 @@ def mv_dense_share( h_vari, dim_vari, scope, num_vari, dim_to, bool_no_activatio
         else:
             return '[ERROR] regularization type'
 
-
-
-# ---- residual and plain dense layers ----  
+# ----- RNN layers -----  
     
-def res_lstm(x, hidden_dim, n_layers, scope, dropout_keep_prob):
+def res_lstm(x, 
+             hidden_dim, 
+             n_layers, 
+             scope, 
+             dropout_keep_prob):
     
     #dropout
     #x = tf.nn.dropout(x, dropout_keep_prob)
@@ -155,7 +298,21 @@ def res_lstm(x, hidden_dim, n_layers, scope, dropout_keep_prob):
              
     return hiddens, state
 
-def plain_rnn(x, dim_layers, scope, dropout_keep_prob, cell_type):
+def plain_rnn(x, 
+              dim_layers, 
+              scope, 
+              dropout_keep_prob, 
+              cell_type):
+    
+    '''
+    Argu.:
+    
+      x: [B T D] 
+      dim_layers: [int]
+      dropout_keep_prob: float 
+      cell_type: lstm, gru
+      
+    '''
     
     with tf.variable_scope(scope):
         
@@ -174,7 +331,6 @@ def plain_rnn(x, dim_layers, scope, dropout_keep_prob, cell_type):
             
         hiddens, state = tf.nn.dynamic_rnn(cell = rnn_cell, inputs = x, dtype = tf.float32)
         
-        
     for i in range(1,len(dim_layers)):
         
         with tf.variable_scope(scope+str(i)):
@@ -188,7 +344,6 @@ def plain_rnn(x, dim_layers, scope, dropout_keep_prob, cell_type):
                 tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[i], \
                                                   kernel_initializer= tf.contrib.keras.initializers.glorot_normal())
             
-            
             # dropout on both input and hidden states
             rnn_cell = tf.nn.rnn_cell.DropoutWrapper(tmp_cell,\
                                                      input_keep_prob = tf.gather(dropout_keep_prob, 0), \
@@ -198,8 +353,14 @@ def plain_rnn(x, dim_layers, scope, dropout_keep_prob, cell_type):
                 
     return hiddens, state 
 
-    
-def res_dense(x, x_dim, hidden_dim, n_layers, scope, dropout_keep_prob):
+# ----- DENSE layers -----  
+
+def res_dense(x, 
+              x_dim, 
+              hidden_dim, 
+              n_layers, 
+              scope, 
+              dropout_keep_prob):
     
         #dropout
         x = tf.nn.dropout(x, dropout_keep_prob)
@@ -233,7 +394,12 @@ def res_dense(x, x_dim, hidden_dim, n_layers, scope, dropout_keep_prob):
         
         return h, regularization
     
-def plain_dense(x, x_dim, dim_layers, scope, dropout_keep_prob, max_norm_regul):
+def plain_dense(x, 
+                x_dim, 
+                dim_layers, 
+                scope, 
+                dropout_keep_prob, 
+                max_norm_regul):
     
         #dropout
         x = tf.nn.dropout(x, dropout_keep_prob)
@@ -288,7 +454,12 @@ def plain_dense(x, x_dim, dim_layers, scope, dropout_keep_prob, max_norm_regul):
                 
         return h, regularization
 
-def plain_dense_leaky(x, x_dim, dim_layers, scope, dropout_keep_prob, alpha):
+def plain_dense_leaky(x, 
+                      x_dim, 
+                      dim_layers, 
+                      scope, 
+                      dropout_keep_prob, 
+                      alpha):
     
         #dropout
         x = tf.nn.dropout(x, dropout_keep_prob)
@@ -330,7 +501,12 @@ def plain_dense_leaky(x, x_dim, dim_layers, scope, dropout_keep_prob, alpha):
         return h, regularization
     
     
-def multi_dense(x, x_dim, num_layers, scope, dropout_keep_prob, max_norm_regul):
+def multi_dense(x, 
+                x_dim, 
+                num_layers, 
+                scope, 
+                dropout_keep_prob, 
+                max_norm_regul):
     
         in_dim = x_dim
         out_dim = int(in_dim/2)

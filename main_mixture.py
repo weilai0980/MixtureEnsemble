@@ -98,9 +98,10 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 
 para_loss_type = args.loss_type
 
-para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd 
+para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10
+para_optimizer_lr_warmup_epoch = 10
 
 # -- training and validation
 
@@ -143,6 +144,7 @@ para_hpara_range['random']['rnn']['batch_size'] = [10, 80]
 para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [10, 100]
 para_hpara_range['random']['rnn']['dense_num'] = [1, 1]
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.6, 1.0]
 
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. test snapshot numbers are explicited determined 
@@ -224,6 +226,7 @@ def log_train(path):
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("learning rate decay : %s \n"%(str(para_optimizer_lr_decay)))
         text_file.write("learning rate decay epoch : %s \n"%(str(para_optimizer_lr_decay_epoch)))
+        text_file.write("learning rate warmup epoch : %s \n"%(str(para_optimizer_lr_warmup_epoch)))
         text_file.write("\n")
         
         text_file.write("hyper-para search : %s \n"%(para_hpara_search))
@@ -341,6 +344,7 @@ def training_validating(xtr,
                           optimization_lr_decay = para_optimizer_lr_decay,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hyper_para_dict["batch_size"]),
                           optimization_burn_in_step = para_burn_in_epoch,
+                          optimization_warmup_step = para_optimizer_lr_warmup_epoch*training_dict["batch_per_epoch"] - 1
                          )
         
         model.train_ini()
@@ -369,7 +373,7 @@ def training_validating(xtr,
             for i in range(tr_batch_num):
                 
                 # batch data
-                batch_idx = tr_idx[ i*int(hyper_para_dict["batch_size"]) : (i+1)*int(hyper_para_dict["batch_size"]) ] 
+                batch_idx = tr_idx[i*int(hyper_para_dict["batch_size"]) : (i+1)*int(hyper_para_dict["batch_size"])] 
                 
                 # shape: [S B T D]
                 # B: number of data instances in one batch
@@ -609,10 +613,6 @@ if __name__ == '__main__':
         
         tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
                                     hpara_dict = hpara_dict)
-        
-        #hpara_dict["bool_bilinear"] = para_bool_bilinear
-        #hpara_dict["para_share_type"] = para_share_type_gate
- 
         # hp_: hyper-parameter
         # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
         
@@ -659,7 +659,7 @@ if __name__ == '__main__':
     # ----- re-train
     
     # best hyper-para and snapshot set 
-    best_hpara, snapshot_steps, bayes_steps = hyper_para_selection(hpara_log, 
+    best_hpara, snapshot_steps, bayes_steps, snapshot_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
                                                                    val_aggreg_num = para_val_aggreg_num, 
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
@@ -670,9 +670,6 @@ if __name__ == '__main__':
     #hpara_dict, tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict,
     #                                        hyper_para_names = para_hpara_list,
     #                                        hyper_para_sample = best_hpara)
-    
-    #hpara_dict["bool_bilinear"] = para_bool_bilinear
-    #hpara_dict["para_share_type"] = para_share_type_gate
     
     step_error, _ = training_validating(tr_x, 
                                         tr_y,
@@ -708,7 +705,7 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, snapshot_steps[:1]],
+                         error_tuple = [error_tuple],
                          ensemble_str = "One-shot")
     
     # -- best snapshot steps 
@@ -722,7 +719,7 @@ if __name__ == '__main__':
                              num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, snapshot_steps],
+                         error_tuple = [error_tuple],
                          ensemble_str = "Top-rank")
     
     # -- bayesian steps
@@ -736,7 +733,7 @@ if __name__ == '__main__':
                                     num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
     
     log_test_performance(path = path_log_error, 
-                         error_tuple = [error_tuple, bayes_steps],
+                         error_tuple = [error_tuple],
                          ensemble_str = "Bayesian")
     
     # -- dump predictions on testing data
@@ -744,3 +741,6 @@ if __name__ == '__main__':
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
     
+    # -- for test
+    
+    print("--- !!! --- \n", snapshot_steps_features, bayes_steps_features)

@@ -13,7 +13,7 @@ If the code helps your research, please cite our work.
 ## Prerequisites
 
 - Linux
-- Library: TensorFlow 1.0
+- Library: TensorFlow 1.13
 - GPU is strongly recommended when training.
 
 ## Notes
