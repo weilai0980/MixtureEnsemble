@@ -18,7 +18,6 @@ from tensorflow.contrib import rnn
 from utils_libs import *
 from utils_training import *
 
-
 # ----- arguments from command line
 
 import argparse
@@ -50,13 +49,11 @@ if args.data_mode == "src_raw":
 
 elif args.data_mode == "src_padding": 
     from mixture_padding import *
-    
 
 # ------ GPU set-up in multi-GPU environment
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-
 
 # ----- data and log paths
 
@@ -68,7 +65,6 @@ path_log_error = "../results/mixture/log_error_mix.txt"
 path_model = "../results/mixture/"
 
 path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
-
 
 # ----- hyper-parameters set-up
 
@@ -94,18 +90,10 @@ para_bool_target_seperate = False
 para_batch_augment = False
 para_x_shape_acronym = ["src", "N", "T", "D"]
 
-# -- optimization
-
-para_loss_type = args.loss_type
-
-para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
-para_optimizer_lr_decay = True
-para_optimizer_lr_decay_epoch = 10
-para_optimizer_lr_warmup_epoch = 10
 
 # -- training and validation
 
-para_model_type = 'linear'
+para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
 para_hpara_n_trial = 5
 
@@ -143,8 +131,10 @@ para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['rnn']['batch_size'] = [10, 80]
 para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [10, 100]
-para_hpara_range['random']['rnn']['dense_num'] = [1, 1]
+para_hpara_range['random']['rnn']['dense_num'] = [0, 2]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.6, 1.0]
+para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
+
 
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. test snapshot numbers are explicited determined 
@@ -157,6 +147,15 @@ para_early_stop_window = 0
 
 para_validation_metric = 'rmse' if args.loss_type == "mse" else 'nnllk'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
+
+# -- optimization
+
+para_loss_type = args.loss_type
+
+para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
+para_optimizer_lr_decay = True
+para_optimizer_lr_decay_epoch = 10
+para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
 
 # -- regularization
 
@@ -176,7 +175,6 @@ para_bool_global_bias = False
 
 para_latent_dependence = args.latent_dependence
 para_latent_prob_type = args.latent_prob_type
-
 
 def log_train(path):
     
@@ -247,7 +245,6 @@ def log_train(path):
         text_file.write("early-stoping look-back window : %s \n"%(para_early_stop_window))
         
         text_file.write("\n\n")
-
 
 # ----- training and evalution
     
@@ -321,6 +318,7 @@ def training_validating(xtr,
         model.network_ini(hyper_para_dict,
                           x_dim = dim_x,
                           x_steps = steps_x, 
+                          model_type = para_model_type, 
                           model_distr_type = para_distr_type,
                           model_distr_para = para_distr_para,
                           model_var_type = para_var_type,

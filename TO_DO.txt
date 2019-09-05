@@ -407,7 +407,7 @@ Training:
   l1
   
   Optimization:
-   
+    RAdam
     LookAhead
     AMSgrad 
     
@@ -432,6 +432,8 @@ Inference:
   remove outliers 
   
   ** truncated Gaussian on source contribution uncertainty
+  
+  kernel density inference 
 
 
 Bayesian:

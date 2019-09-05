@@ -11,6 +11,7 @@ from scipy.optimize import fmin_slsqp
 # local packages
 from utils_libs import *
 from utils_linear_units import *
+from utils_rnn_units import *
 from utils_training import *
 from utils_optimization import *
 
@@ -252,17 +253,18 @@ class mixture_statistic():
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
-                multi_src_predictor_rnn(x = self.x, 
+                multi_src_predictor_rnn(x = self.x,
                                         n_src = self.num_src,
-                                        n_step = x_steps, 
-                                        n_dim = x_dim, 
+                                        n_step = x_steps,
+                                        n_dim = x_dim,
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
-                                        str_scope = "rnn"
-                                        rnn_size_layers = [hyper_para_dict['rnn_size']],
+                                        str_scope = "rnn",
+                                        rnn_size_layers = [int(hyper_para_dict['rnn_size'])],
                                         rnn_cell_type = "gru",
                                         dropout_keep = hyper_para_dict['dropout_keep_prob'],
-                                        dense_num = hyper_para_dict['dense_num'])
+                                        dense_num = int(hyper_para_dict['dense_num']),
+                                        max_norm_cons = hyper_para_dict['max_norm_cons'])
                 
             '''
             else:
@@ -330,7 +332,7 @@ class mixture_statistic():
             
             # global bias term
         
-            global_b = tf.get_variable('global_b', 
+            global_b = tf.get_variable('global_b',
                                        shape = [1, ],
                                        initializer = tf.zeros_initializer())
             
@@ -482,6 +484,7 @@ class mixture_statistic():
                 
                 self.nllk_bound = self.nllk
                 
+                
             elif self.loss_type == 'heter_lk_inv':
                 
                 # component variance
@@ -501,6 +504,7 @@ class mixture_statistic():
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 self.nllk_bound = self.nllk
+                
                 
             elif self.loss_type == 'homo_lk_inv':
                 
@@ -853,16 +857,7 @@ class mixture_statistic():
                                                            decay_steps = self.optimization_lr_decay_steps, 
                                                            decay_rate = 0.96, 
                                                            staircase = True)
-            
-            '''
-            learning_rate = tf.train.polynomial_decay(learning_rate,
-                                                      global_step,
-                                                      num_train_steps,
-                                                      end_learning_rate=0.0,
-                                                      power=1.0,
-                                                      cycle=False)
-            '''
-            
+            # learning rate warm-up
             if self.optimization_warmup_step > 0:
                 
                 global_steps_int = tf.cast(global_step, tf.int32)
