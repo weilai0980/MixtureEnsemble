@@ -335,6 +335,9 @@ Data:
 
 Model:
 
+  posterior for inference
+  temporal dependence
+
   *** Versatility
   
   feature interaction component 

@@ -1,12 +1,11 @@
 #!/usr/bin/python
 
 import numpy as np
+from scipy.stats import truncnorm
+from scipy.optimize import fmin_slsqp
 
 import tensorflow as tf
 import tensorflow_probability as tfp
-
-from scipy.stats import truncnorm
-from scipy.optimize import fmin_slsqp
 
 # local packages
 from utils_libs import *
@@ -18,7 +17,6 @@ from utils_optimization import *
 # reproducibility by fixing the random seed
 # np.random.seed(1)
 # tf.set_random_seed(1)
-
 
 # ----- Mixture statistic -----
 
@@ -32,9 +30,9 @@ class mixture_statistic():
         '''
         Args:
         
-        session: tensorflow session
+          session: tensorflow session
         
-        loss_type: string, type of loss functions, {mse, lk, lk_inv, elbo, ...}
+          loss_type: string, type of loss functions, {mse, lk, lk_inv, elbo, ...}
         
         '''
         
@@ -65,9 +63,9 @@ class mixture_statistic():
         
         self.stored_step_id = []
         
-        
     def network_ini(self,
                     hyper_para_dict,
+                    x_src_seperated,
                     x_dim,
                     x_steps,
                     model_type,
@@ -96,7 +94,6 @@ class mixture_statistic():
                     optimization_burn_in_step,
                     optimization_warmup_step
                     ):
-        
         '''
         Arguments:
         
@@ -175,12 +172,25 @@ class mixture_statistic():
         #self.bool_log = y_bool_log
         self.distr_type = model_distr_type
         
-        # initialize placeholders
+        # -- initialize placeholders
         
         self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
-
-        # shape: [S B T D]
-        self.x = tf.placeholder(tf.float32, [self.num_src, None, x_steps, x_dim], name = 'x')
+        
+        if x_src_seperated == True:
+            # shape: [S, B T D]
+            self.x = []
+            for i in range(self.num_src):
+                self.x.append(tf.placeholder(tf.float32, 
+                                             [None, x_steps[i], x_dim[i]], 
+                                             name = 'x' + str(i)))
+        else:
+            # shape: [S B T D]
+            self.x = tf.placeholder(tf.float32, 
+                                    [self.num_src, None, x_steps, x_dim], 
+                                    name = 'x')
+            
+        # -- hyper-parameters
+        self.x_src_seperated = x_src_seperated
         
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
         self.bool_regu_imbalance = bool_regu_imbalance
@@ -254,9 +264,8 @@ class mixture_statistic():
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
                 multi_src_predictor_rnn(x = self.x,
+                                        x_src_seperated = x_src_seperated,
                                         n_src = self.num_src,
-                                        n_step = x_steps,
-                                        n_dim = x_dim,
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
@@ -266,72 +275,12 @@ class mixture_statistic():
                                         dense_num = int(hyper_para_dict['dense_num']),
                                         max_norm_cons = hyper_para_dict['max_norm_cons'])
                 
-            '''
-            else:
-            
-                if latent_dependence != "none":
-                
-                    tmp_pre_x = tf.reshape(pre_x[i], [-1, (steps_x_list[i]-1) * dim_x_list[i]])
-                    tmp_curr_x = tf.reshape(curr_x[i], [-1, (steps_x_list[i]-1) * dim_x_list[i]])
-                    
-                    #[B]
-                    tmp_mean, tmp_regu_mean = linear(tmp_curr_x, 
-                                                     steps_x_list[i]*dim_x_list[i], 
-                                                     'mean' + str(i), 
-                                                     bool_bias = True,
-                                                     bool_scope_reuse = False)
-                
-                    tmp_var, tmp_regu_var = linear(tmp_curr_x, 
-                                                   steps_x_list[i]*dim_x_list[i], 
-                                                   'var' + str(i), 
-                                                   bool_bias = True,
-                                                   bool_scope_reuse = False)
-                    
-                    
-                    #[B]
-                    tmp_curr_logit, tmp_regu_gate = linear(tmp_curr_x,
-                                                           steps_x_list[i]*dim_x_list[i], 
-                                                           'gate' + str(i),
-                                                           bool_bias = True, 
-                                                           bool_scope_reuse = False) 
-                    #[B]
-                    tmp_pre_logit, _ = linear(tmp_pre_x,
-                                              steps_x_list[i]*dim_x_list[i], 
-                                              'gate' + str(i),
-                                              bool_bias = True,
-                                              bool_scope_reuse = True)
-                    
-                else:
-                    
-                    tmp_x = tf.reshape(self.x_ph_list[i], [-1, steps_x_list[i] * dim_x_list[i]])
-                    
-                    #[B]
-                    tmp_mean, tmp_regu_mean = linear(tmp_x, 
-                                                     steps_x_list[i]*dim_x_list[i], 
-                                                     'mean' + str(i), 
-                                                     bool_bias = True,
-                                                     bool_scope_reuse = False)
-                
-                    tmp_var, tmp_regu_var = linear(tmp_x, 
-                                                   steps_x_list[i]*dim_x_list[i], 
-                                                   'var' + str(i), 
-                                                   bool_bias = True,
-                                                   bool_scope_reuse = False)
-                    
-                    tmp_logit, tmp_regu_gate = linear(tmp_x,
-                                                      steps_x_list[i]*dim_x_list[i], 
-                                                      'gate' + str(i),
-                                                      bool_bias = True,
-                                                      bool_scope_reuse = False)
-            '''
-        
         # ----- individual means and variance
         
         # -- mean
         if bool_bias_global_src == True:
             
             # global bias term
-        
             global_b = tf.get_variable('global_b',
                                        shape = [1, ],
                                        initializer = tf.zeros_initializer())
@@ -346,7 +295,6 @@ class mixture_statistic():
             mean_stack = tf.transpose(tf.concat([tmp_target_src, tmp_rest_src], axis = 0), [1, 0])
         
         else:
-            
             # [B S]
             mean_stack = tf.transpose(tmp_mean, [1, 0])
         
@@ -389,7 +337,6 @@ class mixture_statistic():
                 w_logit = tf.get_variable('w_logit',
                                           [],
                                           initializer = tf.contrib.layers.xavier_initializer())
-            
                 # [B 1]
                 latent_prob_logits = w_logit*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
             
@@ -445,6 +392,7 @@ class mixture_statistic():
             # [B S]
             gate_logits = tf.transpose(tmp_logit, [1, 0])
         
+        # obtain the gate values
         self.gates = tf.nn.softmax(gate_logits, axis = -1)
         
         # ----- mixture mean, variance and nllk  
@@ -585,7 +533,6 @@ class mixture_statistic():
             
             
             # elif self.loss_type == 'stacking':
-            
             
             ''' 
             elif self.loss_type == 'lk_var_mix':
@@ -782,7 +729,7 @@ class mixture_statistic():
                                      0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
             else:
                 
-                # ! numertical stable version of log(sigmoid())
+                # ! numertical stable version of log(sigmoid()) !
                 # avoid the overflow of exp(-x) in sigmoid, when -x is positive large 
                 # [B 1]
                 self.latent_depend = (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
@@ -838,86 +785,93 @@ class mixture_statistic():
             # ?
             self.loss = self.nllk_mix_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
-            
-        else:
-            print('[ERROR] loss type')
         '''
         
-        # ----- learning rate decay
+        # ----- learning rate set-up
+        tf_learning_rate = tf.constant(value = self.lr, 
+                                       shape = [], 
+                                       dtype = tf.float32)
+        global_step = tf.train.get_or_create_global_step()
+        
+        # -- decay
         
         if self.optimization_lr_decay == True:
             
             #global_step = tf.Variable(0, 
             #                          trainable = False)
             
-            global_step = tf.train.get_or_create_global_step()
-            
-            tmp_learning_rate = tf.train.exponential_decay(self.lr, 
-                                                           global_step,
-                                                           decay_steps = self.optimization_lr_decay_steps, 
-                                                           decay_rate = 0.96, 
-                                                           staircase = True)
-            # learning rate warm-up
-            if self.optimization_warmup_step > 0:
-                
-                global_steps_int = tf.cast(global_step, tf.int32)
-                warmup_steps_int = tf.constant(self.optimization_warmup_step, dtype=tf.int32)
-
-                global_steps_float = tf.cast(global_steps_int, tf.float32)
-                warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)
-
-                warmup_percent_done = global_steps_float / warmup_steps_float
-                warmup_learning_rate = self.lr * warmup_percent_done
-                
-                is_warmup = tf.cast(global_steps_int < warmup_steps_int, tf.float32)
-                
-                tmp_learning_rate = ((1.0 - is_warmup) * tmp_learning_rate + is_warmup * warmup_learning_rate)
-            
-            
+            decay_learning_rate = tf.train.exponential_decay(tf_learning_rate, 
+                                                             global_step,
+                                                             decay_steps = self.optimization_lr_decay_steps, 
+                                                             decay_rate = 0.96, 
+                                                             staircase = True)
         else:
-            tmp_learning_rate = self.lr
+            decay_learning_rate = tf_learning_rate
+        
+        # -- warm-up
+        # ref: https://github.com/google-research/bert/blob/ffbda2a1aafe530525212d13194cc84d92ed0313/optimization.py#L29-L65
+        
+        if self.optimization_warmup_step > 0:
+            
+            global_steps_int = tf.cast(global_step, 
+                                       tf.int32)
+            warmup_steps_int = tf.constant(self.optimization_warmup_step, 
+                                           dtype=tf.int32)
+            
+            global_steps_float = tf.cast(global_steps_int, 
+                                         tf.float32)
+            warmup_steps_float = tf.cast(warmup_steps_int, 
+                                         tf.float32)
+            
+            warmup_percent_done = global_steps_float / warmup_steps_float
+            warmup_learning_rate = tf_learning_rate * warmup_percent_done
+                
+            is_warmup = tf.cast(global_steps_int < warmup_steps_int, 
+                                tf.float32)
+                
+            optimizer_lr = ((1.0 - is_warmup) * decay_learning_rate + is_warmup * warmup_learning_rate)
+        
+        else:
+            optimizer_lr = decay_learning_rate
         
         # ----- optimizer
         
         # -- conventional 
         if self.optimization_method == 'adam':
             
-            tmp_train = myAdamOptimizer(learning_rate = tmp_learning_rate)    
-            #tmp_train = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
+            train_optimizer = myAdamOptimizer(learning_rate = optimizer_lr)    
+            #train_optimizer = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
             
         elif self.optimization_method == 'RMSprop':
             
-            tmp_train = myRMSprop(learning_rate = tmp_learning_rate)    
-            #tmp_train = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+            train_optimizer = myRMSprop(learning_rate = optimizer_lr)    
+            #train_optimizer = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
             
         elif self.optimization_method == 'sgd':
             
-            tmp_train = tf.train.MomentumOptimizer(learning_rate = tmp_learning_rate,
-                                                   momentum = 0.9,
-                                                   use_nesterov = True)
+            train_optimizer = tf.train.MomentumOptimizer(learning_rate = optimizer_lr,
+                                                         momentum = 0.9,
+                                                         use_nesterov = True)
             
         elif self.optimization_method == 'adamW':
             
-            tmp_train = tf.contrib.opt.AdamWOptimizer(weight_decay = 0.001,
-                                                      learning_rate = tmp_learning_rate)
+            train_optimizer = tf.contrib.opt.AdamWOptimizer(weight_decay = 0.001,
+                                                            learning_rate = optimizer_lr)
             
         # -- SG-MCMC
         # stochastic gradient Monto-Carlo Markov Chain
         elif self.optimization_method == 'sg_mcmc_adam':
             
-            tmp_train = sg_mcmc_adam(learning_rate = tmp_learning_rate)
+            train_optimizer = sg_mcmc_adam(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sg_mcmc_RMSprop':
             
-            tmp_train = sg_mcmc_RMSprop(learning_rate = tmp_learning_rate)
+            train_optimizer = sg_mcmc_RMSprop(learning_rate = optimizer_lr)
         
-        # -- learning rate decay    
-        if self.optimization_lr_decay == True:
-            self.optimizer = tmp_train.minimize(self.loss, 
-                                                global_step = global_step)
-        else:
-            self.optimizer = tmp_train.minimize(self.loss)
-            
+        # -- training operation
+        self.train_op = train_optimizer.minimize(self.loss, 
+                                                 global_step = global_step)
+        
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
         
@@ -925,20 +879,26 @@ class mixture_statistic():
     def train_batch(self, 
                     x, 
                     y,
+                    x_src_seperated,
                     global_step):
         
         # global_step: in epoch 
         
         data_dict = {}
-        data_dict["x:0"] = x
-        data_dict['y:0'] = y
+        data_dict["y:0"] = y
+        
+        if x_src_seperated == True:
+            # x: [S, B T D]
+            for i in range(len(x)):
+                data_dict["x" + str(i) + ":0"] = x[i]
+        else:
+            data_dict["x:0"] = x
         
         # record the global training step 
         self.training_step = global_step
         
-        _ = self.sess.run(self.optimizer,
+        _ = self.sess.run(self.train_op,
                           feed_dict = data_dict)
-        
         return
     
     def inference_ini(self):
@@ -963,9 +923,13 @@ class mixture_statistic():
         # NNLLK 
         # nnllk - normalized negative log likelihood by the number of data samples
         
-        # shape of x: [S, B, T, D]
-        self.nnllk = self.nllk / tf.to_float(tf.shape(self.x)[1])
-        
+        if self.x_src_seperated == True:
+            # shape of x: [S, B T D]
+            self.nnllk = self.nllk / tf.to_float(tf.shape(self.x[0])[0])
+        else:
+            # shape of x: [S, B T D]
+            self.nnllk = self.nllk / tf.to_float(tf.shape(self.x)[1])
+            
         # for model restore and inference
         tf.add_to_collection("rmse", self.rmse)
         tf.add_to_collection("mae", self.mae)
@@ -985,29 +949,36 @@ class mixture_statistic():
     def validation(self,
                    x,
                    y,
+                   x_src_seperated,
                    snapshot_type,
                    snapshot_Bernoulli,
                    step,
                    bool_end_of_epoch):
     
-        # x: shape [S B T D]
+        # x: [S B T D] or [S, B T D]
         # y: [B 1]
         
         if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
             # -- validation inference
-        
+            
             data_dict = {}
-            data_dict["x:0"] = x
-            data_dict['y:0'] = y
-        
+            data_dict["y:0"] = y
+            
+            if x_src_seperated == True:
+                # x: [S, B T D]
+                for i in range(len(x)):
+                    data_dict["x" + str(i) + ":0"] = x[i]
+            else:
+                # x: [S B T D]
+                data_dict["x:0"] = x
+                
             rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
                                                           tf.get_collection('mae')[0],
                                                           tf.get_collection('mape')[0],
                                                           tf.get_collection('nnllk')[0],
                                                           tf.get_collection('loss')[0]],
                                                           feed_dict = data_dict)
-            
             # -- validation monitoring
         
             # validation error log for early stopping
@@ -1021,22 +992,28 @@ class mixture_statistic():
     #   infer givn testing data
     def inference(self, 
                   x, 
-                  y, 
+                  y,
+                  x_src_seperated,
                   bool_py_eval):
         
-        # x: shape [S B T D]
+        # x: [S B T D] or [S, B T D]
         # y: [B 1]
         
         data_dict = {}
-        data_dict["x:0"] = x
         data_dict['y:0'] = y
+        
+        if x_src_seperated == True:
+            # x: [S, N T D]
+            for i in range(len(x)):
+                data_dict["x" + str(i) + ":0"] = x[i]
+        else:
+            data_dict["x:0"] = x
         
         rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
                                                 tf.get_collection('mae')[0],
                                                 tf.get_collection('mape')[0],
                                                 tf.get_collection('nnllk')[0]],
                                                 feed_dict = data_dict)
-        
         if bool_py_eval == True:
             
             # [B 1]  [B 1]   [B S]
@@ -1128,13 +1105,14 @@ class mixture_statistic():
                       path_data)
         return
     
+    '''
     #   collect the optimized variable values
     def collect_coeff_values(self, 
                              vari_keyword):
         
         return [tf_var.name for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)],\
                [tf_var.eval() for tf_var in tf.trainable_variables() if (vari_keyword in tf_var.name)]
-    
+    '''
     
 class ensemble_inference(object):
 
@@ -1167,10 +1145,20 @@ class ensemble_inference(object):
         self.py_var_samples.append(py_var)
         
         return
-            
-    def bayesian_inference(self, 
-                           y):
-        # y: [B 1]
+    
+    def density_inference(self,
+                          sample_features,
+                          y):
+        
+        '''
+        y: [B 1]
+        sample_features: [A M]
+                         M: 
+        '''
+        
+        kde = KernelDensity(kernel = 'gaussian', bandwidth = 0.2).fit(sample_features)
+        # [A 1]
+        sample_density = np.exp(kde.score_samples(sample_features))
         
         # [A B S]
         # A: number of samples
@@ -1185,7 +1173,7 @@ class ensemble_inference(object):
         
         # -- mean
         # [B]
-        bayes_mean = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        bayes_mean = np.mean(sample_density*np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
         #bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
         
         
@@ -1195,19 +1183,19 @@ class ensemble_inference(object):
         # [A B S]
         var_plus_sq_mean_src = v_src_sample + m_src_sample**2
         # [B]
-        bayes_total_var = np.mean(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        bayes_total_var = np.mean(sample_density*np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
         
         
         # -- volatility
         # heteroskedasticity
         # [B]                       [A B S]
-        bayes_vola = np.mean(np.sum(g_src_sample*v_src_sample, -1), 0)
+        bayes_vola = np.mean(sample_density*np.sum(g_src_sample*v_src_sample, -1), 0)
         
         
         # -- uncertainty on predicted mean
         # without heteroskedasticity
         # [B]                       [A B S]
-        bayes_unc = np.mean(np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
+        bayes_unc = np.mean(sample_density*np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
         
         
         # -- nnllk
@@ -1219,7 +1207,7 @@ class ensemble_inference(object):
         # [A B S]
         tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
         # [B]                   [A B S]
-        tmp_lk = np.mean(np.sum(g_src_sample*tmp_lk_src, -1), 0)
+        tmp_lk = np.mean(sample_density*np.sum(g_src_sample*tmp_lk_src, -1), 0)
                                                                                                  
         nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
         
@@ -1232,6 +1220,76 @@ class ensemble_inference(object):
 
         uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
         
+        
+        # -- gate
+        # [B S]                 [A B S]
+        bayes_gate_src = np.mean(g_src_sample, axis = 0)
+        bayes_gate_src_var = np.var(g_src_sample, axis = 0)
+        
+        # -- output
+        tmpy = np.squeeze(y)
+        
+        # error tuple [], prediction tuple []
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
+               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        
+    def bayesian_inference(self, 
+                           y):
+        '''
+        y: [B 1]
+        A: number of samples
+        '''
+        # [A B S]
+        m_src_sample = np.asarray(self.py_mean_src_samples)
+        v_src_sample = np.asarray(self.py_var_src_samples)
+        g_src_sample = np.asarray(self.py_gate_src_samples)
+        
+        # [A B 1]
+        m_sample = np.asarray(self.py_mean_samples)
+        
+        # -- mean
+        # [B]
+        bayes_mean = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        #bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        
+        # -- total variance
+        # [B]
+        sq_mean = bayes_mean**2
+        # [A B S]
+        var_plus_sq_mean_src = v_src_sample + m_src_sample**2
+        # [B]
+        bayes_total_var = np.mean(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        
+        # -- volatility
+        # heteroskedasticity
+        # [B]                       [A B S]
+        bayes_vola = np.mean(np.sum(g_src_sample*v_src_sample, -1), 0)
+        
+        # -- uncertainty on predicted mean
+        # without heteroskedasticity
+        # [B]                       [A B S]
+        bayes_unc = np.mean(np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
+        
+        # -- nnllk
+        # normalized negative log-likelihood
+        
+        # [1 B 1]
+        aug_y = np.expand_dims(y, axis=0)
+        
+        # [A B S]
+        tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
+        # [B]                   [A B S]
+        tmp_lk = np.mean(np.sum(g_src_sample*tmp_lk_src, -1), 0)
+        # normalized                                                                                         
+        nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
+        
+        # -- uniform nnllk
+        # take the mixture mean and variance to parameterize one Gaussian distribution
+        
+        # [B]
+        uni_nnllk_vol = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_vola + 1e-5) + 0.5*np.log(bayes_vola + 1e-5) + 0.5*np.log(2*np.pi))
+
+        uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
         
         # -- gate
         # [B S]                 [A B S]
