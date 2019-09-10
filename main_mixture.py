@@ -23,20 +23,15 @@ from utils_training import *
 import argparse
 
 parser = argparse.ArgumentParser()
-# parser.add_argument('--model', '-m', help = "model", type = str, default = 'statistic')
 parser.add_argument('--latent_prob_type', '-t', help = "latent_prob_type", type = str, default = "none")
 # "none", "constant_diff_sq", "scalar_diff_sq", "vector_diff_sq"
 parser.add_argument('--latent_dependence', '-d', help = "latent_dependence", type = str, default = "none")
 # "none", "independent", "markov"
 parser.add_argument('--data_mode', '-m', help = "source specific data or with paddning", type = str, default = "src_padding")
 # "src_raw", "src_padding"
-
 parser.add_argument('--dataset', '-a', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
-# "src_raw", "src_padding"
-
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
 parser.add_argument('--target_distr', '-p', help = "target_probability_distribution", type = str, default = "gaussian")
-
 parser.add_argument('--loss_type', '-l', help = "loss_type", type = str, default = "lk")
 
 args = parser.parse_args()
@@ -55,11 +50,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 path_data = args.dataset
 #"../dataset/bitcoin/market2_tar5_len10/"
-
 path_log_error = "../results/mixture/log_error_mix.txt"
-
 path_model = "../results/mixture/"
-
 path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
 
 # ----- hyper-parameters set-up
@@ -85,12 +77,13 @@ para_bool_target_seperate = False
 # if yes, the last source corresponds to the auto-regressive target variable
 para_batch_augment = False
 para_x_shape_acronym = ["src", "N", "T", "D"]
+para_add_common_pattern = False
 
 # -- training and validation
 
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
-para_hpara_n_trial = 1
+para_hpara_n_trial = 5
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
@@ -122,12 +115,12 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.001, 0.002]
-para_hpara_range['random']['rnn']['batch_size'] = [32, 80]
+para_hpara_range['random']['rnn']['lr'] = [0.001, 0.0015]
+para_hpara_range['random']['rnn']['batch_size'] = [100, 150]
 para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [32, 50]
-para_hpara_range['random']['rnn']['dense_num'] = [0, 3]
-para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
+para_hpara_range['random']['rnn']['rnn_size'] =  [16, 50]
+para_hpara_range['random']['rnn']['dense_num'] = [0, 0]
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [1.0, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
 # model snapshot sample: epoch_wise or batch_wise
@@ -182,7 +175,7 @@ def log_train(path):
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
         text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
-        text_file.write("data batch augmentation : %s \n"%(para_batch_augment))
+        text_file.write("data added common pattern : %s \n"%(para_add_common_pattern))
         text_file.write("\n")
         
         text_file.write("model type : %s \n"%(para_model_type))
@@ -553,6 +546,30 @@ if __name__ == '__main__':
     
     if args.data_mode == "src_raw":
         # y [N 1], x [S [N T D]]
+        
+        if para_add_common_pattern == True:
+            # x [S [N T D]]
+            # T is the same across sources
+            # [N T D*S]
+            common_x = np.concatenate(tr_x, -1)
+            # [S+1, ]
+            tr_x.append(common_x)
+        
+            common_x = np.concatenate(val_x, -1)
+            val_x.append(common_x)
+            
+            common_x = np.concatenate(ts_x, -1)
+            ts_x.append(common_x)
+        
+            print("\n ----- test ----- \n")
+            for tmp in tr_x:
+                print(np.shape(tmp))
+            
+            for tmp in val_x:
+                print(np.shape(tmp))
+            
+            for tmp in ts_x:
+                print(np.shape(tmp))
         
         para_steps_x = []
         para_dim_x = []

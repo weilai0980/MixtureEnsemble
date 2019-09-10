@@ -11,7 +11,6 @@ import tensorflow as tf
 # local 
 from utils_libs import *
 
-
 def multi_src_predictor_rnn(x, 
                             x_src_seperated,
                             n_src, 
@@ -23,7 +22,6 @@ def multi_src_predictor_rnn(x,
                             dropout_keep,
                             dense_num,
                             max_norm_cons):
-    
     
     if x_src_seperated == True:
         x_list = x
@@ -105,13 +103,14 @@ def multi_src_predictor_rnn(x,
     
     # --- gate
     
-    # [S B d] -> [S B 1]         
+    # [S B d] -> [S B 1] 
+    # ? tanh activation
     tmp_logit, regu_logit = mv_dense(h_vari = h_src, 
                                      dim_vari = rnn_size_layers[-1], 
                                      scope = str_scope + "_logit", 
                                      num_vari = n_src, 
                                      dim_to = 1, 
-                                     bool_activation = True, 
+                                     bool_activation = False, 
                                      max_norm_regul = max_norm_cons, 
                                      regul_type = "l2")
     
@@ -149,20 +148,20 @@ def multi_mv_dense(num_layers,
         
         with tf.variable_scope(scope + str(i)):
             
-            # ? dropout
-            h_mv_input = tf.nn.dropout(h_mv_input, 
-                                       keep_prob)
-            # h_mv [V B d]
+            # no dropout on the input
+            if i != 0:
+                # h_mv [V B d]
+                h_mv_input = tf.nn.dropout(h_mv_input, 
+                                           keep_prob)
             # ? max norm constrains
             h_mv_input, tmp_regu_dense = mv_dense(h_vari = h_mv_input, 
                                                   dim_vari = in_dim_vari,
                                                   scope = scope + str(i),
                                                   num_vari = num_vari,
                                                   dim_to = out_dim_vari,
-                                                  bool_activation = False, 
+                                                  bool_activation = bool_activation, 
                                                   max_norm_regul = max_norm_regul, 
                                                   regul_type = regul_type)
-            
             reg_mv_dense += tmp_regu_dense
             
             in_dim_vari  = out_dim_vari
@@ -215,7 +214,6 @@ def mv_dense(h_vari,
             tmp_h =  tf.reduce_sum(h_expand * w + b, 2)
             
         # [V B D 1] * [V 1 D d] -> [V B d]
-        # ?
         if bool_activation == True:
             h = tf.nn.relu(tmp_h)
         else:
@@ -290,6 +288,16 @@ def res_lstm(x,
              scope, 
              dropout_keep_prob):
     
+    '''
+    Argu.:
+    
+      x: [B T D] 
+      hidden_dim: int
+      n_layers: int
+      dropout_keep_prob: float 
+      
+    '''
+    
     #dropout
     #x = tf.nn.dropout(x, dropout_keep_prob)
     
@@ -352,10 +360,9 @@ def plain_rnn(x,
                                                initializer = tf.contrib.keras.initializers.glorot_normal())
         elif cell_type == 'gru':
             
-            # tf.nn.rnn_cell.GRUCell, tf.contrib.cudnn_rnn.CudnnGRU
             tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[0],
                                               kernel_initializer = tf.contrib.keras.initializers.glorot_normal())
-        # dropout on hidden states
+        # ! only dropout on hidden states !
         rnn_cell = tf.nn.rnn_cell.DropoutWrapper(tmp_cell,
                                                  state_keep_prob = dropout_keep_prob)
             
@@ -385,206 +392,3 @@ def plain_rnn(x,
                                                inputs = hiddens, 
                                                dtype = tf.float32)
     return hiddens, state 
-
-# ----- DENSE layers -----  
-
-def res_dense(x, 
-              x_dim, 
-              hidden_dim, 
-              n_layers, 
-              scope, 
-              dropout_keep_prob):
-    
-        #dropout
-        x = tf.nn.dropout(x, dropout_keep_prob)
-        
-        with tf.variable_scope(scope):
-            
-            # initilization
-            w = tf.get_variable('w', 
-                                [x_dim, hidden_dim], 
-                                dtype = tf.float32,
-                                initializer = tf.contrib.layers.variance_scaling_initializer())
-                                #initializer = tf.contrib.layers.xavier_initializer())
-            b = tf.Variable(tf.zeros([hidden_dim]))
-            h = tf.nn.relu(tf.matmul(x, w) + b)
-            
-            regularization = tf.nn.l2_loss(w)
-        #dropout
-        #h = tf.nn.dropout(h, dropout_keep_prob)
-        
-        for i in range(1, n_layers):
-            
-            with tf.variable_scope(scope+str(i)):
-                
-                w = tf.get_variable('w', [hidden_dim, hidden_dim], 
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-                b = tf.Variable(tf.zeros(hidden_dim))
-                
-                # residual connection
-                tmp_h = h
-                h = tf.nn.relu(tf.matmul(h, w) + b)
-                h = tmp_h + h
-                
-                regularization += tf.nn.l2_loss(w)
-        
-        return h, regularization
-    
-def plain_dense(x, 
-                x_dim, 
-                dim_layers, 
-                scope, 
-                dropout_keep_prob, 
-                max_norm_regul):
-    
-        #dropout
-        x = tf.nn.dropout(x, dropout_keep_prob)
-        
-        with tf.variable_scope(scope):
-            # initilization
-            w = tf.get_variable('w', [x_dim, dim_layers[0]], dtype=tf.float32,\
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-            b = tf.Variable(tf.zeros([dim_layers[0]]))
-            
-            # max norm constraints
-            if max_norm_regul > 0:
-                
-                clipped = tf.clip_by_norm(w, 
-                                          clip_norm = max_norm_regul, 
-                                          axes = 1)
-                clip_w = tf.assign(w, clipped)
-                    
-                h = tf.nn.relu( tf.matmul(x, clip_w) + b )
-            else:
-                h = tf.nn.relu( tf.matmul(x, w) + b )
-                    
-            #?
-            regularization = tf.nn.l2_loss(w)
-            #regularization = tf.reduce_sum(tf.abs(w))
-                
-        #dropout
-        h = tf.nn.dropout(h, dropout_keep_prob)
-        
-        for i in range(1, len(dim_layers)):
-            
-            with tf.variable_scope(scope + str(i)):
-                
-                w = tf.get_variable('w', 
-                                    [dim_layers[i-1], dim_layers[i]], 
-                                    dtype = tf.float32,
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-                b = tf.Variable(tf.zeros(dim_layers[i]))
-                
-                # max norm constraints 
-                if max_norm_regul > 0:
-                    
-                    clipped = tf.clip_by_norm(w, 
-                                              clip_norm = max_norm_regul, 
-                                              axes = 1)
-                    clip_w = tf.assign(w, clipped)
-                    
-                    h = tf.nn.relu(tf.matmul(h, clip_w) + b)
-                    
-                else:
-                    h = tf.nn.relu(tf.matmul(h, w) + b)
-                
-                #?
-                regularization += tf.nn.l2_loss(w)
-                #regularization += tf.reduce_sum(tf.abs(w))
-                
-        return h, regularization
-
-def plain_dense_leaky(x, 
-                      x_dim, 
-                      dim_layers, 
-                      scope, 
-                      dropout_keep_prob, 
-                      alpha):
-    
-        #dropout
-        x = tf.nn.dropout(x, dropout_keep_prob)
-        
-        with tf.variable_scope(scope):
-                # initilization
-                w = tf.get_variable('w', [x_dim, dim_layers[0]], dtype=tf.float32,\
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-                b = tf.Variable(tf.zeros([dim_layers[0]]))
-                
-                # ?
-                tmp_h = tf.matmul(x, w) + b 
-                h = tf.maximum( alpha*tmp_h, tmp_h )
-
-                #?
-                regularization = tf.nn.l2_loss(w)
-                #regularization = tf.reduce_sum(tf.abs(w))
-                
-        #dropout
-        #h = tf.nn.dropout(h, dropout_keep_prob)
-        
-        for i in range(1, len(dim_layers)):
-            
-            with tf.variable_scope(scope+str(i)):
-                w = tf.get_variable('w', [dim_layers[i-1], dim_layers[i]], dtype=tf.float32,\
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-                b = tf.Variable(tf.zeros(dim_layers[i]))
-                
-                # ?
-                tmp_h = tf.matmul(h, w) + b 
-                h = tf.maximum( alpha*tmp_h, tmp_h )
-                
-                #?
-                regularization += tf.nn.l2_loss(w)
-                #regularization += tf.reduce_sum(tf.abs(w))
-                
-        return h, regularization
-    
-    
-def multi_dense(x, 
-                x_dim, 
-                num_layers, 
-                scope, 
-                dropout_keep_prob, 
-                max_norm_regul):
-    
-        in_dim = x_dim
-        out_dim = int(in_dim/2)
-        
-        h = x
-        regularization = 0.0
-        
-        for i in range(num_layers):
-            
-            with tf.variable_scope(scope+str(i)):
-                
-                #dropout
-                h = tf.nn.dropout(h, dropout_keep_prob)
-                
-                w = tf.get_variable('w', [ in_dim, out_dim ], dtype=tf.float32,\
-                                    initializer = tf.contrib.layers.variance_scaling_initializer())
-                                    #initializer=tf.contrib.layers.xavier_initializer())
-                b = tf.Variable(tf.zeros( out_dim ))
-                
-                # max norm constraints 
-                if max_norm_regul > 0:
-                    
-                    clipped = tf.clip_by_norm(w, clip_norm = max_norm_regul, axes = 1)
-                    clip_w = tf.assign(w, clipped)
-                    
-                    h = tf.nn.relu( tf.matmul(h, clip_w) + b )
-                    
-                else:
-                    h = tf.nn.relu( tf.matmul(h, w) + b )
-                
-                #?
-                regularization += tf.nn.l2_loss(w)
-                #regularization += tf.reduce_sum(tf.abs(w))
-                
-                in_dim = out_dim
-                out_dim = int(out_dim/2)
-                
-        return h, regularization, in_dim    
