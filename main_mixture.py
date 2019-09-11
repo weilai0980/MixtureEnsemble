@@ -23,23 +23,26 @@ from utils_training import *
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', '-a', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
+parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
+
+'''
 parser.add_argument('--latent_prob_type', '-t', help = "latent_prob_type", type = str, default = "none")
 # "none", "constant_diff_sq", "scalar_diff_sq", "vector_diff_sq"
 parser.add_argument('--latent_dependence', '-d', help = "latent_dependence", type = str, default = "none")
 # "none", "independent", "markov"
 parser.add_argument('--data_mode', '-m', help = "source specific data or with paddning", type = str, default = "src_padding")
 # "src_raw", "src_padding"
-parser.add_argument('--dataset', '-a', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
-parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
 parser.add_argument('--target_distr', '-p', help = "target_probability_distribution", type = str, default = "gaussian")
 parser.add_argument('--loss_type', '-l', help = "loss_type", type = str, default = "lk")
+'''
 
 args = parser.parse_args()
 print(args)
 
-method_str = 'statistic'
+#method_str = 'statistic'
 
-from mixture_padding import *
+from mixture_models import *
 
 # ------ GPU set-up in multi-GPU environment
 
@@ -52,13 +55,13 @@ path_data = args.dataset
 #"../dataset/bitcoin/market2_tar5_len10/"
 path_log_error = "../results/mixture/log_error_mix.txt"
 path_model = "../results/mixture/"
-path_py = "../results/mixture/py_" + args.target_distr + "_" + args.loss_type + "_" + args.latent_dependence + "_" + args.latent_prob_type + ".p"
+path_py = "../results/mixture/py_" + args.dataset + ".p"
 
 # ----- hyper-parameters set-up
 
 # -- model
 
-para_distr_type = args.target_distr
+para_distr_type = "gaussian"
 # gaussian, student_t
 para_distr_para = []
 # gaussian: [] 
@@ -132,12 +135,12 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 para_early_stop_bool = False
 para_early_stop_window = 0
 
-para_validation_metric = 'rmse' if args.loss_type == "mse" else 'nnllk'
-para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
-
 # -- optimization
 
-para_loss_type = args.loss_type
+para_loss_type = "heter_lk_inv"
+
+para_validation_metric = 'nnllk'
+para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
 para_optimizer_lr_decay = True
@@ -160,18 +163,18 @@ para_bool_bias_in_var = True
 para_bool_bias_in_gate = True
 para_bool_global_bias = False
 
-para_latent_dependence = args.latent_dependence
-para_latent_prob_type = args.latent_prob_type
+para_latent_dependence = "none"
+para_latent_prob_type = "none"
 
 def log_train(path):
     
     with open(path, "a") as text_file:
         
-        text_file.write("\n\n ------ Statistic mixture : \n")
+        text_file.write("\n\n ------ Bayesian mixture : \n")
         
-        text_file.write("data_mode : %s \n"%(args.data_mode))
-        text_file.write("data path : %s \n"%(path_data))
         text_file.write("data source seperated : %s \n"%(para_x_src_seperated))
+        #text_file.write("data_mode : %s \n"%(args.data_mode))
+        text_file.write("data path : %s \n"%(path_data))
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
         text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
@@ -412,7 +415,7 @@ def training_validating(xtr,
                 
                 # - model saver 
                 
-                if retrain_bool == True and model.model_saver(path = path_model + method_str + '_' + str(global_step),
+                if retrain_bool == True and model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
                                                               epoch = epoch,
                                                               step = global_step,
                                                               snapshot_steps = retrain_snapshot_steps,
@@ -420,7 +423,7 @@ def training_validating(xtr,
                                                               early_stop_bool = para_early_stop_bool,
                                                               early_stop_window = para_early_stop_window) == True:
                     
-                    print("\n    [MODEL SAVED] \n " + path_model + method_str + '_' + str(global_step))
+                    print("\n    [MODEL SAVED] \n " + path_model + para_model_type + '_' + str(global_step))
                         
                 global_step += 1
             
@@ -459,8 +462,8 @@ def testing(model_snapshots,
         for tmp_model_id in model_snapshots:
             
             # path of the stored models 
-            tmp_meta = file_path + method_str + '_' + str(tmp_model_id) + '.meta'
-            tmp_data = file_path + method_str + '_' + str(tmp_model_id)
+            tmp_meta = file_path + para_model_type + '_' + str(tmp_model_id) + '.meta'
+            tmp_data = file_path + para_model_type + '_' + str(tmp_model_id)
         
             # clear graph
             tf.reset_default_graph()
@@ -544,7 +547,9 @@ if __name__ == '__main__':
     
     # -- steps and dimensionality of each source
     
-    if args.data_mode == "src_raw":
+    if para_bool_target_seperate == True:
+    
+    #if args.data_mode == "src_raw":
         # y [N 1], x [S [N T D]]
         
         if para_add_common_pattern == True:
@@ -586,7 +591,9 @@ if __name__ == '__main__':
         
         shape_tr_x_dict = dict({"N": len(tr_x[tmp_src])})
             
-    elif args.data_mode == "src_padding":
+    else:
+        # padding
+        #args.data_mode == "src_padding":
         # y [N 1], x [S N T D]
         
         # padding to normalized feature data
