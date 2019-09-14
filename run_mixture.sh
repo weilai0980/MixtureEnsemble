@@ -1,22 +1,20 @@
 
-python3 main_mixture.py -g $1 -a "../dataset/bitcoin/market1_tar5_len10/"
+python3 main_mixture.py -g $1 -d "../dataset/bitcoin/market2_tar5_len10/"
+
+python3 main_mixture.py -g $1 -d "../dataset/bitcoin/market2_tar1_len10/"
+
+#python3 main_mixture.py -g $1 -d "../dataset/bitcoin/market1_tar1_len10/"
+
+#python3 main_mixture.py -g $1 -d "../dataset/bitcoin/market2_tar1_len10/"
+
+#python3 main_mixture.py -m "src_padding" -t "vector_diff_sq" -d "markov"  -g $2 -p $1 -l "heter_lk_inv" -a "../dataset/bitcoin/market2_tar1_len10/"
 
 #python3 main_mixture.py -m "src_padding" -t "vector_diff_sq" -d "markov"  -g $2 -p $1 -l "heter_lk_inv" -a "../dataset/bitcoin/market1_tar5_len10/"
 
 
 #python3 main_mixture.py -m "src_padding" -t "vector_diff_sq" -d "markov"  -g $2 -p $1 -l "heter_lk_inv" -a "../dataset/bitcoin/market1_tar1_len10/"
 
-
-python3 main_mixture.py -g $1 -a "../dataset/bitcoin/market2_tar5_len10/"
-
-python3 main_mixture.py -g $1 -a "../dataset/bitcoin/market1_tar1_len10/"
-
 #python3 main_mixture.py -m "src_padding" -t "vector_diff_sq" -d "markov"  -g $2 -p $1 -l "heter_lk_inv" -a "../dataset/bitcoin/market2_tar5_len10/"
-
-python3 main_mixture.py -g $1 -a "../dataset/bitcoin/market2_tar1_len10/"
-
-#python3 main_mixture.py -m "src_padding" -t "vector_diff_sq" -d "markov"  -g $2 -p $1 -l "heter_lk_inv" -a "../dataset/bitcoin/market2_tar1_len10/"
-
 
 
 

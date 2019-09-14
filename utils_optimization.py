@@ -24,7 +24,6 @@ from tensorflow.python.ops import gen_random_ops
 from tensorflow.python.ops.gen_random_ops import *
 import tensorflow as tf
 
-
 class myAdamOptimizer(optimizer.Optimizer):
   """Optimizer that implements the Adam algorithm.
   See [Kingma et al., 2014](http://arxiv.org/abs/1412.6980)
@@ -221,9 +220,6 @@ class myAdamOptimizer(optimizer.Optimizer):
     return control_flow_ops.group(
         *update_ops + [update_beta1, update_beta2], name=name_scope)
 
-
-
-
 class AdamWeightDecayOptimizer(tf.train.Optimizer):
   """A basic Adam optimizer that includes "correct" L2 weight decay."""
 
@@ -314,9 +310,6 @@ class AdamWeightDecayOptimizer(tf.train.Optimizer):
     return param_name
 
 
-
-
-
 def _ShapeTensor(shape):
   
   """Convert to an int32 or int64 tensor, defaulting to int32 if empty."""
@@ -326,7 +319,6 @@ def _ShapeTensor(shape):
     dtype = None
     
   return ops.convert_to_tensor(shape, dtype = dtype, name="shape")
-
 
 class sg_mcmc_adam(optimizer.Optimizer):
     
@@ -423,7 +415,6 @@ class sg_mcmc_adam(optimizer.Optimizer):
       return (self._get_non_slot_variable("beta1_power", graph = graph),
               self._get_non_slot_variable("beta2_power", graph = graph))
 
-
   def _create_slots(self, 
                     var_list):
         
@@ -443,7 +434,6 @@ class sg_mcmc_adam(optimizer.Optimizer):
       self._zeros_slot(v, "m", self._name)
       self._zeros_slot(v, "v", self._name)
         
-
   def _prepare(self):
     
     lr = self._call_if_callable(self._lr)
@@ -514,7 +504,6 @@ class sg_mcmc_adam(optimizer.Optimizer):
     
     return control_flow_ops.group(*[var_update, m_t, v_t]) 
     
-    
     '''
     m = self.get_slot(var, "m")
     v = self.get_slot(var, "v")
@@ -534,6 +523,63 @@ class sg_mcmc_adam(optimizer.Optimizer):
         use_locking=self._use_locking).op
     
     '''
+    
+  def _resource_apply_dense(self, 
+                              grad, 
+                              var):
+    # -----
+     
+    beta1_power, beta2_power = self._get_beta_accumulators()
+    beta1_power = math_ops.cast(beta1_power, var.dtype.base_dtype)
+    beta2_power = math_ops.cast(beta2_power, var.dtype.base_dtype)
+    
+    lr_t = math_ops.cast(self._lr_t, var.dtype.base_dtype)
+    beta1_t = math_ops.cast(self._beta1_t, var.dtype.base_dtype)
+    beta2_t = math_ops.cast(self._beta2_t, var.dtype.base_dtype)
+    
+    epsilon_t = math_ops.cast(self._epsilon_t, var.dtype.base_dtype)
+    lr = (lr_t * math_ops.sqrt(1.0 - beta2_power) / (1.0 - beta1_power))
+    
+    # m_t = beta1 * m + (1 - beta1) * g_t
+    m = self.get_slot(var, "m")
+    m_scaled_g_values = grad * (1.0 - beta1_t)
+    m_t = state_ops.assign(m, m_scaled_g_values + m * beta1_t, use_locking = self._use_locking)
+    
+    # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+    v = self.get_slot(var, "v")
+    v_scaled_g_values = (grad * grad) * (1.0 - beta2_t)
+    v_t = state_ops.assign(v, v_scaled_g_values + v * beta2_t, use_locking = self._use_locking)
+    
+    v_sqrt = math_ops.sqrt(v_t)
+    #var_update = state_ops.assign_sub(var, 1.0*lr * m_t / (v_sqrt + epsilon_t), use_locking = self._use_locking)
+    
+    # ----- inject noise
+    
+    shape_tensor = _ShapeTensor(array_ops.shape(var))
+    
+    dtype = dtypes.float32
+    
+    seed = None
+    seed1, seed2 = random_seed.get_seed(seed)
+    
+    rnd = gen_random_ops.random_standard_normal(shape_tensor, 
+                                                dtype,
+                                                seed = seed1, 
+                                                seed2 = seed2)
+    
+    #inject_noise = rnd * math_ops.sqrt(2.0 * lr * (1.0-beta1_t)/(v_sqrt+epsilon_t))
+    #inject_noise = rnd * math_ops.sqrt(1.0 * lr/(v_sqrt + epsilon_t))
+    
+    """ ? 1.0*lr leads to inferior performance ? """
+    inject_noise = rnd * math_ops.sqrt(lr * (1.0 - beta1_t) * (1.0 - beta1_t)/(v_sqrt + epsilon_t))
+    
+    ''' beta1 on noise '''
+    
+    # -----
+    """ ? 1.0 """
+    var_update = state_ops.assign_sub(var, lr * m_t/(v_sqrt + epsilon_t) - inject_noise, use_locking = self._use_locking)
+    
+    return control_flow_ops.group(*[var_update, m_t, v_t]) 
 
   def _finish(self, 
               update_ops, 
@@ -553,11 +599,6 @@ class sg_mcmc_adam(optimizer.Optimizer):
                 beta2_power * self._beta2_t, use_locking=self._use_locking)
     
     return control_flow_ops.group(*update_ops + [update_beta1, update_beta2], name = name_scope)
-
-
-
-
-
 
 class sg_mcmc_RMSprop(optimizer.Optimizer):
     
@@ -733,12 +774,6 @@ class sg_mcmc_RMSprop(optimizer.Optimizer):
     return control_flow_ops.group(
         *update_ops + [update_beta1, update_beta2], name=name_scope)
 
-
-
-
-
-
-
 class myRMSprop(optimizer.Optimizer):
     
   def __init__(self,
@@ -873,7 +908,6 @@ class myRMSprop(optimizer.Optimizer):
     
     
     return control_flow_ops.group(*[var_update, v_t]) 
-    
 
   def _finish(self, 
               update_ops, 
@@ -895,3 +929,232 @@ class myRMSprop(optimizer.Optimizer):
         *update_ops + [update_beta1, update_beta2], name=name_scope)
 
 
+
+
+#import tensorflow.compat.v1 as tf1
+#import tensorflow.compat.v2 as tf
+
+#from tensorflow_probability.python.internal import distribution_util
+#from tensorflow_probability.python.internal import dtype_util
+#from tensorflow_probability.python.math import diag_jacobian
+
+from tensorflow.python.training import training_ops
+
+
+class StochasticGradientLangevinDynamics(optimizer.Optimizer):
+    
+  """
+  An optimizer module for stochastic gradient Langevin dynamics.
+  This implements the preconditioned Stochastic Gradient Langevin Dynamics
+  optimizer [(Li et al., 2016)][1]. The optimization variable is regarded as a
+  sample from the posterior under Stochastic Gradient Langevin Dynamics with
+  noise rescaled in each dimension according to [RMSProp](
+  http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf).
+  Note: If a prior is included in the loss, it should be scaled by
+  `1/data_size`, where `data_size` is the number of points in the data set.
+  I.e., it should be divided by the `data_size` term described below.
+  
+  Args:
+    learning_rate: Scalar `float`-like `Tensor`. The base learning rate for the
+      optimizer. Must be tuned to the specific function being minimized.
+    preconditioner_decay_rate: Scalar `float`-like `Tensor`. The exponential
+      decay rate of the rescaling of the preconditioner (RMSprop). (This is
+      "alpha" in Li et al. (2016)). Should be smaller than but nearly `1` to
+      approximate sampling from the posterior. (Default: `0.95`)
+    data_size: Scalar `int`-like `Tensor`. The effective number of
+      points in the data set. Assumes that the loss is taken as the mean over a
+      minibatch. Otherwise if the sum was taken, divide this number by the
+      batch size. If a prior is included in the loss function, it should be
+      normalized by `data_size`. Default value: `1`.
+    burnin: Scalar `int`-like `Tensor`. The number of iterations to collect
+      gradient statistics to update the preconditioner before starting to draw
+      noisy samples. (Default: `25`)
+    diagonal_bias: Scalar `float`-like `Tensor`. Term added to the diagonal of
+      the preconditioner to prevent the preconditioner from degenerating.
+      (Default: `1e-8`)
+    name: Python `str` describing ops managed by this function.
+      (Default: `"StochasticGradientLangevinDynamics"`)
+    parallel_iterations: the number of coordinates for which the gradients of
+        the preconditioning matrix can be computed in parallel. Must be a
+        positive integer.
+  Raises:
+    InvalidArgumentError: If preconditioner_decay_rate is a `Tensor` not in
+      `(0,1]`.
+    NotImplementedError: If eager execution is enabled.
+    
+  #### References
+  [1]: Chunyuan Li, Changyou Chen, David Carlson, and Lawrence Carin.
+       Preconditioned Stochastic Gradient Langevin Dynamics for Deep Neural
+       Networks. In _Association for the Advancement of Artificial
+       Intelligence_, 2016. https://arxiv.org/abs/1512.07666
+  """
+
+  def __init__(self,
+               learning_rate,
+               preconditioner_decay_rate=0.95,
+               data_size = 1,
+               burnin = 25,
+               diagonal_bias = 1e-8,
+               name = None,
+               parallel_iterations = 10):
+    default_name = 'StochasticGradientLangevinDynamics'
+    with tf.name_scope(name, default_name, [
+        learning_rate, preconditioner_decay_rate, data_size, burnin,
+        diagonal_bias
+    ]):
+      if tf.executing_eagerly():
+        raise NotImplementedError('Eager execution currently not supported for '
+                                  ' SGLD optimizer.')
+
+      self._preconditioner_decay_rate = tf.convert_to_tensor(
+          value=preconditioner_decay_rate, name='preconditioner_decay_rate')
+      self._data_size = tf.convert_to_tensor(value=data_size, name='data_size')
+      
+      self._burnin = tf.convert_to_tensor(value = burnin,
+                                          name = 'burnin',
+                                          dtype = tf.int64)
+          #dtype = dtype_util.common_dtype([burnin], dtype_hint=tf.int64))
+      
+      self._diagonal_bias = tf.convert_to_tensor(
+          value=diagonal_bias, name='diagonal_bias')
+      # TODO(b/124800185): Consider migrating `learning_rate` to be a
+      # hyperparameter handled by the base Optimizer class. This would allow
+      # users to plug in a `tf.keras.optimizers.schedules.LearningRateSchedule`
+      # object in addition to Tensors.
+      self._learning_rate = tf.convert_to_tensor(
+          value=learning_rate, name='learning_rate')
+      self._parallel_iterations = parallel_iterations
+      
+      self._preconditioner_decay_rate = self._preconditioner_decay_rate
+      self._data_size = self._data_size
+      self._burnin = self._burnin
+      self._diagonal_bias = self._diagonal_bias
+        
+      '''
+      self._preconditioner_decay_rate = distribution_util.with_dependencies([
+          tf1.assert_non_negative(
+              self._preconditioner_decay_rate,
+              message='`preconditioner_decay_rate` must be non-negative'),
+          tf1.assert_less_equal(
+              self._preconditioner_decay_rate,
+              1.,
+              message='`preconditioner_decay_rate` must be at most 1.'),
+      ], self._preconditioner_decay_rate)
+      
+      self._data_size = distribution_util.with_dependencies([
+          tf1.assert_greater(
+              self._data_size,
+              0,
+              message='`data_size` must be greater than zero')
+      ], self._data_size)
+
+      self._burnin = distribution_util.with_dependencies([
+          tf1.assert_non_negative(
+              self._burnin, message='`burnin` must be non-negative'),
+          tf1.assert_integer(
+              self._burnin, message='`burnin` must be an integer')
+      ], self._burnin)
+
+      self._diagonal_bias = distribution_util.with_dependencies([
+          tf1.assert_non_negative(
+              self._diagonal_bias,
+              message='`diagonal_bias` must be non-negative')
+      ], self._diagonal_bias)
+      
+      '''
+
+      super(StochasticGradientLangevinDynamics,
+            self).__init__(name=name or default_name)
+
+  def _create_slots(self, var_list):
+    for var in var_list:
+      self.add_slot(var, 'rms', 'ones')
+
+  def get_config(self):
+    # TODO(b/124800185): Consider making `learning_rate`, `data_size`, `burnin`,
+    # `preconditioner_decay_rate` and `diagonal_bias` hyperparameters.
+    pass
+
+  def _prepare(self, var_list):
+    # We need to put the conversion and check here because a user will likely
+    # want to decay the learning rate dynamically.
+    
+    self._learning_rate_tensor = tf.convert_to_tensor(value=self._learning_rate, name='learning_rate_tensor')
+    '''
+    self._learning_rate_tensor = distribution_util.with_dependencies(
+        [
+            tf1.assert_non_negative(
+                self._learning_rate,
+                message='`learning_rate` must be non-negative')
+        ],
+        tf.convert_to_tensor(
+            value=self._learning_rate, name='learning_rate_tensor'))
+    '''        
+    
+    self._decay_tensor = tf.convert_to_tensor(
+        value=self._preconditioner_decay_rate, name='preconditioner_decay_rate')
+
+    super(StochasticGradientLangevinDynamics, self)._prepare(var_list)
+
+  def _resource_apply_dense(self, grad, var):
+    rms = self.get_slot(var, 'rms')
+    new_grad = self._apply_noisy_update(rms, grad, var)
+    return training_ops.resource_apply_gradient_descent(
+        var.handle,
+        tf.cast(self._learning_rate_tensor, var.dtype.base_dtype),
+        new_grad,
+        use_locking=self._use_locking)
+
+  def _resource_apply_sparse(self, grad, var, indices):
+    rms = self.get_slot(var, 'rms')
+    new_grad = self._apply_noisy_update(rms, grad, var, indices)
+    return self._resource_scatter_add(
+        var, indices,
+        -new_grad * tf.cast(self._learning_rate_tensor, var.dtype.base_dtype))
+
+  @property
+  def variable_scope(self):
+    """Variable scope of all calls to `tf.get_variable`."""
+    return self._variable_scope
+
+  def _apply_noisy_update(self, mom, grad, var, indices=None):
+    # Compute and apply the gradient update following
+    # preconditioned Langevin dynamics
+    stddev = tf.where(
+        tf.squeeze(self.iterations > tf.cast(self._burnin, tf.int64)),
+        tf.cast(tf.math.rsqrt(self._learning_rate), grad.dtype),
+        tf.zeros([], grad.dtype))
+    # Keep an exponentially weighted moving average of squared gradients.
+    # Not thread safe
+    decay_tensor = tf.cast(self._decay_tensor, grad.dtype)
+    new_mom = decay_tensor * mom + (1. - decay_tensor) * tf.square(grad)
+    preconditioner = tf.math.rsqrt(new_mom +
+                                   tf.cast(self._diagonal_bias, grad.dtype))
+
+    # Compute gradients of the preconditioner.
+    # Note: Since the preconditioner depends indirectly on `var` through `grad`,
+    # in Eager mode, `diag_jacobian` would need access to the loss function.
+    # This is the only blocker to supporting Eager mode for the SGLD optimizer.
+    
+    
+    #_, preconditioner_grads = diag_jacobian(
+    #     xs=var,
+    #    ys=preconditioner,
+    #    parallel_iterations=self._parallel_iterations)
+
+    mean = 0.5 * (preconditioner * grad * tf.cast(self._data_size, grad.dtype) )
+                 # - preconditioner_grads[0])
+    
+    stddev *= tf.sqrt(preconditioner)
+    result_shape = tf.broadcast_dynamic_shape(
+        tf.shape(input=mean), tf.shape(input=stddev))
+
+    update_ops = []
+    if indices is None:
+      update_ops.append(mom.assign(new_mom))
+    else:
+      update_ops.append(self._resource_scatter_update(mom, indices, new_mom))
+
+    with tf.control_dependencies(update_ops):
+      return tf.random.normal(
+          shape=result_shape, mean=mean, stddev=stddev, dtype=grad.dtype)

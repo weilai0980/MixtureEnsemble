@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
 import numpy as np
-
 import tensorflow as tf
+
 # fix random seed
 np.random.seed(1)
 tf.set_random_seed(1)

@@ -2,11 +2,9 @@
 
 import sys
 import os
-
 import numpy as np
 import random
 from random import shuffle
-
 import time
 import json
 
@@ -21,46 +19,28 @@ from utils_training import *
 # ----- arguments from command line
 
 import argparse
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', '-a', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
+parser.add_argument('--dataset', '-d', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
-
-'''
-parser.add_argument('--latent_prob_type', '-t', help = "latent_prob_type", type = str, default = "none")
-# "none", "constant_diff_sq", "scalar_diff_sq", "vector_diff_sq"
-parser.add_argument('--latent_dependence', '-d', help = "latent_dependence", type = str, default = "none")
-# "none", "independent", "markov"
-parser.add_argument('--data_mode', '-m', help = "source specific data or with paddning", type = str, default = "src_padding")
-# "src_raw", "src_padding"
-parser.add_argument('--target_distr', '-p', help = "target_probability_distribution", type = str, default = "gaussian")
-parser.add_argument('--loss_type', '-l', help = "loss_type", type = str, default = "lk")
-'''
 
 args = parser.parse_args()
 print(args)
 
-#method_str = 'statistic'
-
 from mixture_models import *
 
 # ------ GPU set-up in multi-GPU environment
-
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # ----- data and log paths
-
 path_data = args.dataset
-#"../dataset/bitcoin/market2_tar5_len10/"
 path_log_error = "../results/mixture/log_error_mix.txt"
 path_model = "../results/mixture/"
-path_py = "../results/mixture/py_" + args.dataset + ".p"
+path_py = "../results/mixture/py_" + str(args.dataset)[-10:] + ".p"
 
 # ----- hyper-parameters set-up
 
 # -- model
-
 para_distr_type = "gaussian"
 # gaussian, student_t
 para_distr_para = []
@@ -71,22 +51,18 @@ para_var_type = "square" # square, exp
 # always positive correlation of the feature to the variance
 para_share_type_gate = "no_share"
 # no_share, share, mix
-para_bool_bilinear = True # for linear units
 
 # -- data
-
-para_y_log = False
+para_x_src_seperated = True
 para_bool_target_seperate = False
 # if yes, the last source corresponds to the auto-regressive target variable
-para_batch_augment = False
 para_x_shape_acronym = ["src", "N", "T", "D"]
 para_add_common_pattern = False
 
 # -- training and validation
-
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
-para_hpara_n_trial = 5
+para_hpara_n_trial = 2
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
@@ -118,11 +94,11 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.001, 0.0015]
-para_hpara_range['random']['rnn']['batch_size'] = [100, 150]
-para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [16, 50]
-para_hpara_range['random']['rnn']['dense_num'] = [0, 0]
+para_hpara_range['random']['rnn']['lr'] = [0.0001, 0.0005]
+para_hpara_range['random']['rnn']['batch_size'] = [64, 150]
+para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.000001]
+para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
+para_hpara_range['random']['rnn']['dense_num'] = [0, 2]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [1.0, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
@@ -136,7 +112,6 @@ para_early_stop_bool = False
 para_early_stop_window = 0
 
 # -- optimization
-
 para_loss_type = "heter_lk_inv"
 
 para_validation_metric = 'nnllk'
@@ -148,7 +123,6 @@ para_optimizer_lr_decay_epoch = 10 # after the warm-up
 para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
 
 # -- regularization
-
 para_regu_mean = True
 para_regu_var = True
 para_regu_gate = False
@@ -173,7 +147,6 @@ def log_train(path):
         text_file.write("\n\n ------ Bayesian mixture : \n")
         
         text_file.write("data source seperated : %s \n"%(para_x_src_seperated))
-        #text_file.write("data_mode : %s \n"%(args.data_mode))
         text_file.write("data path : %s \n"%(path_data))
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
@@ -182,7 +155,6 @@ def log_train(path):
         text_file.write("\n")
         
         text_file.write("model type : %s \n"%(para_model_type))
-        text_file.write("bi-linear : %s \n"%(para_bool_bilinear))
         text_file.write("target distribution type : %s \n"%(para_distr_type))
         text_file.write("target distribution para. : %s \n"%(str(para_distr_para)))
         text_file.write("target variable as a seperated data source : %s \n"%(para_bool_target_seperate))
@@ -252,18 +224,16 @@ def training_validating(xtr,
                         retrain_bayes_steps,
                         retrain_bool):
     '''
-    Args:
+    Argu.:
     
     xtr: [num_src, N, T, D]
          S: num_src
          N: number of data samples
          T: number of steps
          D: dimension at each time step
-        
     ytr: [N 1]
         
     dim_x: integer, corresponding to D
-    
     steps_x: integer, corresponding to T
     
     hyper_para_dict: 
@@ -278,17 +248,15 @@ def training_validating(xtr,
     training_dict:
        "batch_per_epoch": int
        "tr_idx": list of integer
-       
     '''
-    
     # clear the graph in the current session 
     tf.reset_default_graph()
     
-    # stabilize the network by fixing random seeds
-    np.random.seed(1)
-    tf.set_random_seed(1)
-    
     with tf.device('/device:GPU:0'):
+        
+        # fix the random seed to stabilize the network
+        np.random.seed(1)
+        tf.set_random_seed(1)
         
         # session set-up
         config = tf.ConfigProto()
@@ -296,10 +264,6 @@ def training_validating(xtr,
         config.gpu_options.allow_growth = True
         
         sess = tf.Session(config = config)
-        
-        # fix the random seed to stabilize the network
-        np.random.seed(1)
-        tf.set_random_seed(1)
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
@@ -315,7 +279,6 @@ def training_validating(xtr,
                           model_distr_type = para_distr_type,
                           model_distr_para = para_distr_para,
                           model_var_type = para_var_type,
-                          model_bool_bilinear = para_bool_bilinear,
                           model_para_share_type = para_share_type_gate,
                           bool_regu_mean = para_regu_mean,
                           bool_regu_var = para_regu_var,
@@ -372,15 +335,6 @@ def training_validating(xtr,
                 # [B 1]
                 batch_y = ytr[batch_idx]
                 
-                '''
-                # bath-wise data augmentation: for inbalanced data
-                if para_batch_augment == True:
-                    
-                    batch_x, batch_y = batch_augment(batch_x, 
-                                                     batch_y, 
-                                                     num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
-                '''
-                
                 # one-step training on a batch of training data
                 model.train_batch(batch_x, 
                                   batch_y,
@@ -406,15 +360,12 @@ def training_validating(xtr,
                                                    ytr, 
                                                    x_src_seperated = x_src_seperated,
                                                    bool_py_eval = False)
-                    
-                    # para_metric_map[] defined on
                     step_error.append([global_step,
                                        tr_metric, 
                                        val_metric, 
                                        epoch])
-                
+                    
                 # - model saver 
-                
                 if retrain_bool == True and model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
                                                               epoch = epoch,
                                                               step = global_step,
@@ -430,8 +381,7 @@ def training_validating(xtr,
             # -- epoch-wise
             
             print("\n --- At epoch %d : \n  %s "%(epoch, str(step_error[-1])))
-            print("\n gates : \n", monitor_metric)
-            print("\n py_mean_src : \n", monitor_metric)
+            print("\n loss : \n", monitor_metric)
             
             # NAN value exception 
             if np.isnan(monitor_metric[-1]) == True:
@@ -547,9 +497,7 @@ if __name__ == '__main__':
     
     # -- steps and dimensionality of each source
     
-    if para_bool_target_seperate == True:
-    
-    #if args.data_mode == "src_raw":
+    if para_x_src_seperated == True:
         # y [N 1], x [S [N T D]]
         
         if para_add_common_pattern == True:
@@ -578,7 +526,6 @@ if __name__ == '__main__':
         
         para_steps_x = []
         para_dim_x = []
-        para_x_src_seperated = True
         
         for tmp_src in range(len(tr_x)):
             
@@ -593,7 +540,6 @@ if __name__ == '__main__':
             
     else:
         # padding
-        #args.data_mode == "src_padding":
         # y [N 1], x [S N T D]
         
         # padding to normalized feature data
@@ -630,6 +576,9 @@ if __name__ == '__main__':
         hpara_generator = hyper_para_grid_search(para_hpara_range[para_hpara_search][para_model_type])
             
     # -- begin hyper-para search
+    # fix random seed
+    np.random.seed(1)
+    tf.set_random_seed(1)
     
     hpara_log = []
     

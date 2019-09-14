@@ -15,8 +15,8 @@ from utils_training import *
 from utils_optimization import *
 
 # reproducibility by fixing the random seed
-# np.random.seed(1)
-# tf.set_random_seed(1)
+np.random.seed(1)
+tf.set_random_seed(1)
 
 # ----- Mixture statistic -----
 
@@ -28,12 +28,9 @@ class mixture_statistic():
                  num_src,
                  ):
         '''
-        Args:
-        
+        Argu.:
           session: tensorflow session
-        
           loss_type: string, type of loss functions, {mse, lk, lk_inv, elbo, ...}
-        
         '''
         
         # build the network graph 
@@ -46,17 +43,8 @@ class mixture_statistic():
         self.loss_type = loss_type
         self.distr_type = ''
         
-        # number of components or sources in X
+        # number of sources in X
         self.num_src = num_src
-        
-        # for SG-MCMC during both training and testing phases
-        # [A B S]
-        # A: number of samples
-        # self.py_mean_src_samples = []
-        # self.py_var_src_samples = []
-        # self.py_gate_src_samples = []
-        
-        self.py_mean_samples = []
         
         self.log_step_error = []
         self.log_error_up_flag = False
@@ -72,7 +60,6 @@ class mixture_statistic():
                     model_distr_type,
                     model_distr_para,
                     model_var_type,
-                    model_bool_bilinear,
                     model_para_share_type,
                     bool_regu_mean,
                     bool_regu_var,
@@ -92,8 +79,7 @@ class mixture_statistic():
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
                     optimization_burn_in_step,
-                    optimization_warmup_step
-                    ):
+                    optimization_warmup_step):
         '''
         Arguments:
         
@@ -121,7 +107,6 @@ class mixture_statistic():
                     
         model_var_type: square or exponential
         
-        
         bool_regu_positive_mean: if regularization of positive mean 
         
         bool_regu_gate: if regularization the gate functions
@@ -132,34 +117,31 @@ class mixture_statistic():
         
         latent_prob_type: string, probability calculation of latent logits, "none", "scalar", "vector", "matrix"
         
-        
         bool_bias_mean: have bias in mean prediction
         
         bool_bias_var: have bias in variance prediction
         
         bool_bias_gate: have bias in gate prediction
         
+        Dictionary of abbreviation:
+        
+           nllk: negative log likelihood
+           hetero: heteroskedasticity
+           inv: inversed
+           const: constant
+           indi: individual
+           py: predicted y
+           src: source
+           var: variance
+         
+           A: number of samples
+           S: source 
+           B: batch size
+           T: time steps
+           D: data dimensionality at each time step
         '''
         
-        # Dictionary of abbreviation:
-        #
-        #   nllk: negative log likelihood
-        #   hetero: heteroskedasticity
-        #   inv: inversed
-        #   const: constant
-        #   indi: individual
-        #   py: predicted y
-        #   src: source
-        #   var: variance
-        # 
-        #   A: number of samples
-        #   S: source 
-        #   B: batch size
-        #   T: time steps
-        #   D: data dimensionality at each time step
-        
         # ----- fix the random seed to reproduce the results
-        
         np.random.seed(1)
         tf.set_random_seed(1)
         
@@ -215,7 +197,6 @@ class mixture_statistic():
             # [S B T-1 D]
             curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, x_steps - 1, -1])
             
-            # model_bool_bilinear
             if model_type == "linear":
                 
                 #[S B]
@@ -246,7 +227,6 @@ class mixture_statistic():
         else:
             
             if model_type == "linear":
-            #if model_bool_bilinear == True:
                 
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = \
@@ -269,8 +249,8 @@ class mixture_statistic():
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
-                                        rnn_size_layers = [int(hyper_para_dict['rnn_size'])],
-                                        rnn_cell_type = "gru",
+                                        rnn_size_layers = [int(hyper_para_dict['rnn_size']), int(hyper_para_dict['rnn_size'])],
+                                        rnn_cell_type = "lstm",
                                         dropout_keep = hyper_para_dict['dropout_keep_prob'],
                                         dense_num = int(hyper_para_dict['dense_num']),
                                         max_norm_cons = hyper_para_dict['max_norm_cons'])
@@ -418,7 +398,7 @@ class mixture_statistic():
                 
                 # variance
                 sq_mean_stack = var_stack + tf.square(mean_stack)
-                # [B 1]                                   [B S]          [B S]
+                # [B 1]                                 [B S]          [B S]
                 mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
@@ -431,7 +411,6 @@ class mixture_statistic():
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 self.nllk_bound = self.nllk
-                
                 
             elif self.loss_type == 'heter_lk_inv':
                 
@@ -452,7 +431,6 @@ class mixture_statistic():
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 self.nllk_bound = self.nllk
-                
                 
             elif self.loss_type == 'homo_lk_inv':
                 
@@ -483,7 +461,6 @@ class mixture_statistic():
                 
                 self.nllk_bound = self.nllk
             
-            
             # elbo: evidence lower bound optimization    
             elif self.loss_type == 'heter_elbo':
                 
@@ -510,7 +487,6 @@ class mixture_statistic():
         
                 self.nllk_bound = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_bound, -1)) 
             
-            
             elif self.loss_type == 'mse':
                 
                 # component variance
@@ -530,7 +506,6 @@ class mixture_statistic():
             
                 lk = tf.multiply(lk_src, self.gates) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
-            
             
             # elif self.loss_type == 'stacking':
             
@@ -673,7 +648,7 @@ class mixture_statistic():
                 # [B 1]                     [B S]         [B S]
                 self.py_var = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)
             '''
-
+        
         # ----- regularization
         
         self.regu_var = regu_var 
@@ -796,10 +771,7 @@ class mixture_statistic():
         # -- decay
         
         if self.optimization_lr_decay == True:
-            
-            #global_step = tf.Variable(0, 
-            #                          trainable = False)
-            
+                        
             decay_learning_rate = tf.train.exponential_decay(tf_learning_rate, 
                                                              global_step,
                                                              decay_steps = self.optimization_lr_decay_steps, 
@@ -852,21 +824,24 @@ class mixture_statistic():
             train_optimizer = tf.train.MomentumOptimizer(learning_rate = optimizer_lr,
                                                          momentum = 0.9,
                                                          use_nesterov = True)
-            
         elif self.optimization_method == 'adamW':
             
             train_optimizer = tf.contrib.opt.AdamWOptimizer(weight_decay = 0.001,
                                                             learning_rate = optimizer_lr)
-            
         # -- SG-MCMC
         # stochastic gradient Monto-Carlo Markov Chain
         elif self.optimization_method == 'sg_mcmc_adam':
+            
+            print("\n --- sg_mcmc_adam ---- \n")
             
             train_optimizer = sg_mcmc_adam(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sg_mcmc_RMSprop':
             
             train_optimizer = sg_mcmc_RMSprop(learning_rate = optimizer_lr)
+            
+        else:
+            print("\n --- OPTIMIZER ERROR ---- \n")
         
         # -- training operation
         self.train_op = train_optimizer.minimize(self.loss, 

@@ -11,6 +11,10 @@ import tensorflow as tf
 # local 
 from utils_libs import *
 
+# stabilize the network by fixing random seeds
+np.random.seed(1)
+tf.set_random_seed(1)
+
 def multi_src_predictor_rnn(x, 
                             x_src_seperated,
                             n_src, 
