@@ -34,9 +34,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # ----- data and log paths
 path_data = args.dataset
-path_log_error = "../results/mixture/log_error_mix.txt"
+path_log_error = "../results/mixture/log_error_mix_" + str(args.gpu_id) + ".txt"
 path_model = "../results/mixture/"
-path_py = "../results/mixture/py_" + str(args.dataset)[-10:] + ".p"
+path_py = "../results/mixture/py_" + str(args.dataset)[-10:-1] + "_" + str(args.gpu_id) + ".p"
 
 # ----- hyper-parameters set-up
 
@@ -57,12 +57,12 @@ para_x_src_seperated = True
 para_bool_target_seperate = False
 # if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
-para_add_common_pattern = False
+para_add_common_pattern = True
 
 # -- training and validation
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
-para_hpara_n_trial = 2
+para_hpara_n_trial = 8
 
 para_n_epoch = 80
 para_burn_in_epoch = 20
@@ -94,11 +94,11 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.0001, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [64, 150]
-para_hpara_range['random']['rnn']['l2'] = [1e-7, 0.000001]
+para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.001]
+para_hpara_range['random']['rnn']['batch_size'] = [64, 100]
+para_hpara_range['random']['rnn']['l2'] = [1e-5, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
-para_hpara_range['random']['rnn']['dense_num'] = [0, 2]
+para_hpara_range['random']['rnn']['dense_num'] = [1, 4]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [1.0, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
@@ -193,17 +193,15 @@ def log_train(path):
         text_file.write("hyper-para search : %s \n"%(para_hpara_search))
         text_file.write("hyper-para range : %s \n"%(str(para_hpara_range[para_hpara_search][para_model_type])))
         text_file.write("hyper-para random search trials : %s \n"%(str(para_hpara_n_trial)))
-        
         text_file.write("\n")
+        
         text_file.write("epochs in total : %s \n"%(para_n_epoch))
         text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
-        
         text_file.write("snapshot type : %s \n"%(para_snapshot_type))
         text_file.write("snapshot_Bernoulli : %s \n"%(para_snapshot_Bernoulli))
         text_file.write("num. snapshots in validation : %s \n"%(para_val_aggreg_num))
         text_file.write("num. snapshots in testing : %s \n"%(para_test_snapshot_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
-        
         text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
         text_file.write("early-stoping look-back window : %s \n"%(para_early_stop_window))
         
@@ -262,12 +260,13 @@ def training_validating(xtr,
         config = tf.ConfigProto()
         config.allow_soft_placement = True
         config.gpu_options.allow_growth = True
-        
         sess = tf.Session(config = config)
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
-                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
+                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
+                                  hyper_para_dict = hyper_para_dict, 
+                                  model_type = para_model_type)
         
         # -- initialize the network
         
@@ -298,8 +297,7 @@ def training_validating(xtr,
                           optimization_lr_decay = para_optimizer_lr_decay,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hyper_para_dict["batch_size"]),
                           optimization_burn_in_step = para_burn_in_epoch,
-                          optimization_warmup_step = para_optimizer_lr_warmup_epoch*training_dict["batch_per_epoch"] - 1
-                         )
+                          optimization_warmup_step = para_optimizer_lr_warmup_epoch*training_dict["batch_per_epoch"] - 1)
         
         model.train_ini()
         model.inference_ini()
@@ -402,7 +400,9 @@ def testing(model_snapshots,
             file_path,
             bool_instance_eval,
             loss_type,
-            num_src):
+            num_src,
+            snapshot_features, 
+            hpara_dict):
     
     # ensemble of model snapshots
     infer = ensemble_inference()
@@ -426,7 +426,9 @@ def testing(model_snapshots,
         
             model = mixture_statistic(session = sess, 
                                       loss_type = para_loss_type,
-                                      num_src = num_src)
+                                      num_src = num_src,
+                                      hyper_para_dict = hpara_dict, 
+                                      model_type = para_model_type)
             # restore the model
             model.model_restore(tmp_meta, 
                                 tmp_data)
@@ -459,8 +461,11 @@ def testing(model_snapshots,
     
     else:
         # ensemble inference
-        return infer.bayesian_inference(yts)
-    
+        if len(snapshot_features) == 0:
+            return infer.bayesian_inference(yts)
+        else:
+            return infer.importance_inference(snapshot_features = snapshot_features, 
+                                              y = yts)
 # ----- main process  
 
 if __name__ == '__main__':
@@ -637,7 +642,7 @@ if __name__ == '__main__':
     # ----- re-train
     
     # best hyper-para and snapshot set 
-    best_hpara, snapshot_steps, bayes_steps, snapshot_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
+    best_hpara, snapshot_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
                                                                    val_aggreg_num = para_val_aggreg_num, 
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
@@ -676,7 +681,9 @@ if __name__ == '__main__':
                              file_path = path_model,
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
-                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0], 
+                             snapshot_features = [],
+                             hpara_dict = best_hpara)
     
     log_test_performance(path = path_log_error,
                          error_tuple = [error_tuple],
@@ -691,11 +698,31 @@ if __name__ == '__main__':
                              file_path = path_model,
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
-                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0], 
+                             snapshot_features = [],
+                             hpara_dict = best_hpara)
     
     log_test_performance(path = path_log_error,
                          error_tuple = [error_tuple],
                          ensemble_str = "Top-rank")
+    
+    # -- importance weighted best snapshot steps 
+    
+    error_tuple, _ = testing(model_snapshots = snapshot_steps,
+                             xts = ts_x,
+                             yts = ts_y,
+                             x_src_seperated = para_x_src_seperated,
+                             file_path = path_model,
+                             bool_instance_eval = True,
+                             loss_type = para_loss_type,
+                             num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0], 
+                             snapshot_features = top_steps_features, 
+                             hpara_dict = best_hpara)
+    
+    log_test_performance(path = path_log_error,
+                         error_tuple = [error_tuple],
+                         ensemble_str = "Importance Top-rank")
+    
     
     # -- bayesian steps
     
@@ -706,11 +733,30 @@ if __name__ == '__main__':
                                     file_path = path_model,
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
-                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0])
+                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0], 
+                                    snapshot_features = [],
+                                    hpara_dict = best_hpara)
     
     log_test_performance(path = path_log_error,
                          error_tuple = [error_tuple],
                          ensemble_str = "Bayesian")
+    
+    # -- importance weighted bayesian steps
+    
+    error_tuple, py_tuple = testing(model_snapshots = bayes_steps,
+                                    xts = ts_x,
+                                    yts = ts_y,
+                                    x_src_seperated = para_x_src_seperated,
+                                    file_path = path_model,
+                                    bool_instance_eval = True,
+                                    loss_type = para_loss_type,
+                                    num_src = len(ts_x) if type(ts_x) == list else np.shape(ts_x)[0], 
+                                    snapshot_features = bayes_steps_features, 
+                                    hpara_dict = best_hpara)
+    
+    log_test_performance(path = path_log_error,
+                         error_tuple = [error_tuple],
+                         ensemble_str = "Importance Bayesian")
     
     # -- dump predictions on testing data
     
@@ -719,4 +765,4 @@ if __name__ == '__main__':
     
     # -- for test
     
-    print("--- !!! --- \n", snapshot_steps_features, bayes_steps_features)
+    #print("--- !!! --- \n", snapshot_steps_features, bayes_steps_features)

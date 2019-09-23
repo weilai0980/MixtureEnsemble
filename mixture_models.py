@@ -7,6 +7,8 @@ from scipy.optimize import fmin_slsqp
 import tensorflow as tf
 import tensorflow_probability as tfp
 
+from sklearn.neighbors.kde import KernelDensity
+
 # local packages
 from utils_libs import *
 from utils_linear_units import *
@@ -25,30 +27,28 @@ class mixture_statistic():
     def __init__(self, 
                  session, 
                  loss_type,
-                 num_src,
-                 ):
+                 num_src, 
+                 hyper_para_dict,
+                 model_type):
         '''
         Argu.:
           session: tensorflow session
           loss_type: string, type of loss functions, {mse, lk, lk_inv, elbo, ...}
+          num_src:
+          hyper_para_dict:
+          model_type:
         '''
-        
-        # build the network graph 
-        self.lr = 0.0
-        self.l2 = 0.0
-        
+        #self.lr = 0.0
+        #self.l2 = 0.0
+        #elf.distr_type = ''
         self.sess = session
-        
-        #self.bool_log = ''
         self.loss_type = loss_type
-        self.distr_type = ''
-        
-        # number of sources in X
-        self.num_src = num_src
+        self.num_src = num_src # number of sources in X
+        self.hyper_para_dict = hyper_para_dict
+        self.model_type = model_type
         
         self.log_step_error = []
         self.log_error_up_flag = False
-        
         self.stored_step_id = []
         
     def network_ini(self,
@@ -81,7 +81,7 @@ class mixture_statistic():
                     optimization_burn_in_step,
                     optimization_warmup_step):
         '''
-        Arguments:
+        Argu.:
         
         hyper_para_dict:
         
@@ -97,7 +97,6 @@ class mixture_statistic():
         
         x_steps: sequence length values for each component in X
                 
-        
         model_distr_type: string, type of the distribution of the target variable
         
         model_distr_para: set of parameters of the associated distribution
@@ -147,11 +146,11 @@ class mixture_statistic():
         
         # ----- ini
         
-        # build the network graph 
-        self.lr = hyper_para_dict["lr"]
-        self.l2 = hyper_para_dict["l2"]
+        self.hyper_para_dict = hyper_para_dict
         
-        #self.bool_log = y_bool_log
+        # build the network graph 
+        self.lr = self.hyper_para_dict["lr"]
+        self.l2 = self.hyper_para_dict["l2"]
         self.distr_type = model_distr_type
         
         # -- initialize placeholders
@@ -170,6 +169,10 @@ class mixture_statistic():
             self.x = tf.placeholder(tf.float32, 
                                     [self.num_src, None, x_steps, x_dim], 
                                     name = 'x')
+        
+        if model_type == "rnn":
+            self.keep_prob = tf.placeholder(tf.float32, shape = (), 
+                                            name = 'keep_prob')
             
         # -- hyper-parameters
         self.x_src_seperated = x_src_seperated
@@ -219,11 +222,8 @@ class mixture_statistic():
                                            bool_scope_reuse= [True, True, True], 
                                            str_scope = "",
                                            para_share_logit = model_para_share_type)
-            
             elif model_type == "rnn":
-                
                 a = 1
-                
         else:
             
             if model_type == "linear":
@@ -249,11 +249,11 @@ class mixture_statistic():
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
-                                        rnn_size_layers = [int(hyper_para_dict['rnn_size']), int(hyper_para_dict['rnn_size'])],
+                                        rnn_size_layers = [ int(self.hyper_para_dict['rnn_size']) ],
                                         rnn_cell_type = "lstm",
-                                        dropout_keep = hyper_para_dict['dropout_keep_prob'],
-                                        dense_num = int(hyper_para_dict['dense_num']),
-                                        max_norm_cons = hyper_para_dict['max_norm_cons'])
+                                        dropout_keep = self.keep_prob,
+                                        dense_num = int(self.hyper_para_dict['dense_num']),
+                                        max_norm_cons = self.hyper_para_dict['max_norm_cons'])
                 
         # ----- individual means and variance
         
@@ -788,7 +788,7 @@ class mixture_statistic():
             global_steps_int = tf.cast(global_step, 
                                        tf.int32)
             warmup_steps_int = tf.constant(self.optimization_warmup_step, 
-                                           dtype=tf.int32)
+                                           dtype = ntf.int32)
             
             global_steps_float = tf.cast(global_steps_int, 
                                          tf.float32)
@@ -868,7 +868,10 @@ class mixture_statistic():
                 data_dict["x" + str(i) + ":0"] = x[i]
         else:
             data_dict["x:0"] = x
-        
+            
+        if self.model_type == "rnn":
+            data_dict["keep_prob:0"] = self.hyper_para_dict['dropout_keep_prob']
+            
         # record the global training step 
         self.training_step = global_step
         
@@ -929,11 +932,15 @@ class mixture_statistic():
                    snapshot_Bernoulli,
                    step,
                    bool_end_of_epoch):
-    
-        # x: [S B T D] or [S, B T D]
-        # y: [B 1]
-        
+        '''
+        x: [S B T D] or [S, B T D]
+        y: [B 1]
+        '''
         if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
+            
+            # evaluate mode
+            #tmpval = self.hyper_para_dict['dropout_keep_prob']
+            #self.hyper_para_dict['dropout_keep_prob'] = 1.0
             
             # -- validation inference
             
@@ -948,32 +955,41 @@ class mixture_statistic():
                 # x: [S B T D]
                 data_dict["x:0"] = x
                 
+            if self.model_type == "rnn":
+                data_dict["keep_prob:0"] = 1.0
+                
             rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
                                                           tf.get_collection('mae')[0],
                                                           tf.get_collection('mape')[0],
                                                           tf.get_collection('nnllk')[0],
                                                           tf.get_collection('loss')[0]],
                                                           feed_dict = data_dict)
-            # -- validation monitoring
-        
             # validation error log for early stopping
             self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
+            
+            # back to training mode
+            #self.hyper_para_dict['dropout_keep_prob'] = tmpval
             
             # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
             return [rmse, mae, mape, nnllk], [loss]
         
         return None, None
         
-    #   infer givn testing data
+    # infer givn testing data
     def inference(self, 
                   x, 
                   y,
                   x_src_seperated,
                   bool_py_eval):
-        
+        '''
         # x: [S B T D] or [S, B T D]
         # y: [B 1]
+        '''
+        # evaluate mode
+        #tmpval = self.hyper_para_dict['dropout_keep_prob']
+        #self.hyper_para_dict['dropout_keep_prob'] = 1.0
         
+        # --
         data_dict = {}
         data_dict['y:0'] = y
         
@@ -983,6 +999,9 @@ class mixture_statistic():
                 data_dict["x" + str(i) + ":0"] = x[i]
         else:
             data_dict["x:0"] = x
+            
+        if self.model_type == "rnn":
+            data_dict["keep_prob:0"] = 1.0
         
         rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
                                                 tf.get_collection('mae')[0],
@@ -990,7 +1009,6 @@ class mixture_statistic():
                                                 tf.get_collection('nnllk')[0]],
                                                 feed_dict = data_dict)
         if bool_py_eval == True:
-            
             # [B 1]  [B 1]   [B S]
             py_mean, py_var, py_gate_src, py_mean_src, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
                                                                                    tf.get_collection('py_var')[0],
@@ -1004,7 +1022,9 @@ class mixture_statistic():
             py_gate_src = None
             py_mean_src = None
             py_var_src = None
-            
+        # back to training mode
+        #self.hyper_para_dict['dropout_keep_prob'] = tmpval
+        
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
         return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
     
@@ -1035,7 +1055,6 @@ class mixture_statistic():
                 if tmp_window_error < tmp_last_error:
                     
                     if self.log_error_up_flag == False:
-                        
                         self.stored_step_id.append(self.training_step - 1)
                     
                         saver = tf.train.Saver()
@@ -1046,7 +1065,6 @@ class mixture_statistic():
                 
                         return True
                 else:
-                    
                     self.log_error_up_flag = False
         
         # -- best snapshots
@@ -1073,13 +1091,11 @@ class mixture_statistic():
     def model_restore(self,
                       path_meta, 
                       path_data):
-        
         saver = tf.train.import_meta_graph(path_meta, 
                                            clear_devices = True)
         saver.restore(self.sess, 
                       path_data)
         return
-    
     '''
     #   collect the optimized variable values
     def collect_coeff_values(self, 
@@ -1121,36 +1137,83 @@ class ensemble_inference(object):
         
         return
     
-    def density_inference(self,
-                          sample_features,
-                          y):
+    def softmax_stable(self, 
+                       X, 
+                       theta = 1.0, 
+                       axis = None):
+        '''
+        logsumexp trick
+    
+        Compute the softmax of each element along an axis of X.
+
+        Argu.:
+          X: ND-Array. Probably should be floats.
+          theta (optional): float parameter, used as a multiplier
+                          prior to exponentiation. Default = 1.0
+          axis (optional): axis to compute values along. Default is the
+                         first non-singleton axis.
+
+        Returns an array the same size as X. The result will sum to 1
+        along the specified axis.
+        '''
+        # make X at least 2d
+        y = np.atleast_2d(X)
+
+        # find axis
+        if axis is None:
+            axis = next(j[0] for j in enumerate(y.shape) if j[1] > 1)
+
+        # multiply y against the theta parameter,
+        y = y * float(theta)
+
+        # subtract the max for numerical stability
+        y = y - np.expand_dims(np.max(y, axis = axis), axis)
+
+        # exponentiate y
+        y = np.exp(y)
+
+        # take the sum along the specified axis
+        ax_sum = np.expand_dims(np.sum(y, axis = axis), axis)
+
+        # finally: divide elementwise
+        p = y / ax_sum
+
+        # flatten if X was 1D
+        if len(X.shape) == 1: 
+            p = p.flatten()
         
+        return p
+    
+    def importance_inference(self,
+                             snapshot_features,
+                             y):
         '''
         y: [B 1]
-        sample_features: [A M]
-                         M: 
+        snapshot_features: [A M]
+                            M: 
         '''
+        num_snapshot = len(snapshot_features)
+        snapshot_features = np.reshape(np.asarray(snapshot_features), (num_snapshot, -1))
         
-        kde = KernelDensity(kernel = 'gaussian', bandwidth = 0.2).fit(sample_features)
-        # [A 1]
-        sample_density = np.exp(kde.score_samples(sample_features))
+        kde = KernelDensity(kernel = 'gaussian', bandwidth = 0.2).fit(snapshot_features)
+        kde_score = kde.score_samples(snapshot_features)
+        snapshot_imp = self.softmax_stable(kde_score, 
+                                           theta = 1.0, 
+                                           axis = None)
+        snapshot_imp = np.expand_dims(np.asarray(snapshot_imp), axis = 1)
+        print("\n\n ----- test \n", snapshot_imp)
         
         # [A B S]
         # A: number of samples
-        
         m_src_sample = np.asarray(self.py_mean_src_samples)
         v_src_sample = np.asarray(self.py_var_src_samples)
         g_src_sample = np.asarray(self.py_gate_src_samples)
-        
         # [A B 1]
         m_sample = np.asarray(self.py_mean_samples)
         
-        
         # -- mean
         # [B]
-        bayes_mean = np.mean(sample_density*np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
-        #bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
-        
+        bayes_mean = np.sum(snapshot_imp*np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
         
         # -- total variance
         # [B]
@@ -1158,20 +1221,17 @@ class ensemble_inference(object):
         # [A B S]
         var_plus_sq_mean_src = v_src_sample + m_src_sample**2
         # [B]
-        bayes_total_var = np.mean(sample_density*np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
-        
+        bayes_total_var = np.sum(snapshot_imp*np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
         
         # -- volatility
         # heteroskedasticity
         # [B]                       [A B S]
-        bayes_vola = np.mean(sample_density*np.sum(g_src_sample*v_src_sample, -1), 0)
-        
+        bayes_vola = np.sum(snapshot_imp*np.sum(g_src_sample*v_src_sample, -1), 0)
         
         # -- uncertainty on predicted mean
         # without heteroskedasticity
         # [B]                       [A B S]
-        bayes_unc = np.mean(sample_density*np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
-        
+        bayes_unc = np.sum(snapshot_imp*np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
         
         # -- nnllk
         # normalized negative log-likelihood
@@ -1182,10 +1242,9 @@ class ensemble_inference(object):
         # [A B S]
         tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
         # [B]                   [A B S]
-        tmp_lk = np.mean(sample_density*np.sum(g_src_sample*tmp_lk_src, -1), 0)
+        tmp_lk = np.sum(snapshot_imp*np.sum(g_src_sample*tmp_lk_src, -1), 0)
                                                                                                  
         nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
-        
         
         # -- uniform nnllk
         # take the mixture mean and variance to parameterize one Gaussian distribution
@@ -1194,7 +1253,6 @@ class ensemble_inference(object):
         uni_nnllk_vol = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_vola + 1e-5) + 0.5*np.log(bayes_vola + 1e-5) + 0.5*np.log(2*np.pi))
 
         uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
-        
         
         # -- gate
         # [B S]                 [A B S]
@@ -1323,7 +1381,6 @@ class ensemble_inference(object):
                 tr_gau_batch_src[-1].append([tmp_para[2], tmp_para[3]])
                 
         '''
-        
         # -- output
         tmpy = np.squeeze(y)
         

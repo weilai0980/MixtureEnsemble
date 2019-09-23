@@ -24,6 +24,10 @@ from tensorflow.python.ops import gen_random_ops
 from tensorflow.python.ops.gen_random_ops import *
 import tensorflow as tf
 
+'''
+https://www.tensorflow.org/api_docs/python/tf/disable_resource_variables
+'''
+
 class myAdamOptimizer(optimizer.Optimizer):
   """Optimizer that implements the Adam algorithm.
   See [Kingma et al., 2014](http://arxiv.org/abs/1412.6980)

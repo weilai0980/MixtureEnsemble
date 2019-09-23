@@ -201,9 +201,7 @@ Training-validation:
     learning rate
     regularization
     batch-size
-    
-    epoch 
-    
+    epoch     
   
   evaluation metric: 
     rmse, mae, mape, nnllk

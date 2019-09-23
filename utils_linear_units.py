@@ -22,7 +22,6 @@ def multi_src_predictor_linear(x,
       bool_scope_reuse: [mean, var, gate]
     
     '''
-    
     #[S B]
     tmp_mean, regu_mean = multi_src_bilinear(x,
                                              [steps, dim],
@@ -38,7 +37,6 @@ def multi_src_predictor_linear(x,
                                            bool_scope_reuse = bool_scope_reuse[1],
                                            num_src = n_src)
     
-    
     tmp_logit, regu_gate = multi_src_logit_bilinear(x,
                                                     [steps, dim],
                                                     str_scope + 'gate',
@@ -46,7 +44,6 @@ def multi_src_predictor_linear(x,
                                                     bool_scope_reuse = bool_scope_reuse[2],
                                                     num_src = n_src,
                                                     para_share_type = para_share_logit)
-    
     
     return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate
     
@@ -141,7 +138,6 @@ def multi_src_logit_bilinear(x,
            # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
-
 def multi_src_linear(x, 
                      dim_x, 
                      scope, 
@@ -172,7 +168,6 @@ def multi_src_linear(x,
         
            # [S B]          l2: regularization
     return h, tf.reduce_sum(tf.square(w))
-
 
 def multi_src_bilinear(x, 
                        shape_x, 
@@ -211,7 +206,6 @@ def multi_src_bilinear(x,
          # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
-
 def linear(x, 
            dim_x, 
            scope, 
@@ -239,7 +233,6 @@ def linear(x,
            
            # [B]          l2: regularization
     return tf.squeeze(h), tf.reduce_sum(tf.square(w))
-
 
 def bilinear(x, 
              shape_x, 
