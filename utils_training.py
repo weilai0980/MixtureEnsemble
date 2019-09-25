@@ -14,15 +14,16 @@ from utils_libs import *
 
 def data_reshape(data, 
                  bool_target_seperate):
+    '''
+    Argu.:
+     S: source
+     N: instance
+     T: time steps
+     D: dimensionality at each step
     
-    # S: source
-    # N: instance
-    # T: time steps
-    # D: dimensionality at each step
-    
-    # data: [yi, ti, [xi_src1, xi_src2, ...]]
-    # by default, the first element in the xi_src1 is the auto-regressive target
-    
+     data: [yi, ti, [xi_src1, xi_src2, ...]]
+     by default, the first element in the xi_src1 is the auto-regressive target
+    '''
     src_num = len(data[0][2])
     tmpx = []
     
@@ -49,13 +50,13 @@ def data_reshape(data,
     # output shape: x [S N T D],  y [N 1]
     return tmpx, np.expand_dims(tmpy, -1)
 
-
 def data_padding_x(x, 
                    num_src):
-    
-    # shape of x: [S N T D]
-    # T and D are different across sources
-    
+    '''
+    Argu.:
+     shape of x: [S N T D]
+     T and D are different across sources
+    '''
     num_samples = len(x[0])
     
     max_dim_t =  max([np.shape(x[i][0])[0] for i in range(num_src)])
@@ -79,7 +80,6 @@ def data_padding_x(x,
     # [S N T D]
     return target_x
 
-
 def func_mape(y, 
               yhat):
     
@@ -102,38 +102,7 @@ def func_rmse(y,
     
     return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
 
-
-def batch_augment(x, 
-                  y, 
-                  num_src):
-    
-    # x: [S B T D], 
-    # y: [B 1]
-    
-    # [B [1]]
-    idx_y = [[idx, i] for idx, i in enumerate(y)]
-    
-    sort_idx_y = sorted(idx_y, key = lambda x: x[1][0], reverse = True)
-    
-    aug_num = int(0.2*len(y))
-    
-    for i in range(aug_num):
-        
-        tmp_idx = sort_idx_y[i][0]
-        
-        for j in range(num_src):
-            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
-            x[j] = np.append(x[j], x[j][tmp_idx:tmp_idx+1], axis = 0)
-        
-        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
-        y = np.append(y, y[tmp_idx : tmp_idx+1], axis = 0)
-    
-    return x, y
-
-
-
 # ----- logging
-
 
 def log_train_val_performance(path, 
                               hpara, 
@@ -143,18 +112,17 @@ def log_train_val_performance(path,
     with open(path, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
-        
+'''        
 def log_train_val_bayesian_error(path, 
                                  error):
     
     with open(path, "a") as text_env:
         text_env.write("          %s\n\n"%(str(error)))
-        
+'''        
         
 def log_val_hyper_para(path, 
                        hpara_tuple, 
                        error_tuple):
-    
     with open(path, "a") as text_file:
         text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
         text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
@@ -163,35 +131,27 @@ def log_val_hyper_para(path,
 def log_test_performance(path, 
                          error_tuple,
                          ensemble_str):
-    
     with open(path, "a") as text_file:
         text_file.write("\n  test performance %s : %s \n"%(ensemble_str, str(error_tuple)))
         
         
 def log_null_loss_exception(epoch_errors, 
                             log_path):
-    
-    # epoch_errors: [ [step, tr_metric, val_metric, epoch] ]    
+    '''
+    Argu.:
+      epoch_errors: [ [step, tr_metric, val_metric, epoch] ]    
+    '''
     for i in epoch_errors:
-        
         if np.isnan(i[1][0]) == True:
-            
             with open(log_path, "a") as text_file:
                 text_file.write("\n  NULL loss exception at: %s \n"%(str(i[0])))
-            
             break
     return
 
-
 # ----- hyper-parameter searching 
 
-
-def parameter_manager(shape_x_dict, 
+def training_para_gen(shape_x_dict, 
                       hpara_dict):
-    
-    #hpara_dict = dict(zip(hyper_para_names, hyper_para_sample))
-    #hpara_dict["batch_size"] = int(hpara_dict["batch_size"])
-    
     tr_dict = {}
     
     ''' ? np.ceil ? '''
@@ -199,7 +159,6 @@ def parameter_manager(shape_x_dict,
     tr_dict["tr_idx"] = list(range(shape_x_dict["N"]))
         
     return tr_dict
-
 
 # hpara: hyper-parameter    
 class hyper_para_grid_search(object):
@@ -238,25 +197,20 @@ class hyper_para_grid_search(object):
             
             self.idx[cur_n] = 0
             self.trial_search(idx, cur_n + 1, True)
-            
             return True
-        
+
         else:
-            
             if self.trial_search(self.idx, cur_n + 1, False) == False:
-                
                 if self.idx[cur_n] + 1 < len(self.hpara_range[cur_n]):
                     
                     self.idx[cur_n] += 1
                     self.trial_search(self.idx, cur_n + 1, True)
-                    
                     return True
                 
                 else:
                     return False
             else:
                 return True
-            
             
 class hyper_para_random_search(object):
     
@@ -321,17 +275,16 @@ class hyper_para_random_search(object):
                     hpara_instance[self.hpara_names[idx]] = tmp_hpara_val
                 
                 return hpara_instance
-                
         return
         
-    
 def hyper_para_selection(hpara_log, 
                          val_aggreg_num, 
                          test_snapshot_num,
                          metric_idx):
-    
-    # hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
-    
+    '''
+    Argu.:
+      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
+    '''
     hp_err = []
     
     for hp_epoch_err in hpara_log:
@@ -341,14 +294,12 @@ def hyper_para_selection(hpara_log,
     # sorted_hp[0]: hyper-para with the best validation performance
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
-    
     # -- bayes steps
     full_steps = [k[0] for k in sorted_hp[0][1]]
     
     tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
     bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
     bayes_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
-    
     
     # -- snapshot steps
     snapshot_steps = full_steps[:len(bayes_steps)]
@@ -362,5 +313,48 @@ def hyper_para_selection(hpara_log,
            bayes_steps,\
            snapshot_steps_features,\
             bayes_steps_features
+
+# ----- data loader
+
+class data_loader(object):
+    
+    def __init__(self, 
+                 x,
+                 y,
+                 batch_size, 
+                 num_ins):
+        '''
+        Argu.:
+          x: numpy array
+          y: numpy array
+        '''
+        self.x = x
+        self.y = y
+        self.batch_size = batch_size
+        
+        self.ids = list(range(num_ins))
+        np.random.shuffle(self.ids)
+        
+        self.num_batch = int(np.ceil(1.0*num_ins/batch_size))
+        self.batch_cnt = 0
+        
+    def re_shuffle(self):
+        self.batch_cnt = 0
+        np.random.shuffle(self.ids)
+        
+    def one_batch(self):
+        
+        if self.batch_cnt >= self.num_batch:
+            return None, None
+        else:
+            # batch data
+            batch_ids = self.ids[self.batch_cnt*int(self.batch_size) : (self.batch_cnt+1)*int(self.batch_size)] 
+            # shape: [S B T D]
+            # B: number of data instances in one batch
+            batch_x = [x[tmp_src][batch_ids] for tmp_src in range(len(x))]
+            # [B 1]
+            batch_y = y[batch_ids]
             
-            
+            self.batch_cnt += 1
+            
+            return batch_x, batch_y

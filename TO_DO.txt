@@ -167,6 +167,8 @@ training error
   different optimizers
   heteroskedasticity and MCMC inference
   discrepency between validation and testing data
+  
+density average
 
 
 --------------- POINT LEARNED -------------------

@@ -94,12 +94,12 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.001]
-para_hpara_range['random']['rnn']['batch_size'] = [64, 100]
+para_hpara_range['random']['rnn']['lr'] = [0.0001, 0.0005]
+para_hpara_range['random']['rnn']['batch_size'] = [40, 80]
 para_hpara_range['random']['rnn']['l2'] = [1e-5, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
-para_hpara_range['random']['rnn']['dense_num'] = [1, 4]
-para_hpara_range['random']['rnn']['dropout_keep_prob'] = [1.0, 1.0]
+para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.9, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
 # model snapshot sample: epoch_wise or batch_wise
@@ -304,9 +304,15 @@ def training_validating(xtr,
         
         # -- set up training batch parameters
         
+        '''
         tr_batch_num = training_dict["batch_per_epoch"] 
         tr_idx = training_dict["tr_idx"]
+        '''
         
+        batch_gen = data_loader(x = xtr,
+                                y = ytr,
+                                batch_size = hyper_para_dict["batch_size"], 
+                                num_ins)
         # -- begin training
         
         # training and validation error log
@@ -318,11 +324,19 @@ def training_validating(xtr,
         
         for epoch in range(para_n_epoch):
             
+            '''
             # shuffle traning instances each epoch
             np.random.shuffle(tr_idx)
+            '''
             
-            # loop over all batches            
-            for i in range(tr_batch_num):
+            batch_gen.re_shuffle()
+            
+            # loop over all batches
+            batch_x, batch_y = batch_gen.one_batch()
+            while batch_x != None:
+                
+            '''            
+            #for i in range(tr_batch_num):
                 
                 # batch data
                 batch_idx = tr_idx[i*int(hyper_para_dict["batch_size"]) : (i+1)*int(hyper_para_dict["batch_size"])] 
@@ -332,6 +346,7 @@ def training_validating(xtr,
                 batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
                 # [B 1]
                 batch_y = ytr[batch_idx]
+            '''    
                 
                 # one-step training on a batch of training data
                 model.train_batch(batch_x, 
@@ -373,7 +388,8 @@ def training_validating(xtr,
                                                               early_stop_window = para_early_stop_window) == True:
                     
                     print("\n    [MODEL SAVED] \n " + path_model + para_model_type + '_' + str(global_step))
-                        
+                
+                batch_x, batch_y = batch_gen.one_batch()
                 global_step += 1
             
             # -- epoch-wise
@@ -452,11 +468,9 @@ def testing(model_snapshots,
     #         prediction tuple []
     
     if len(model_snapshots) == 0:
-        
         return ["None"], ["None"]
     
     elif len(model_snapshots) == 1:
-        
         return error_tuple, py_tuple
     
     else:
@@ -483,9 +497,6 @@ if __name__ == '__main__':
     
     print(len(tr_dta), len(val_dta), len(ts_dta))
     
-    # output from the reshape 
-    # y [N 1], x [S [N T D]]    
-    
     # if para_bool_target_seperate = yes, the last source corresponds to the auto-regressive target variable
     tr_x, tr_y = data_reshape(tr_dta, 
                               bool_target_seperate = para_bool_target_seperate)
@@ -495,6 +506,8 @@ if __name__ == '__main__':
     
     ts_x, ts_y = data_reshape(ts_dta,
                               bool_target_seperate = para_bool_target_seperate)
+    # output from the reshape 
+    # y [N 1], x [S [N T D]]
     
     print("training: ", len(tr_x[0]), len(tr_y))
     print("validation: ", len(val_x[0]), len(val_y))
@@ -593,7 +606,7 @@ if __name__ == '__main__':
                                                  
     while hpara_dict != None:
         
-        tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
+        tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
                                     hpara_dict = hpara_dict)
         # hp_: hyper-parameter
         # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
@@ -613,7 +626,7 @@ if __name__ == '__main__':
         
         #[ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
         ''' ? '''
-        hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
+        #hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
         hpara_log.append([hpara_dict, hp_step_error])
         
         # -- prepare for the next trial
@@ -631,7 +644,6 @@ if __name__ == '__main__':
                                   hpara = hpara_log[-1][0], 
                                   hpara_error = hpara_log[-1][1][0],
                                   train_time = hp_epoch_time)
-        
         # NAN loss exception
         log_null_loss_exception(hp_step_error, 
                                 path_log_error)
@@ -646,7 +658,7 @@ if __name__ == '__main__':
                                                                    val_aggreg_num = para_val_aggreg_num, 
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
-    tr_dict = parameter_manager(shape_x_dict = shape_tr_x_dict, 
+    tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
                                 hpara_dict = best_hpara)
     
     step_error, _ = training_validating(tr_x, 

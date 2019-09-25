@@ -38,9 +38,6 @@ class mixture_statistic():
           hyper_para_dict:
           model_type:
         '''
-        #self.lr = 0.0
-        #self.l2 = 0.0
-        #elf.distr_type = ''
         self.sess = session
         self.loss_type = loss_type
         self.num_src = num_src # number of sources in X
@@ -188,7 +185,6 @@ class mixture_statistic():
         self.bool_regu_mean = bool_regu_mean
         self.bool_regu_var = bool_regu_var
         
-        #self.optimization_mode = optimization_mode
         self.training_step = 0
         
         # ----- individual models
@@ -788,7 +784,7 @@ class mixture_statistic():
             global_steps_int = tf.cast(global_step, 
                                        tf.int32)
             warmup_steps_int = tf.constant(self.optimization_warmup_step, 
-                                           dtype = ntf.int32)
+                                           dtype = tf.int32)
             
             global_steps_float = tf.cast(global_steps_int, 
                                          tf.float32)
@@ -856,9 +852,9 @@ class mixture_statistic():
                     y,
                     x_src_seperated,
                     global_step):
-        
-        # global_step: in epoch 
-        
+        '''
+        global_step: in epoch 
+        '''
         data_dict = {}
         data_dict["y:0"] = y
         
@@ -938,10 +934,6 @@ class mixture_statistic():
         '''
         if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
-            # evaluate mode
-            #tmpval = self.hyper_para_dict['dropout_keep_prob']
-            #self.hyper_para_dict['dropout_keep_prob'] = 1.0
-            
             # -- validation inference
             
             data_dict = {}
@@ -967,9 +959,6 @@ class mixture_statistic():
             # validation error log for early stopping
             self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
             
-            # back to training mode
-            #self.hyper_para_dict['dropout_keep_prob'] = tmpval
-            
             # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
             return [rmse, mae, mape, nnllk], [loss]
         
@@ -985,10 +974,6 @@ class mixture_statistic():
         # x: [S B T D] or [S, B T D]
         # y: [B 1]
         '''
-        # evaluate mode
-        #tmpval = self.hyper_para_dict['dropout_keep_prob']
-        #self.hyper_para_dict['dropout_keep_prob'] = 1.0
-        
         # --
         data_dict = {}
         data_dict['y:0'] = y
@@ -1022,8 +1007,6 @@ class mixture_statistic():
             py_gate_src = None
             py_mean_src = None
             py_var_src = None
-        # back to training mode
-        #self.hyper_para_dict['dropout_keep_prob'] = tmpval
         
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
         return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
@@ -1042,7 +1025,6 @@ class mixture_statistic():
                     early_stop_window):
         
         # -- early stopping
-        
         # self.log_step_error: [self.training_step, [rmse, mae, mape, nnllk]]
         
         if early_stop_bool == True:

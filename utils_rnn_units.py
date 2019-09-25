@@ -169,6 +169,9 @@ def multi_mv_dense(num_layers,
     
     for i in range(num_layers):
         
+        if out_dim_vari <= 1:
+            break
+        
         with tf.variable_scope(scope + str(i)):
             
             # no dropout on the input
