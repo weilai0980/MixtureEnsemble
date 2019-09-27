@@ -1,0 +1,287 @@
+#!/usr/bin/python
+
+import numpy as np
+from sklearn.neighbors.kde import KernelDensity
+
+class ensemble_inference(object):
+
+    def __init__(self):
+        '''
+        for SG-MCMC
+          [A B S]
+          A: number of samples
+        '''
+        self.py_mean_src_samples = []
+        self.py_var_src_samples = []
+        self.py_gate_src_samples = []
+        
+        self.py_mean_samples = []
+        self.py_var_samples = []
+        
+    def add_samples(self, 
+                    py_mean, 
+                    py_var,
+                    py_mean_src,
+                    py_var_src, 
+                    py_gate_src):
+        # [A B S]         
+        self.py_mean_src_samples.append(py_mean_src)
+        self.py_var_src_samples.append(py_var_src)
+        self.py_gate_src_samples.append(py_gate_src)
+        
+        # [A B 1]
+        self.py_mean_samples.append(py_mean)
+        self.py_var_samples.append(py_var)
+        
+        return
+    
+    def softmax_stable(self, 
+                       X, 
+                       theta = 1.0, 
+                       axis = None):
+        '''
+        logsumexp trick
+    
+        Compute the softmax of each element along an axis of X.
+
+        Argu.:
+          X: ND-Array. Probably should be floats.
+          theta (optional): float parameter, used as a multiplier
+                          prior to exponentiation. Default = 1.0
+          axis (optional): axis to compute values along. Default is the
+                         first non-singleton axis.
+
+        Returns an array the same size as X. The result will sum to 1
+        along the specified axis.
+        '''
+        # make X at least 2d
+        y = np.atleast_2d(X)
+
+        # find axis
+        if axis is None:
+            axis = next(j[0] for j in enumerate(y.shape) if j[1] > 1)
+
+        # multiply y against the theta parameter,
+        y = y * float(theta)
+
+        # subtract the max for numerical stability
+        y = y - np.expand_dims(np.max(y, axis = axis), axis)
+
+        # exponentiate y
+        y = np.exp(y)
+
+        # take the sum along the specified axis
+        ax_sum = np.expand_dims(np.sum(y, axis = axis), axis)
+
+        # finally: divide elementwise
+        p = y / ax_sum
+
+        # flatten if X was 1D
+        if len(X.shape) == 1: 
+            p = p.flatten()
+        
+        return p
+    
+    def importance_inference(self,
+                             snapshot_features,
+                             y):
+        '''
+        y: [B 1]
+        snapshot_features: [A M]
+                            M: 
+        '''
+        num_snapshot = len(snapshot_features)
+        snapshot_features = np.reshape(np.asarray(snapshot_features), (num_snapshot, -1))
+        
+        kde = KernelDensity(kernel = 'gaussian', bandwidth = 0.2).fit(snapshot_features)
+        kde_score = kde.score_samples(snapshot_features)
+        snapshot_imp = self.softmax_stable(kde_score, 
+                                           theta = 1.0, 
+                                           axis = None)
+        snapshot_imp = np.expand_dims(np.asarray(snapshot_imp), axis = 1)
+        print("\n\n ----- test \n", snapshot_imp)
+        
+        # [A B S]
+        # A: number of samples
+        m_src_sample = np.asarray(self.py_mean_src_samples)
+        v_src_sample = np.asarray(self.py_var_src_samples)
+        g_src_sample = np.asarray(self.py_gate_src_samples)
+        # [A B 1]
+        m_sample = np.asarray(self.py_mean_samples)
+        
+        # -- mean
+        # [B]
+        bayes_mean = np.sum(snapshot_imp*np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        
+        # -- total variance
+        # [B]
+        sq_mean = bayes_mean**2
+        # [A B S]
+        var_plus_sq_mean_src = v_src_sample + m_src_sample**2
+        # [B]
+        bayes_total_var = np.sum(snapshot_imp*np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        
+        # -- volatility
+        # heteroskedasticity
+        # [B]                       [A B S]
+        bayes_vola = np.sum(snapshot_imp*np.sum(g_src_sample*v_src_sample, -1), 0)
+        
+        # -- uncertainty on predicted mean
+        # without heteroskedasticity
+        # [B]                       [A B S]
+        bayes_unc = np.sum(snapshot_imp*np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
+        
+        # -- nnllk
+        # normalized negative log-likelihood
+        
+        # [1 B 1]
+        aug_y = np.expand_dims(y, axis=0)
+        
+        # [A B S]
+        tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
+        # [B]                   [A B S]
+        tmp_lk = np.sum(snapshot_imp*np.sum(g_src_sample*tmp_lk_src, -1), 0)
+                                                                                                 
+        nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
+        
+        # -- uniform nnllk
+        # take the mixture mean and variance to parameterize one Gaussian distribution
+        
+        # [B]
+        uni_nnllk_vol = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_vola + 1e-5) + 0.5*np.log(bayes_vola + 1e-5) + 0.5*np.log(2*np.pi))
+
+        uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
+        
+        # -- gate
+        # [B S]                 [A B S]
+        bayes_gate_src = np.mean(g_src_sample, axis = 0)
+        bayes_gate_src_var = np.var(g_src_sample, axis = 0)
+        
+        # -- output
+        tmpy = np.squeeze(y)
+        
+        # error tuple [], prediction tuple []
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
+               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        
+    def bayesian_inference(self, 
+                           y):
+        '''
+        y: [B 1]
+        A: number of samples
+        '''
+        # [A B S]
+        m_src_sample = np.asarray(self.py_mean_src_samples)
+        v_src_sample = np.asarray(self.py_var_src_samples)
+        g_src_sample = np.asarray(self.py_gate_src_samples)
+        
+        # [A B 1]
+        m_sample = np.asarray(self.py_mean_samples)
+        
+        # -- mean
+        # [B]
+        bayes_mean = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
+        #bayes_mean = np.squeeze(np.mean(m_sample, axis = 0))
+        
+        # -- total variance
+        # [B]
+        sq_mean = bayes_mean**2
+        # [A B S]
+        var_plus_sq_mean_src = v_src_sample + m_src_sample**2
+        # [B]
+        bayes_total_var = np.mean(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        
+        # -- volatility
+        # heteroskedasticity
+        # [B]                       [A B S]
+        bayes_vola = np.mean(np.sum(g_src_sample*v_src_sample, -1), 0)
+        
+        # -- uncertainty on predicted mean
+        # without heteroskedasticity
+        # [B]                       [A B S]
+        bayes_unc = np.mean(np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
+        
+        # -- nnllk
+        # normalized negative log-likelihood
+        
+        # [1 B 1]
+        aug_y = np.expand_dims(y, axis=0)
+        
+        # [A B S]
+        tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
+        # [B]                   [A B S]
+        tmp_lk = np.mean(np.sum(g_src_sample*tmp_lk_src, -1), 0)
+        # normalized                                                                                         
+        nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
+        
+        # -- uniform nnllk
+        # take the mixture mean and variance to parameterize one Gaussian distribution
+        
+        # [B]
+        uni_nnllk_vol = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_vola + 1e-5) + 0.5*np.log(bayes_vola + 1e-5) + 0.5*np.log(2*np.pi))
+
+        uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
+        
+        # -- gate
+        # [B S]                 [A B S]
+        bayes_gate_src = np.mean(g_src_sample, axis = 0)
+        bayes_gate_src_var = np.var(g_src_sample, axis = 0)
+        
+        '''
+        # -- gate uncertainty 
+        # infer by truncated Gaussian [0.0, 1.0]
+        
+        print("-----------------  begin to infer gate uncertainty...\n")
+        
+        # [B S]
+        loc_ini = np.mean(g_src_sample, axis = 0) 
+        scale_ini = np.std(g_src_sample, axis = 0)
+        
+        real_left = 0.0
+        real_right = 1.0
+        
+        # [B S]
+        left_ini = 1.0*(real_left - loc_ini)/(scale_ini + 1e-5)
+        right_ini = 1.0*(real_right - loc_ini)/(scale_ini + 1e-5)
+        
+        # [A B S]
+        norm_g_src_sample = 1.0*(g_src_sample - loc_ini)/(scale_ini + 1e-5)
+        
+        def func(p, r, xa, xb):
+            return truncnorm.nnlf(p, r)
+        
+        def constraint(p, r, xa, xb):
+            a, b, loc, scale = p
+            return np.array([a*scale + loc - xa, b*scale + loc - xb])
+        
+        # [B S A]       
+        batch_src_sample = np.transpose(norm_g_src_sample, [1, 2, 0])
+        
+        num_batch = np.shape(batch_src_sample)[0]
+        num_src = np.shape(batch_src_sample)[1]
+        
+        # [B S 2]: [B S 0] mean, [B S 1] var
+        tr_gau_batch_src = []
+        
+        for tmp_ins in range(num_batch):
+            
+            tr_gau_batch_src.append([])
+            
+            for tmp_src in range(num_src):
+                
+                tmp_para = fmin_slsqp(func, 
+                                      [left_ini[tmp_ins][tmp_src], right_ini[tmp_ins][tmp_src], loc_ini[tmp_ins][tmp_src], scale_ini[tmp_ins][tmp_src]], 
+                                      f_eqcons = constraint, 
+                                      args = (batch_src_sample[tmp_ins][tmp_src], real_left, real_right),
+                                      iprint = False, 
+                                      iter = 1000)
+                
+                tr_gau_batch_src[-1].append([tmp_para[2], tmp_para[3]])
+        '''
+        # -- output
+        tmpy = np.squeeze(y)
+        
+        # error tuple [], prediction tuple []
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
+               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        

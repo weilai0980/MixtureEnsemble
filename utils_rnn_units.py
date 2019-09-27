@@ -131,13 +131,13 @@ def multi_src_predictor_rnn(x,
     # [S B d] -> [S B 1]
     # ? tanh activation
     tmp_logit, regu_logit = mv_dense(h_vari = h_src, 
-                                          dim_vari = rnn_size_layers[-1], 
-                                          scope = str_scope + "_logit", 
-                                          num_vari = n_src, 
-                                          dim_to = 1, 
-                                          bool_activation = False, 
-                                          max_norm_regul = max_norm_cons, 
-                                          regul_type = "l2")
+                                     dim_vari = rnn_size_layers[-1], 
+                                     scope = str_scope + "_logit", 
+                                     num_vari = n_src, 
+                                     dim_to = 1, 
+                                     bool_activation = False, 
+                                     max_norm_regul = max_norm_cons, 
+                                     regul_type = "l2")
     
     return tf.squeeze(tmp_mean), regu_mean, tf.squeeze(tmp_var), regu_var, tf.squeeze(tmp_logit), regu_logit
 
@@ -153,10 +153,8 @@ def multi_mv_dense(num_layers,
                    max_norm_regul,
                    regul_type):
     '''
-    h_vari: [V B D] -> [V B d] 
-
     Argu.:
-      h_vari: [V B D]
+      h_vari: [V B D] -> [V B d]
       dim_vari: int
       num_vari: int
       dim_to: int
@@ -205,10 +203,8 @@ def mv_dense(h_vari,
              max_norm_regul, 
              regul_type):
     '''
-    h_vari: [V B D] -> [V B d] 
-
     Argu.:
-      h_vari: [V B D]
+      h_vari: [V B D] -> [V B d]
       dim_vari: int
       num_vari: int
       dim_to: int
@@ -358,12 +354,10 @@ def plain_rnn(x,
               cell_type):
     '''
     Argu.:
-    
       x: [B T D] 
       dim_layers: [int]
       dropout_keep_prob: float 
       cell_type: lstm, gru
-      
     '''
     # stabilize the network by fixing random seeds
     np.random.seed(1)
@@ -408,4 +402,4 @@ def plain_rnn(x,
             hiddens, state = tf.nn.dynamic_rnn(cell = rnn_cell, 
                                                inputs = hiddens, 
                                                dtype = tf.float32)
-    return hiddens, state 
+    return hiddens, state

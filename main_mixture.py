@@ -96,10 +96,10 @@ para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
 para_hpara_range['random']['rnn']['lr'] = [0.0001, 0.0005]
 para_hpara_range['random']['rnn']['batch_size'] = [40, 80]
-para_hpara_range['random']['rnn']['l2'] = [1e-5, 0.01]
+para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
-para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.9, 1.0]
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
 # model snapshot sample: epoch_wise or batch_wise
@@ -118,6 +118,7 @@ para_validation_metric = 'nnllk'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
+# re-set this for training on new data
 para_optimizer_lr_decay = True
 para_optimizer_lr_decay_epoch = 10 # after the warm-up
 para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
@@ -223,18 +224,17 @@ def training_validating(xtr,
                         retrain_bool):
     '''
     Argu.:
-    
-    xtr: [num_src, N, T, D]
+      xtr: [num_src, N, T, D]
          S: num_src
          N: number of data samples
          T: number of steps
          D: dimension at each time step
-    ytr: [N 1]
+      ytr: [N 1]
         
-    dim_x: integer, corresponding to D
-    steps_x: integer, corresponding to T
-    
-    hyper_para_dict: 
+      dim_x: integer, corresponding to D
+      steps_x: integer, corresponding to T
+      
+      hyper_para_dict: 
        "lr": float,
        "batch_size": int
        "l2": float,
@@ -243,7 +243,7 @@ def training_validating(xtr,
        "dense_num": int,
        "use_hidden_before_dense": bool
        
-    training_dict:
+      training_dict:
        "batch_per_epoch": int
        "tr_idx": list of integer
     '''
@@ -267,7 +267,6 @@ def training_validating(xtr,
                                   num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
                                   hyper_para_dict = hyper_para_dict, 
                                   model_type = para_model_type)
-        
         # -- initialize the network
         
         model.network_ini(hyper_para_dict,
@@ -303,12 +302,10 @@ def training_validating(xtr,
         model.inference_ini()
         
         # -- set up training batch parameters
-        
         '''
         tr_batch_num = training_dict["batch_per_epoch"] 
         tr_idx = training_dict["tr_idx"]
         '''
-        
         batch_gen = data_loader(x = xtr,
                                 y = ytr,
                                 batch_size = hyper_para_dict["batch_size"], 
@@ -323,16 +320,15 @@ def training_validating(xtr,
         st_time = time.time()
         
         for epoch in range(para_n_epoch):
-            
             '''
             # shuffle traning instances each epoch
             np.random.shuffle(tr_idx)
             '''
             
-            batch_gen.re_shuffle()
-            
             # loop over all batches
+            batch_gen.re_shuffle()
             batch_x, batch_y = batch_gen.one_batch()
+            
             while batch_x != None:
                 
             '''            
@@ -347,7 +343,6 @@ def training_validating(xtr,
                 # [B 1]
                 batch_y = ytr[batch_idx]
             '''    
-                
                 # one-step training on a batch of training data
                 model.train_batch(batch_x, 
                                   batch_y,
@@ -355,7 +350,6 @@ def training_validating(xtr,
                                   global_step = epoch)
                 
                 # - batch-wise validation
-            
                 # val_metric: [val_rmse, val_mae, val_mape, val_nnllk]
                 # nnllk: normalized negative log likelihood
                 
@@ -373,10 +367,7 @@ def training_validating(xtr,
                                                    ytr, 
                                                    x_src_seperated = x_src_seperated,
                                                    bool_py_eval = False)
-                    step_error.append([global_step,
-                                       tr_metric, 
-                                       val_metric, 
-                                       epoch])
+                    step_error.append([global_step, tr_metric, val_metric, epoch])
                     
                 # - model saver 
                 if retrain_bool == True and model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
@@ -508,7 +499,6 @@ if __name__ == '__main__':
                               bool_target_seperate = para_bool_target_seperate)
     # output from the reshape 
     # y [N 1], x [S [N T D]]
-    
     print("training: ", len(tr_x[0]), len(tr_y))
     print("validation: ", len(val_x[0]), len(val_y))
     print("testing: ", len(ts_x[0]), len(ts_y))
@@ -517,7 +507,6 @@ if __name__ == '__main__':
     
     if para_x_src_seperated == True:
         # y [N 1], x [S [N T D]]
-        
         if para_add_common_pattern == True:
             # x [S [N T D]]
             # T is the same across sources
@@ -577,7 +566,7 @@ if __name__ == '__main__':
         para_x_src_seperated = False
     
         # y [N 1], x [S N T D]  
-        shape_tr_x_dict =  dict(zip(para_x_shape_acronym, np.shape(tr_x)))
+        shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(tr_x)))
     
     # ----- training and validation
     
@@ -585,12 +574,10 @@ if __name__ == '__main__':
     
     # -- hyper-para generator 
     
-    if para_hpara_search == "random":
-        
+    if para_hpara_search == "random":        
         hpara_generator = hyper_para_random_search(para_hpara_range[para_hpara_search][para_model_type], 
                                                    para_hpara_n_trial)
     elif para_hpara_search == "grid":
-
         hpara_generator = hyper_para_grid_search(para_hpara_range[para_hpara_search][para_model_type])
             
     # -- begin hyper-para search
@@ -602,7 +589,7 @@ if __name__ == '__main__':
     
     # sample one set-up of hyper-para
     hpara_dict = hpara_generator.one_trial()
-    tr_dict = {} # training para dictionary 
+    #tr_dict = {} # training para dictionary 
                                                  
     while hpara_dict != None:
         
@@ -734,7 +721,6 @@ if __name__ == '__main__':
     log_test_performance(path = path_log_error,
                          error_tuple = [error_tuple],
                          ensemble_str = "Importance Top-rank")
-    
     
     # -- bayesian steps
     

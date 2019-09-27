@@ -15,6 +15,7 @@ from utils_linear_units import *
 from utils_rnn_units import *
 from utils_training import *
 from utils_optimization import *
+#from utils_inference import *
 
 # reproducibility by fixing the random seed
 np.random.seed(1)
@@ -168,7 +169,8 @@ class mixture_statistic():
                                     name = 'x')
         
         if model_type == "rnn":
-            self.keep_prob = tf.placeholder(tf.float32, shape = (), 
+            self.keep_prob = tf.placeholder(tf.float32, 
+                                            shape = (), 
                                             name = 'keep_prob')
             
         # -- hyper-parameters

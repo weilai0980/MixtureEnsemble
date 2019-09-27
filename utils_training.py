@@ -10,6 +10,12 @@ tf.set_random_seed(1)
 # local 
 from utils_libs import *
 
+# ----- randomness
+
+def fix_randomness(seed):
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+
 # ----- data preparation 
 
 def data_reshape(data, 
@@ -322,7 +328,8 @@ class data_loader(object):
                  x,
                  y,
                  batch_size, 
-                 num_ins):
+                 num_ins, 
+                 num_src):
         '''
         Argu.:
           x: numpy array
@@ -331,7 +338,8 @@ class data_loader(object):
         self.x = x
         self.y = y
         self.batch_size = batch_size
-        
+        self.num_src = num_src
+        
         self.ids = list(range(num_ins))
         np.random.shuffle(self.ids)
         
@@ -348,12 +356,12 @@ class data_loader(object):
             return None, None
         else:
             # batch data
-            batch_ids = self.ids[self.batch_cnt*int(self.batch_size) : (self.batch_cnt+1)*int(self.batch_size)] 
+            batch_ids = self.ids[self.batch_cnt*int(self.batch_size):(self.batch_cnt+1)*int(self.batch_size)] 
             # shape: [S B T D]
             # B: number of data instances in one batch
-            batch_x = [x[tmp_src][batch_ids] for tmp_src in range(len(x))]
+            batch_x = [self.x[tmp_src][batch_ids] for tmp_src in range(self.num_src)]
             # [B 1]
-            batch_y = y[batch_ids]
+            batch_y = self.y[batch_ids]
             
             self.batch_cnt += 1
             
