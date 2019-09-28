@@ -64,12 +64,6 @@ para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
 para_hpara_n_trial = 8
 
-para_n_epoch = 80
-para_burn_in_epoch = 20
-
-para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
-para_snapshot_Bernoulli = 0.001
-
 para_hpara_range = {}
 
 para_hpara_range['grid'] = {}
@@ -94,18 +88,24 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.0001, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [40, 80]
+para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
+para_hpara_range['random']['rnn']['batch_size'] = [60, 100]
 para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
+para_n_epoch = 80
+para_burn_in_epoch = 20
+
+para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
+para_snapshot_Bernoulli = 0.001
+
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. test snapshot numbers are explicited determined 
 #   batch_wise: vali. test snapshot numbers are arbitary 
-para_val_aggreg_num = max(1, int(0.05*para_n_epoch))
+para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
 para_early_stop_bool = False
@@ -200,7 +200,7 @@ def log_train(path):
         text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
         text_file.write("snapshot type : %s \n"%(para_snapshot_type))
         text_file.write("snapshot_Bernoulli : %s \n"%(para_snapshot_Bernoulli))
-        text_file.write("num. snapshots in validation : %s \n"%(para_val_aggreg_num))
+        text_file.write("num. snapshots in validation : %s \n"%(para_vali_snapshot_num))
         text_file.write("num. snapshots in testing : %s \n"%(para_test_snapshot_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
         text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
@@ -267,8 +267,8 @@ def training_validating(xtr,
                                   num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
                                   hyper_para_dict = hyper_para_dict, 
                                   model_type = para_model_type)
-        # -- initialize the network
         
+        # -- initialize the network
         model.network_ini(hyper_para_dict,
                           x_dim = dim_x,
                           x_steps = steps_x, 
@@ -302,14 +302,12 @@ def training_validating(xtr,
         model.inference_ini()
         
         # -- set up training batch parameters
-        '''
-        tr_batch_num = training_dict["batch_per_epoch"] 
-        tr_idx = training_dict["tr_idx"]
-        '''
+        
         batch_gen = data_loader(x = xtr,
                                 y = ytr,
                                 batch_size = hyper_para_dict["batch_size"], 
-                                num_ins)
+                                num_ins = training_dict["tr_num_ins"],  
+                                num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
         # -- begin training
         
         # training and validation error log
@@ -320,29 +318,14 @@ def training_validating(xtr,
         st_time = time.time()
         
         for epoch in range(para_n_epoch):
-            '''
-            # shuffle traning instances each epoch
-            np.random.shuffle(tr_idx)
-            '''
             
             # loop over all batches
+            # shuffle traning instances each epoch
             batch_gen.re_shuffle()
-            batch_x, batch_y = batch_gen.one_batch()
+            batch_x, batch_y, bool_last = batch_gen.one_batch()
             
             while batch_x != None:
-                
-            '''            
-            #for i in range(tr_batch_num):
-                
-                # batch data
-                batch_idx = tr_idx[i*int(hyper_para_dict["batch_size"]) : (i+1)*int(hyper_para_dict["batch_size"])] 
-                
-                # shape: [S B T D]
-                # B: number of data instances in one batch
-                batch_x = [xtr[tmp_src][batch_idx] for tmp_src in range(len(xtr))]
-                # [B 1]
-                batch_y = ytr[batch_idx]
-            '''    
+                    
                 # one-step training on a batch of training data
                 model.train_batch(batch_x, 
                                   batch_y,
@@ -359,7 +342,7 @@ def training_validating(xtr,
                                                               snapshot_type = para_snapshot_type,
                                                               snapshot_Bernoulli = para_snapshot_Bernoulli,
                                                               step = global_step,
-                                                              bool_end_of_epoch = (True if i == tr_batch_num -1 else False))
+                                                              bool_end_of_epoch = bool_last)
                 if val_metric:
                     
                     # tr_metric [tr_rmse, tr_mae, tr_mape, tr_nnllk]
@@ -380,7 +363,7 @@ def training_validating(xtr,
                     
                     print("\n    [MODEL SAVED] \n " + path_model + para_model_type + '_' + str(global_step))
                 
-                batch_x, batch_y = batch_gen.one_batch()
+                batch_x, batch_y, bool_last = batch_gen.one_batch()
                 global_step += 1
             
             # -- epoch-wise
@@ -543,7 +526,7 @@ if __name__ == '__main__':
             
             print("src " + str(tmp_src) + " shape: ", tmp_shape)
         
-        shape_tr_x_dict = dict({"N": len(tr_x[tmp_src])})
+        shape_tr_x_dict = dict({"N": len(tr_x[0])})
             
     else:
         # padding
@@ -612,8 +595,7 @@ if __name__ == '__main__':
                                                            retrain_bayes_steps = [])
         
         #[ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
-        ''' ? '''
-        #hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
+        hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
         hpara_log.append([hpara_dict, hp_step_error])
         
         # -- prepare for the next trial
@@ -642,7 +624,7 @@ if __name__ == '__main__':
     
     # best hyper-para and snapshot set 
     best_hpara, snapshot_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
-                                                                   val_aggreg_num = para_val_aggreg_num, 
+                                                                   val_snapshot_num = para_vali_snapshot_num, 
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
     tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
@@ -761,6 +743,4 @@ if __name__ == '__main__':
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
     
-    # -- for test
     
-    #print("--- !!! --- \n", snapshot_steps_features, bayes_steps_features)

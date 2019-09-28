@@ -1046,7 +1046,6 @@ class mixture_statistic():
                         
                         #  avoid consecutive upward 
                         self.log_error_up_flag = True
-                
                         return True
                 else:
                     self.log_error_up_flag = False
@@ -1057,7 +1056,6 @@ class mixture_statistic():
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
-            
             return True
         
         # -- bayesian ensembles
@@ -1066,7 +1064,6 @@ class mixture_statistic():
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
-            
             return True
         
         return False

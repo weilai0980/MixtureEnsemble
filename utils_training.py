@@ -163,7 +163,8 @@ def training_para_gen(shape_x_dict,
     ''' ? np.ceil ? '''
     tr_dict["batch_per_epoch"] = int(np.ceil(1.0*shape_x_dict["N"]/int(hpara_dict["batch_size"])))
     tr_dict["tr_idx"] = list(range(shape_x_dict["N"]))
-        
+    tr_dict["tr_num_ins"] = shape_x_dict["N"]
+    
     return tr_dict
 
 # hpara: hyper-parameter    
@@ -284,7 +285,7 @@ class hyper_para_random_search(object):
         return
         
 def hyper_para_selection(hpara_log, 
-                         val_aggreg_num, 
+                         val_snapshot_num, 
                          test_snapshot_num,
                          metric_idx):
     '''
@@ -295,7 +296,6 @@ def hyper_para_selection(hpara_log,
     
     for hp_epoch_err in hpara_log:
         hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
-    
     
     # sorted_hp[0]: hyper-para with the best validation performance
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
@@ -318,43 +318,98 @@ def hyper_para_selection(hpara_log,
            snapshot_steps,\
            bayes_steps,\
            snapshot_steps_features,\
-            bayes_steps_features
+           bayes_steps_features
+
+def hyper_para_select_top_steps(hpara_log, 
+                                val_snapshot_num, 
+                                test_snapshot_num,
+                                metric_idx):
+    '''
+    Argu.:
+      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
+    '''
+    hp_err = []
+    
+    for hp_epoch_err in hpara_log:
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_snapshot_num]])])
+    
+    # sorted_hp[0]: hyper-para with the best validation performance
+    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
+    
+    # -- top steps
+    snapshot_steps = full_steps[:len(test_snapshot_num)]
+    snapshot_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
+    
+    best_hyper_para_dict = sorted_hp[0][0]
+    # best hp, snapshot_steps, bayes_steps
+    
+    return best_hyper_para_dict,\
+           snapshot_steps,\
+           snapshot_steps_features,\
+
+def hyper_para_select_bayeisan_steps(hpara_log, 
+                                     val_snapshot_num, 
+                                     test_snapshot_num,
+                                     metric_idx):
+    '''
+    Argu.:
+      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
+    '''
+    hp_err = []
+    
+    for hp_epoch_err in hpara_log:
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_snapshot_num]])])
+    
+    # sorted_hp[0]: hyper-para with the best validation performance
+    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
+    
+    # -- bayes steps
+    full_steps = [k[0] for k in sorted_hp[0][1]]
+    
+    tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
+    bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
+    bayes_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
+        
+    best_hyper_para_dict = sorted_hp[0][0]
+    # best hp, snapshot_steps, bayes_steps
+    
+    return best_hyper_para_dict,\
+           bayes_steps,\
+           bayes_steps_features
 
 # ----- data loader
 
 class data_loader(object):
-    
-    def __init__(self, 
-                 x,
-                 y,
-                 batch_size, 
-                 num_ins, 
-                 num_src):
-        '''
-        Argu.:
-          x: numpy array
-          y: numpy array
-        '''
-        self.x = x
-        self.y = y
-        self.batch_size = batch_size
-        self.num_src = num_src
+    
+    def __init__(self,
+                 x,
+                 y,batch_size,num_ins,num_src):
+        '''
+        Argu.:
+        x: numpy array
+        y: numpy array
+        '''
+        self.x = x
+        self.y = y
+        self.batch_size = batch_size
+        self.num_src = num_src
         
-        self.ids = list(range(num_ins))
-        np.random.shuffle(self.ids)
-        
-        self.num_batch = int(np.ceil(1.0*num_ins/batch_size))
-        self.batch_cnt = 0
-        
-    def re_shuffle(self):
-        self.batch_cnt = 0
-        np.random.shuffle(self.ids)
-        
-    def one_batch(self):
-        
-        if self.batch_cnt >= self.num_batch:
-            return None, None
-        else:
+        self.num_batch = int(np.ceil(1.0*num_ins/batch_size))
+        
+        self.ids = list(range(num_ins))
+        np.random.shuffle(self.ids)
+        self.batch_cnt = 0
+        self.bool_last_batch = False
+    
+    def re_shuffle(self):
+        self.batch_cnt = 0
+        np.random.shuffle(self.ids)
+        self.bool_last_batch = False
+        
+    def one_batch(self):
+        if self.batch_cnt >= self.num_batch:
+            return None, None, None
+        else:
             # batch data
             batch_ids = self.ids[self.batch_cnt*int(self.batch_size):(self.batch_cnt+1)*int(self.batch_size)] 
             # shape: [S B T D]
@@ -364,5 +419,8 @@ class data_loader(object):
             batch_y = self.y[batch_ids]
             
             self.batch_cnt += 1
-            
-            return batch_x, batch_y
+            
+            if self.batch_cnt >= self.num_batch:
+                self.bool_last_batch = True
+            
+            return batch_x, batch_y, self.bool_last_batch 

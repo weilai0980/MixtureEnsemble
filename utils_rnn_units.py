@@ -30,7 +30,7 @@ def multi_src_predictor_rnn(x,
         x_list = x
     else:
         # shape: [ S, [B T D] ]
-        tmp_x_list = tf.split(x, 
+        tmp_x_list = tf.split(x,
                               num_or_size_splits = n_src, 
                               axis = 0)
         x_list = [tf.squeeze(tmp_x, 0) for tmp_x in tmp_x_list]
@@ -61,9 +61,10 @@ def multi_src_predictor_rnn(x,
                                                       dim_vari = rnn_size_layers[-1],
                                                       scope = str_scope + "_mean_h",
                                                       num_vari = n_src,
-                                                      bool_activation = True,
+                                                      activation_type = "relu",
                                                       max_norm_regul = max_norm_cons,
                                                       regul_type = "l2")
+    # output layer
     # [S B 1] 
     # no dropout on output layer
     tmp_mean, regu_mean_pred = mv_dense(h_vari = h_mean, 
@@ -71,7 +72,7 @@ def multi_src_predictor_rnn(x,
                                         scope = str_scope + "_mean_pred", 
                                         num_vari = n_src, 
                                         dim_to = 1, 
-                                        bool_activation = False, 
+                                        activation_type = "", 
                                         max_norm_regul = max_norm_cons, 
                                         regul_type = "l2")
     
@@ -86,9 +87,10 @@ def multi_src_predictor_rnn(x,
                                                    dim_vari = rnn_size_layers[-1],
                                                    scope = str_scope + "_var_h",
                                                    num_vari = n_src,
-                                                   bool_activation = True,
+                                                   activation_type = "relu",
                                                    max_norm_regul = max_norm_cons,
                                                    regul_type = "l2")
+    # output layer
     # [S B 1]
     # no dropout on output layer
     tmp_var, regu_var_pred = mv_dense(h_vari = h_var, 
@@ -96,14 +98,13 @@ def multi_src_predictor_rnn(x,
                                       scope = str_scope + "_var_pred", 
                                       num_vari = n_src, 
                                       dim_to = 1, 
-                                      bool_activation = False, 
+                                      activation_type = "", 
                                       max_norm_regul = max_norm_cons, 
                                       regul_type = "l2")
     
     regu_var = reg_var_h + regu_var_pred
     
     # --- gate
-    
     '''
     # [S B d]
     h_logit, reg_logit_h, dim_src_logit = multi_mv_dense(num_layers = dense_num,
@@ -128,6 +129,7 @@ def multi_src_predictor_rnn(x,
     
     regu_logit = reg_logit_h + regu_logit_pred
     '''
+    # output layer
     # [S B d] -> [S B 1]
     # ? tanh activation
     tmp_logit, regu_logit = mv_dense(h_vari = h_src, 
@@ -135,7 +137,7 @@ def multi_src_predictor_rnn(x,
                                      scope = str_scope + "_logit", 
                                      num_vari = n_src, 
                                      dim_to = 1, 
-                                     bool_activation = False, 
+                                     activation_type = "", 
                                      max_norm_regul = max_norm_cons, 
                                      regul_type = "l2")
     
@@ -149,7 +151,7 @@ def multi_mv_dense(num_layers,
                    dim_vari,
                    scope,
                    num_vari,
-                   bool_activation,
+                   activation_type,
                    max_norm_regul,
                    regul_type):
     '''
@@ -183,7 +185,7 @@ def multi_mv_dense(num_layers,
                                                   scope = scope + str(i),
                                                   num_vari = num_vari,
                                                   dim_to = out_dim_vari,
-                                                  bool_activation = bool_activation, 
+                                                  activation_type = activation_type, 
                                                   max_norm_regul = max_norm_regul, 
                                                   regul_type = regul_type)
             reg_mv_dense += tmp_regu_dense
@@ -199,7 +201,7 @@ def mv_dense(h_vari,
              scope, 
              num_vari, 
              dim_to, 
-             bool_activation, 
+             activation_type, 
              max_norm_regul, 
              regul_type):
     '''
@@ -232,8 +234,10 @@ def mv_dense(h_vari,
             tmp_h =  tf.reduce_sum(h_expand * w + b, 2)
             
         # [V B D 1] * [V 1 D d] -> [V B d]
-        if bool_activation == True:
+        if activation_type == "relu":
             h = tf.nn.relu(tmp_h)
+        elif activation_type == "tanh":
+            h = tf.nn.tanh(tmp_h)
         else:
             h = tmp_h
         
@@ -271,7 +275,6 @@ def mv_dense_share(h_vari,
             
             clipped = tf.clip_by_norm(w, clip_norm = max_norm_regul, axes = 0)
             clip_w = tf.assign(w, clipped)
-            
             # [V B d]
             tmp_h = tf.tensordot(h_vari, w, 1) + b
             #tmp_h = tf.reduce_sum(h_expand * clip_w + b, 2)
@@ -366,11 +369,9 @@ def plain_rnn(x,
     with tf.variable_scope(scope):
         
         if cell_type == 'lstm':
-            
             tmp_cell = tf.nn.rnn_cell.LSTMCell(dim_layers[0], 
                                                initializer = tf.contrib.keras.initializers.glorot_normal())
         elif cell_type == 'gru':
-            
             tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[0],
                                               kernel_initializer = tf.contrib.keras.initializers.glorot_normal())
         # ! only dropout on hidden states !
@@ -380,17 +381,14 @@ def plain_rnn(x,
         hiddens, state = tf.nn.dynamic_rnn(cell = rnn_cell, 
                                            inputs = x, 
                                            dtype = tf.float32)
-        
     for i in range(1, len(dim_layers)):
         
         with tf.variable_scope(scope + str(i)):
             
             if cell_type == 'lstm':
-                
                 tmp_cell = tf.nn.rnn_cell.LSTMCell(dim_layers[i], 
                                                    initializer= tf.contrib.keras.initializers.glorot_normal())
             elif cell_type == 'gru':
-                
                 tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[i],
                                                   kernel_initializer= tf.contrib.keras.initializers.glorot_normal())
             
