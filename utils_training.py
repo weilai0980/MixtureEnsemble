@@ -118,28 +118,18 @@ def log_train_val_performance(path,
     with open(path, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
-'''        
-def log_train_val_bayesian_error(path, 
-                                 error):
-    
-    with open(path, "a") as text_env:
-        text_env.write("          %s\n\n"%(str(error)))
-'''        
-        
 def log_val_hyper_para(path, 
                        hpara_tuple, 
                        error_tuple):
     with open(path, "a") as text_file:
         text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
         text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
-     
-    
+        
 def log_test_performance(path, 
                          error_tuple,
                          ensemble_str):
     with open(path, "a") as text_file:
         text_file.write("\n  test performance %s : %s \n"%(ensemble_str, str(error_tuple)))
-        
         
 def log_null_loss_exception(epoch_errors, 
                             log_path):
@@ -224,15 +214,14 @@ class hyper_para_random_search(object):
     def __init__(self, 
                  hpara_range_dict, 
                  n_trial):
+        '''
+        hpara_range_dict: [[lower_boud, up_bound]]
+        '''
         # ?
         # np.random.seed(1)
         
         self.n_trial = n_trial
         self.cur_trial = 0
-        
-        # lr_range, batch_size_range, l2_range        
-        # [[lower_boud, up_bound]]
-        # self.hpara_range = hpara_range
         
         self.hpara_names = []
         self.hpara_range = []
@@ -244,7 +233,6 @@ class hyper_para_random_search(object):
         
         # no duplication
         self.hpara_set = set()
-        
         self.ini_flag = True
         
     def one_trial(self):
@@ -258,10 +246,10 @@ class hyper_para_random_search(object):
             return None
         
     def trial_search(self):
-        
-        # Return:
-        # a name-value hyper-para dictionary
-        
+        '''
+        Return:
+          a name-value hyper-para dictionary
+        '''
         bool_duplicate = True
         
         while bool_duplicate == True:
@@ -295,7 +283,7 @@ def hyper_para_selection(hpara_log,
     hp_err = []
     
     for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_aggreg_num]])])
+        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_snapshot_num]])])
     
     # sorted_hp[0]: hyper-para with the best validation performance
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
@@ -368,7 +356,7 @@ def hyper_para_select_bayeisan_steps(hpara_log,
     
     tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
     bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
-    bayes_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
+    bayes_steps_features = [[k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step]
         
     best_hyper_para_dict = sorted_hp[0][0]
     # best hp, snapshot_steps, bayes_steps
@@ -386,8 +374,8 @@ class data_loader(object):
                  y,batch_size,num_ins,num_src):
         '''
         Argu.:
-        x: numpy array
-        y: numpy array
+          x: numpy array
+          y: numpy array
         '''
         self.x = x
         self.y = y

@@ -15,6 +15,7 @@ from tensorflow.contrib import rnn
 # local packages 
 from utils_libs import *
 from utils_training import *
+from utils_inference import *
 
 # ----- arguments from command line
 
@@ -60,6 +61,7 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 para_add_common_pattern = True
 
 # -- training and validation
+# hpara: hyper parameter
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
 para_hpara_n_trial = 8
@@ -89,9 +91,9 @@ para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
 para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [60, 100]
+para_hpara_range['random']['rnn']['batch_size'] = [80, 100]
 para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [8, 16]
+para_hpara_range['random']['rnn']['rnn_size'] =  [10, 10]
 para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
@@ -103,8 +105,8 @@ para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
 para_snapshot_Bernoulli = 0.001
 
 # model snapshot sample: epoch_wise or batch_wise
-#   epoch_wise: vali. test snapshot numbers are explicited determined 
-#   batch_wise: vali. test snapshot numbers are arbitary 
+#   epoch_wise: vali. and test snapshot numbers are explicited determined 
+#   batch_wise: vali. and test snapshot numbers are arbitary 
 para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
@@ -411,7 +413,6 @@ def testing(model_snapshots,
             config = tf.ConfigProto()
             config.allow_soft_placement = True
             config.gpu_options.allow_growth = True
-        
             sess = tf.Session(config = config)
         
             model = mixture_statistic(session = sess, 
@@ -489,6 +490,7 @@ if __name__ == '__main__':
     # -- steps and dimensionality of each source
     
     if para_x_src_seperated == True:
+        # data source seperated
         # y [N 1], x [S [N T D]]
         if para_add_common_pattern == True:
             # x [S [N T D]]
@@ -556,7 +558,6 @@ if __name__ == '__main__':
     log_train(path_log_error)
     
     # -- hyper-para generator 
-    
     if para_hpara_search == "random":        
         hpara_generator = hyper_para_random_search(para_hpara_range[para_hpara_search][para_model_type], 
                                                    para_hpara_n_trial)
@@ -572,7 +573,6 @@ if __name__ == '__main__':
     
     # sample one set-up of hyper-para
     hpara_dict = hpara_generator.one_trial()
-    #tr_dict = {} # training para dictionary 
                                                  
     while hpara_dict != None:
         
@@ -742,5 +742,4 @@ if __name__ == '__main__':
     
     import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
-    
     

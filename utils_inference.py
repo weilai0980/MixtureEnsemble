@@ -3,6 +3,8 @@
 import numpy as np
 from sklearn.neighbors.kde import KernelDensity
 
+from utils_training import *
+
 class ensemble_inference(object):
 
     def __init__(self):
@@ -86,9 +88,9 @@ class ensemble_inference(object):
                              snapshot_features,
                              y):
         '''
-        y: [B 1]
         snapshot_features: [A M]
-                            M: 
+                            M: feature dimensionality
+        y: [B 1]
         '''
         num_snapshot = len(snapshot_features)
         snapshot_features = np.reshape(np.asarray(snapshot_features), (num_snapshot, -1))
