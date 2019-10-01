@@ -247,7 +247,7 @@ class mixture_statistic():
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
-                                        rnn_size_layers = [ int(self.hyper_para_dict['rnn_size']) ],
+                                        rnn_size_layers = [int(self.hyper_para_dict['rnn_size']), int(self.hyper_para_dict['rnn_size'])],
                                         rnn_cell_type = "lstm",
                                         dropout_keep = self.keep_prob,
                                         dense_num = int(self.hyper_para_dict['dense_num']),
@@ -920,7 +920,7 @@ class mixture_statistic():
         
         tf.add_to_collection("py_mean_src", self.py_mean_src)
         tf.add_to_collection("py_var_src", self.py_var_src)
-    
+        
     # step-wise
     def validation(self,
                    x,

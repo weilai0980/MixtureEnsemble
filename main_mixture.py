@@ -91,9 +91,9 @@ para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
 para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [80, 100]
+para_hpara_range['random']['rnn']['batch_size'] = [40, 100]
 para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [10, 10]
+para_hpara_range['random']['rnn']['rnn_size'] =  [18, 18]
 para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
@@ -254,7 +254,12 @@ def training_validating(xtr,
     
     with tf.device('/device:GPU:0'):
         
+        # clear the graph in the current session 
+        tf.reset_default_graph()
+        
         # fix the random seed to stabilize the network
+        os.environ['PYTHONHASHSEED'] = str(1)
+        random.seed(1)  # `python` built-in pseudo-random generator
         np.random.seed(1)
         tf.set_random_seed(1)
         
@@ -302,6 +307,7 @@ def training_validating(xtr,
         
         model.train_ini()
         model.inference_ini()
+        #tf.get_default_graph().finalize()
         
         # -- set up training batch parameters
         

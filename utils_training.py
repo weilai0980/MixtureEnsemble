@@ -215,10 +215,10 @@ class hyper_para_random_search(object):
                  hpara_range_dict, 
                  n_trial):
         '''
-        hpara_range_dict: [[lower_boud, up_bound]]
+        Argu.:
+          hpara_range_dict: [[lower_boud, up_bound]]
         '''
-        # ?
-        # np.random.seed(1)
+        np.random.seed(1)
         
         self.n_trial = n_trial
         self.cur_trial = 0
@@ -377,6 +377,8 @@ class data_loader(object):
           x: numpy array
           y: numpy array
         '''
+        np.random.seed(1)
+        
         self.x = x
         self.y = y
         self.batch_size = batch_size

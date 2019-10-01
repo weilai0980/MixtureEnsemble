@@ -293,8 +293,12 @@ https://karpathy.github.io/2019/04/25/recipe/?utm_source=Deep+Learning+Weekly&ut
 
 https://blog.nanonets.com/hyperparameter-optimization/?utm_campaign=Deep%20Learning%20Weekly&utm_medium=email&utm_source=Revue%20newsletter
 
-
 https://towardsdatascience.com/checklist-for-debugging-neural-networks-d8b2a9434f21
+
+
+*check linear version: adam, sgmcmc
+
+*rnn version: sgmcmc
 
 
 

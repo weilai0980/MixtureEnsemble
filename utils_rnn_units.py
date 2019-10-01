@@ -26,6 +26,9 @@ def multi_src_predictor_rnn(x,
                             dense_num,
                             max_norm_cons):
     
+    np.random.seed(1)
+    tf.set_random_seed(1)
+    
     if x_src_seperated == True:
         x_list = x
     else:
@@ -178,7 +181,8 @@ def multi_mv_dense(num_layers,
             if i != 0:
                 # h_mv [V B d]
                 h_mv_input = tf.nn.dropout(h_mv_input, 
-                                           keep_prob)
+                                           keep_prob, 
+                                           seed = 1)
             # ? max norm constrains
             h_mv_input, tmp_regu_dense = mv_dense(h_vari = h_mv_input, 
                                                   dim_vari = in_dim_vari,
@@ -214,11 +218,17 @@ def mv_dense(h_vari,
     with tf.variable_scope(scope):
         
         # [V 1 D d]
-        w = tf.get_variable('w', 
+        w = tf.get_variable('w',  
                             [num_vari, 1, dim_vari, dim_to], 
-                            initializer=tf.contrib.layers.xavier_initializer())
+                            initializer = tf.contrib.layers.xavier_initializer(seed = 1))
         # [V 1 1 d]
+        
+        #b = tf.get_variable("b", 
+        #                    shape = [num_vari, 1, 1, dim_to], 
+        #                    initializer = tf.zeros_initializer())
+        
         b = tf.Variable(tf.random_normal([num_vari, 1, 1, dim_to]))
+        
         # [V B D 1]
         h_expand = tf.expand_dims(h_vari, -1)
         
@@ -238,6 +248,8 @@ def mv_dense(h_vari,
             h = tf.nn.relu(tmp_h)
         elif activation_type == "tanh":
             h = tf.nn.tanh(tmp_h)
+        elif activation_type == "sigmoid":
+            h = tf.nn.sigmoid(tmp_h)
         else:
             h = tmp_h
         
@@ -267,7 +279,7 @@ def mv_dense_share(h_vari,
         # [D d]
         w = tf.get_variable('w', 
                             [dim_vari, dim_to], 
-                            initializer=tf.contrib.layers.xavier_initializer())
+                            initializer=tf.contrib.layers.xavier_initializer(seed = 1))
         # [ d]
         b = tf.Variable(tf.random_normal([dim_to]))
         
@@ -314,7 +326,7 @@ def res_lstm(x,
     with tf.variable_scope(scope + str(0)):
             #Deep lstm: residual or highway connections 
             lstm_cell = tf.nn.rnn_cell.LSTMCell(hidden_dim, \
-                                                initializer = tf.contrib.keras.initializers.glorot_normal())
+                                                initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1))
             hiddens, state = tf.nn.dynamic_rnn(cell = lstm_cell, 
                                                inputs = x, 
                                                dtype = tf.float32)
@@ -325,7 +337,7 @@ def res_lstm(x,
             tmp_h = hiddens
             
             lstm_cell = tf.nn.rnn_cell.LSTMCell(hidden_dim, \
-                                                initializer = tf.contrib.keras.initializers.glorot_normal())
+                                                initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1))
             hiddens, state = tf.nn.dynamic_rnn(cell = lstm_cell, 
                                                inputs = hiddens, 
                                                dtype = tf.float32)
@@ -342,7 +354,7 @@ def cudnn_rnn(x,
     tmp_cell = tf.contrib.cudnn_rnn.CudnnGRU(num_layers = len(dim_layers),
                                              num_units = dim_layers[0],
                                              dropout = 1.0 - dropout_keep_prob,
-                                             kernel_initializer = tf.contrib.keras.initializers.glorot_normal(),
+                                             kernel_initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1),
                                              name = scope)
     
     hiddens, state = tf.nn.dynamic_rnn(cell = tmp_cell, 
@@ -370,13 +382,14 @@ def plain_rnn(x,
         
         if cell_type == 'lstm':
             tmp_cell = tf.nn.rnn_cell.LSTMCell(dim_layers[0], 
-                                               initializer = tf.contrib.keras.initializers.glorot_normal())
+                                               initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1))
         elif cell_type == 'gru':
             tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[0],
-                                              kernel_initializer = tf.contrib.keras.initializers.glorot_normal())
+                                              kernel_initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1))
         # ! only dropout on hidden states !
         rnn_cell = tf.nn.rnn_cell.DropoutWrapper(tmp_cell,
-                                                 state_keep_prob = dropout_keep_prob)
+                                                 state_keep_prob = dropout_keep_prob, 
+                                                 seed = 1)
             
         hiddens, state = tf.nn.dynamic_rnn(cell = rnn_cell, 
                                            inputs = x, 
@@ -387,15 +400,16 @@ def plain_rnn(x,
             
             if cell_type == 'lstm':
                 tmp_cell = tf.nn.rnn_cell.LSTMCell(dim_layers[i], 
-                                                   initializer= tf.contrib.keras.initializers.glorot_normal())
+                                                   initializer= tf.contrib.keras.initializers.glorot_normal(seed = 1))
             elif cell_type == 'gru':
                 tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[i],
-                                                  kernel_initializer= tf.contrib.keras.initializers.glorot_normal())
+                                                  kernel_initializer= tf.contrib.keras.initializers.glorot_normal(seed = 1))
             
             # dropout on both input and hidden states
             rnn_cell = tf.nn.rnn_cell.DropoutWrapper(tmp_cell,
                                                      input_keep_prob = dropout_keep_prob,
-                                                     state_keep_prob = dropout_keep_prob)
+                                                     state_keep_prob = dropout_keep_prob, 
+                                                     seed = 1)
             
             hiddens, state = tf.nn.dynamic_rnn(cell = rnn_cell, 
                                                inputs = hiddens, 
