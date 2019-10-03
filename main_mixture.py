@@ -64,7 +64,7 @@ para_add_common_pattern = True
 # hpara: hyper parameter
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
-para_hpara_n_trial = 8
+para_hpara_n_trial = 5
 
 para_hpara_range = {}
 
@@ -91,14 +91,14 @@ para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
 para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [40, 100]
+para_hpara_range['random']['rnn']['batch_size'] = [40, 80]
 para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [18, 18]
-para_hpara_range['random']['rnn']['dense_num'] = [1, 3]
+para_hpara_range['random']['rnn']['rnn_size'] =  [25, 25]
+para_hpara_range['random']['rnn']['dense_num'] = [0, 3]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
-para_n_epoch = 80
+para_n_epoch = 60
 para_burn_in_epoch = 20
 
 para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
@@ -361,15 +361,17 @@ def training_validating(xtr,
                     step_error.append([global_step, tr_metric, val_metric, epoch])
                     
                 # - model saver 
-                if retrain_bool == True and model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
-                                                              epoch = epoch,
-                                                              step = global_step,
-                                                              snapshot_steps = retrain_snapshot_steps,
-                                                              bayes_steps = retrain_bayes_steps,
-                                                              early_stop_bool = para_early_stop_bool,
-                                                              early_stop_window = para_early_stop_window) == True:
+                model_saver_flag = model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
+                                                     epoch = epoch,
+                                                     step = global_step,
+                                                     snapshot_steps = retrain_snapshot_steps,
+                                                     bayes_steps = retrain_bayes_steps,
+                                                     early_stop_bool = para_early_stop_bool,
+                                                     early_stop_window = para_early_stop_window)
+                
+                if retrain_bool == True and model_saver_flag != None:
                     
-                    print("\n    [MODEL SAVED] \n " + path_model + para_model_type + '_' + str(global_step))
+                    print("\n    [MODEL SAVED] " + model_saver_flag + " \n " + path_model + para_model_type + '_' + str(global_step))
                 
                 batch_x, batch_y, bool_last = batch_gen.one_batch()
                 global_step += 1

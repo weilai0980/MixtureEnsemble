@@ -83,6 +83,7 @@ def multi_src_predictor_rnn(x,
     
     # --- variance
     
+    # !! watch out for the explosion of variance !!
     # [S B d]
     h_var, reg_var_h, dim_src_var = multi_mv_dense(num_layers = dense_num,
                                                    keep_prob = dropout_keep,
@@ -90,7 +91,7 @@ def multi_src_predictor_rnn(x,
                                                    dim_vari = rnn_size_layers[-1],
                                                    scope = str_scope + "_var_h",
                                                    num_vari = n_src,
-                                                   activation_type = "relu",
+                                                   activation_type = "tanh",
                                                    max_norm_regul = max_norm_cons,
                                                    regul_type = "l2")
     # output layer
@@ -222,12 +223,10 @@ def mv_dense(h_vari,
                             [num_vari, 1, dim_vari, dim_to], 
                             initializer = tf.contrib.layers.xavier_initializer(seed = 1))
         # [V 1 1 d]
-        
-        #b = tf.get_variable("b", 
-        #                    shape = [num_vari, 1, 1, dim_to], 
-        #                    initializer = tf.zeros_initializer())
-        
-        b = tf.Variable(tf.random_normal([num_vari, 1, 1, dim_to]))
+        b = tf.get_variable("b", 
+                            shape = [num_vari, 1, 1, dim_to], 
+                            initializer = tf.zeros_initializer())
+        #b = tf.Variable(tf.random_normal([num_vari, 1, 1, dim_to]))
         
         # [V B D 1]
         h_expand = tf.expand_dims(h_vari, -1)
@@ -250,6 +249,9 @@ def mv_dense(h_vari,
             h = tf.nn.tanh(tmp_h)
         elif activation_type == "sigmoid":
             h = tf.nn.sigmoid(tmp_h)
+        elif activation_type == "leaky_relu":
+            h = tf.nn.leaky_relu(tmp_h, 
+                                 alpha = 0.2)
         else:
             h = tmp_h
         
@@ -258,54 +260,6 @@ def mv_dense(h_vari,
             return h, tf.nn.l2_loss(w) 
         elif regul_type == 'l1':
             return h, tf.reduce_sum(tf.abs(w)) 
-        else:
-            return '[ERROR] regularization type'
-
-# with max-norm regularization 
-def mv_dense_share(h_vari, 
-                   dim_vari, 
-                   scope,
-                   num_vari, 
-                   dim_to, 
-                   bool_no_activation, 
-                   max_norm_regul, 
-                   regul_type):
-    '''
-    Argu.:
-      h_vari: [V B D]
-    '''
-    with tf.variable_scope(scope):
-        
-        # [D d]
-        w = tf.get_variable('w', 
-                            [dim_vari, dim_to], 
-                            initializer=tf.contrib.layers.xavier_initializer(seed = 1))
-        # [ d]
-        b = tf.Variable(tf.random_normal([dim_to]))
-        
-        if max_norm_regul > 0:
-            
-            clipped = tf.clip_by_norm(w, clip_norm = max_norm_regul, axes = 0)
-            clip_w = tf.assign(w, clipped)
-            # [V B d]
-            tmp_h = tf.tensordot(h_vari, w, 1) + b
-            #tmp_h = tf.reduce_sum(h_expand * clip_w + b, 2)
-            
-        else:
-            tmp_h = tf.tensordot(h_vari, w, 1) + b
-            #tmp_h =  tf.reduce_sum(h_expand * w + b, 2)
-            
-        # [V B D 1] * [V 1 D d] -> [V B d]
-        # ?
-        if bool_no_activation == True:
-            h = tmp_h
-        else:
-            h = tf.nn.relu(tmp_h) 
-            
-        if regul_type == 'l2':
-            return h, tf.nn.l2_loss(w) 
-        elif regul_type == 'l1':
-            return h, tf.reduce_sum( tf.abs(w) ) 
         else:
             return '[ERROR] regularization type'
 

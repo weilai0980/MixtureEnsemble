@@ -1056,7 +1056,7 @@ class mixture_statistic():
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
-            return True
+            return "best_snapshots"
         
         # -- bayesian ensembles
         
@@ -1064,9 +1064,9 @@ class mixture_statistic():
             
             saver = tf.train.Saver()
             saver.save(self.sess, path)
-            return True
+            return "bayeisan_snapshots"
         
-        return False
+        return None
         
     #   restore the model from the files
     def model_restore(self,
