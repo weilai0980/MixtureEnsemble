@@ -25,7 +25,6 @@ def multi_src_predictor_rnn(x,
                             dropout_keep,
                             dense_num,
                             max_norm_cons):
-    
     np.random.seed(1)
     tf.set_random_seed(1)
     
@@ -56,7 +55,6 @@ def multi_src_predictor_rnn(x,
     h_src = tf.stack(h_list, 0)
     
     # --- mean
-    
     # [S B d]
     h_mean, reg_mean_h, dim_src_mean = multi_mv_dense(num_layers = dense_num,
                                                       keep_prob = dropout_keep,
@@ -82,7 +80,6 @@ def multi_src_predictor_rnn(x,
     regu_mean = reg_mean_h + regu_mean_pred
     
     # --- variance
-    
     # !! watch out for the explosion of variance !!
     # [S B d]
     h_var, reg_var_h, dim_src_var = multi_mv_dense(num_layers = dense_num,
@@ -195,7 +192,7 @@ def multi_mv_dense(num_layers,
                                                   regul_type = regul_type)
             reg_mv_dense += tmp_regu_dense
             
-            in_dim_vari  = out_dim_vari
+            in_dim_vari = out_dim_vari
             out_dim_vari = int(out_dim_vari/2)
             
     return h_mv_input, reg_mv_dense, in_dim_vari
@@ -226,8 +223,6 @@ def mv_dense(h_vari,
         b = tf.get_variable("b", 
                             shape = [num_vari, 1, 1, dim_to], 
                             initializer = tf.zeros_initializer())
-        #b = tf.Variable(tf.random_normal([num_vari, 1, 1, dim_to]))
-        
         # [V B D 1]
         h_expand = tf.expand_dims(h_vari, -1)
         

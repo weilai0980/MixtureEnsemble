@@ -15,7 +15,6 @@ from utils_linear_units import *
 from utils_rnn_units import *
 from utils_training import *
 from utils_optimization import *
-#from utils_inference import *
 
 # reproducibility by fixing the random seed
 np.random.seed(1)
@@ -767,7 +766,6 @@ class mixture_statistic():
         global_step = tf.train.get_or_create_global_step()
         
         # -- decay
-        
         if self.optimization_lr_decay == True:
                         
             decay_learning_rate = tf.train.exponential_decay(tf_learning_rate, 
@@ -778,7 +776,7 @@ class mixture_statistic():
         else:
             decay_learning_rate = tf_learning_rate
         
-        # -- warm-up
+        # -- learning rate warm-up
         # ref: https://github.com/google-research/bert/blob/ffbda2a1aafe530525212d13194cc84d92ed0313/optimization.py#L29-L65
         
         if self.optimization_warmup_step > 0:
@@ -898,7 +896,6 @@ class mixture_statistic():
         
         # NNLLK 
         # nnllk - normalized negative log likelihood by the number of data samples
-        
         if self.x_src_seperated == True:
             # shape of x: [S, B T D]
             self.nnllk = self.nllk / tf.to_float(tf.shape(self.x[0])[0])
@@ -973,8 +970,9 @@ class mixture_statistic():
                   x_src_seperated,
                   bool_py_eval):
         '''
-        # x: [S B T D] or [S, B T D]
-        # y: [B 1]
+        Argu.:
+          x: [S B T D] or [S, B T D]
+          y: [B 1]
         '''
         # --
         data_dict = {}

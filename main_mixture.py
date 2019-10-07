@@ -37,7 +37,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 path_data = args.dataset
 path_log_error = "../results/mixture/log_error_mix_" + str(args.gpu_id) + ".txt"
 path_model = "../results/mixture/"
-path_py = "../results/mixture/py_" + str(args.dataset)[-10:-1] + "_" + str(args.gpu_id) + ".p"
+path_py = "../results/mixture/py_" + str(args.dataset)[-10:-1] + "_" + ".p"
 
 # ----- hyper-parameters set-up
 
@@ -64,7 +64,7 @@ para_add_common_pattern = True
 # hpara: hyper parameter
 para_model_type = 'rnn'
 para_hpara_search = "random" # random, grid 
-para_hpara_n_trial = 5
+para_hpara_n_trial = 8
 
 para_hpara_range = {}
 
@@ -91,18 +91,21 @@ para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
 para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [40, 80]
-para_hpara_range['random']['rnn']['l2'] = [0.001, 0.01]
-para_hpara_range['random']['rnn']['rnn_size'] =  [25, 25]
+para_hpara_range['random']['rnn']['batch_size'] = [60, 140]
+para_hpara_range['random']['rnn']['l2'] = [0.00001, 0.01]
+para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [0, 3]
-para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.8, 1.0]
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
-para_n_epoch = 60
+para_n_epoch = 50
 para_burn_in_epoch = 20
 
 para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
 para_snapshot_Bernoulli = 0.001
+
+para_early_stop_bool = False
+para_early_stop_window = 0
 
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. and test snapshot numbers are explicited determined 
@@ -110,18 +113,15 @@ para_snapshot_Bernoulli = 0.001
 para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
-para_early_stop_bool = False
-para_early_stop_window = 0
+para_validation_metric = 'nnllk'
+para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 # -- optimization
 para_loss_type = "heter_lk_inv"
 
-para_validation_metric = 'nnllk'
-para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
-
 para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
 # re-set this for training on new data
-para_optimizer_lr_decay = True
+para_optimizer_lr_decay = False
 para_optimizer_lr_decay_epoch = 10 # after the warm-up
 para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
 
@@ -631,7 +631,7 @@ if __name__ == '__main__':
     # ----- re-train
     
     # best hyper-para and snapshot set 
-    best_hpara, snapshot_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
+    best_hpara, top_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
                                                                    val_snapshot_num = para_vali_snapshot_num, 
                                                                    test_snapshot_num = para_test_snapshot_num,
                                                                    metric_idx = para_metric_map[para_validation_metric])
@@ -648,22 +648,22 @@ if __name__ == '__main__':
                                         hyper_para_dict = best_hpara,
                                         training_dict = tr_dict,
                                         retrain_bool = True,
-                                        retrain_snapshot_steps = snapshot_steps, 
+                                        retrain_snapshot_steps = top_steps, 
                                         retrain_bayes_steps = bayes_steps)
     
     log_val_hyper_para(path = path_log_error, 
-                       hpara_tuple = [best_hpara, snapshot_steps], 
+                       hpara_tuple = [best_hpara, top_steps], 
                        error_tuple = step_error[0])
     
-    print('\n----- Best epoch hyper-parameters: ', best_hpara, snapshot_steps, '\n')
+    print('\n----- Best epoch hyper-parameters: ', best_hpara, top_steps, '\n')
     print('\n----- Re-training validation performance: ', step_error[0], '\n')
     
     # ----- testing
-    # error tuple: rmse, mae, mape, nnllk
+    # error tuple: [rmse, mae, mape, nnllk]
     
     # -- best one snapshot 
     
-    error_tuple, _ = testing(model_snapshots = snapshot_steps[:1],
+    error_tuple, _ = testing(model_snapshots = top_steps[:1],
                              xts = ts_x,
                              yts = ts_y,
                              x_src_seperated = para_x_src_seperated,
@@ -680,7 +680,7 @@ if __name__ == '__main__':
     
     # -- best snapshot steps 
     
-    error_tuple, _ = testing(model_snapshots = snapshot_steps,
+    error_tuple, _ = testing(model_snapshots = top_steps,
                              xts = ts_x,
                              yts = ts_y,
                              x_src_seperated = para_x_src_seperated,
@@ -697,7 +697,7 @@ if __name__ == '__main__':
     
     # -- importance weighted best snapshot steps 
     
-    error_tuple, _ = testing(model_snapshots = snapshot_steps,
+    error_tuple, _ = testing(model_snapshots = top_steps,
                              xts = ts_x,
                              yts = ts_y,
                              x_src_seperated = para_x_src_seperated,

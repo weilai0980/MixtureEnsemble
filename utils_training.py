@@ -293,11 +293,11 @@ def hyper_para_selection(hpara_log,
     
     tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
     bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
-    bayes_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
+    bayes_steps_features = [ [k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
     
     # -- snapshot steps
     snapshot_steps = full_steps[:len(bayes_steps)]
-    snapshot_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
+    snapshot_steps_features = [ [k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
     
     best_hyper_para_dict = sorted_hp[0][0]
     # best hp, snapshot_steps, bayes_steps
