@@ -246,7 +246,7 @@ class mixture_statistic():
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
-                                        rnn_size_layers = [int(self.hyper_para_dict['rnn_size']), int(self.hyper_para_dict['rnn_size'])],
+                                        rnn_size_layers = [int(self.hyper_para_dict['rnn_size'])],
                                         rnn_cell_type = "lstm",
                                         dropout_keep = self.keep_prob,
                                         dense_num = int(self.hyper_para_dict['dense_num']),
@@ -842,7 +842,7 @@ class mixture_statistic():
         # -- training operation
         self.train_op = train_optimizer.minimize(self.loss, 
                                                  global_step = global_step)
-        
+        # -- initialize the graph
         self.init = tf.global_variables_initializer()
         self.sess.run(self.init)
         

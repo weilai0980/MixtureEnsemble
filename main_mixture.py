@@ -46,7 +46,7 @@ para_distr_type = "gaussian"
 # gaussian, student_t
 para_distr_para = []
 # gaussian: [] 
-# student_t: [nu], nu>=3
+# student_t: [nu], nu >= 3
 para_var_type = "square" # square, exp
 # for one-dimensional feature, variance derivation should be re-defined? 
 # always positive correlation of the feature to the variance
@@ -90,16 +90,13 @@ para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 
-para_hpara_range['random']['rnn']['lr'] = [0.0005, 0.0005]
-para_hpara_range['random']['rnn']['batch_size'] = [60, 140]
-para_hpara_range['random']['rnn']['l2'] = [0.00001, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [0, 3]
+para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
+para_hpara_range['random']['rnn']['batch_size'] = [120, 140]
+para_hpara_range['random']['rnn']['l2'] = [0.00001, 0.01]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
-
-para_n_epoch = 50
-para_burn_in_epoch = 20
 
 para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
 para_snapshot_Bernoulli = 0.001
@@ -107,23 +104,29 @@ para_snapshot_Bernoulli = 0.001
 para_early_stop_bool = False
 para_early_stop_window = 0
 
+para_n_epoch = 50
+para_burn_in_epoch = 20
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. and test snapshot numbers are explicited determined 
 #   batch_wise: vali. and test snapshot numbers are arbitary 
 para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
-para_validation_metric = 'nnllk'
+para_validation_metric = 'rmse'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
 # -- optimization
 para_loss_type = "heter_lk_inv"
+para_optimizer = "adam" 
+# RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
+# for sg_mcmc family, "para_n_epoch" could be set to higher values
 
-para_optimizer = "adam" # RMSprop, sg_mcmc_RMSprop, adam, sg_mcmc_adam, sgd, adamW 
-# re-set this for training on new data
-para_optimizer_lr_decay = False
+# training heuristic: re-set the following for training on new data
+# if lr_decay is on, "lr" and "para_n_epoch" can be set to higher values
+para_optimizer_lr_decay = False 
 para_optimizer_lr_decay_epoch = 10 # after the warm-up
-para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
+para_optimizer_lr_warmup_epoch = 0
+#int(0.1*para_n_epoch)
 
 # -- regularization
 para_regu_mean = True
@@ -586,9 +589,9 @@ if __name__ == '__main__':
         
         tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
                                     hpara_dict = hpara_dict)
+        
         # hp_: hyper-parameter
         # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
-        
         hp_step_error, hp_epoch_time = training_validating(tr_x,
                                                            tr_y,
                                                            val_x,
@@ -609,8 +612,8 @@ if __name__ == '__main__':
         # -- prepare for the next trial
         
         # stabilize the network by fixing random seeds
-        #np.random.seed(1)
-        #tf.set_random_seed(1)
+        # np.random.seed(1)
+        # tf.set_random_seed(1)
         
         # sample the next hyper-para
         hpara_dict = hpara_generator.one_trial()

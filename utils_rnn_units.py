@@ -80,7 +80,7 @@ def multi_src_predictor_rnn(x,
     regu_mean = reg_mean_h + regu_mean_pred
     
     # --- variance
-    # !! watch out for the explosion of variance !!
+    # !! watch out for the explosion of variance due to square aferwards !!
     # [S B d]
     h_var, reg_var_h, dim_src_var = multi_mv_dense(num_layers = dense_num,
                                                    keep_prob = dropout_keep,

@@ -225,8 +225,14 @@ class myAdamOptimizer(optimizer.Optimizer):
         *update_ops + [update_beta1, update_beta2], name=name_scope)
 
 class AdamWeightDecayOptimizer(tf.train.Optimizer):
-  """A basic Adam optimizer that includes "correct" L2 weight decay."""
-
+  """
+  A basic Adam optimizer that includes "correct" L2 weight decay.
+  
+  Ref.:
+    [2018 ICLR] fixing weight decay regularization in Adam, https://openreview.net/pdf?id=rk6qdGgCZ
+    
+    https://github.com/google-research/bert/blob/master/optimization.py
+  """
   def __init__(self,
                learning_rate,
                weight_decay_rate=0.0,
