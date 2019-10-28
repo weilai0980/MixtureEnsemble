@@ -535,8 +535,8 @@ class sg_mcmc_adam(optimizer.Optimizer):
     '''
     
   def _resource_apply_dense(self, 
-                              grad, 
-                              var):
+                            grad, 
+                            var):
     # -----
      
     beta1_power, beta2_power = self._get_beta_accumulators()
@@ -763,6 +763,55 @@ class sg_mcmc_RMSprop(optimizer.Optimizer):
     var_update = state_ops.assign_sub(var, lr * grad / (v_sqrt + epsilon_t) - inject_noise, use_locking = self._use_locking)
     
     return control_flow_ops.group(*[var_update, v_t]) 
+
+  def _resource_apply_dense(self,
+                            grad, 
+                            var):
+    
+    # -----
+     
+    beta1_power, beta2_power = self._get_beta_accumulators()
+    beta1_power = math_ops.cast(beta1_power, var.dtype.base_dtype)
+    beta2_power = math_ops.cast(beta2_power, var.dtype.base_dtype)
+    
+    lr_t = math_ops.cast(self._lr_t, var.dtype.base_dtype)
+    beta1_t = math_ops.cast(self._beta1_t, var.dtype.base_dtype)
+    beta2_t = math_ops.cast(self._beta2_t, var.dtype.base_dtype)
+    
+    epsilon_t = math_ops.cast(self._epsilon_t, var.dtype.base_dtype)
+    lr = (lr_t * math_ops.sqrt(1 - beta2_power) / (1 - beta1_power))
+    
+    # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+    v = self.get_slot(var, "v")
+    v_scaled_g_values = (grad * grad) * (1.0 - beta2_t)
+    v_t = state_ops.assign(v, v_scaled_g_values + v * beta2_t, use_locking = self._use_locking)
+    
+    v_sqrt = math_ops.sqrt(v_t)
+    
+    #var_update = state_ops.assign_sub(var, lr * m_t / (v_sqrt + epsilon_t), use_locking = self._use_locking)
+    
+    # ----- inject noise
+    
+    shape_tensor = _ShapeTensor(array_ops.shape(var))
+    
+    dtype = dtypes.float32
+    
+    seed = None
+    seed1, seed2 = random_seed.get_seed(seed)
+    
+    rnd = gen_random_ops.random_standard_normal(shape_tensor, 
+                                                dtype,
+                                                seed = seed1, 
+                                                seed2 = seed2)
+    
+    inject_noise = rnd * math_ops.sqrt(1.0 * lr / (v_sqrt + epsilon_t))
+    
+    
+    # ----- 
+    
+    var_update = state_ops.assign_sub(var, lr * grad / (v_sqrt + epsilon_t) - inject_noise, use_locking = self._use_locking)
+    
+    return control_flow_ops.group(*[var_update, v_t]) 
     
 
   def _finish(self, 
@@ -938,9 +987,6 @@ class myRMSprop(optimizer.Optimizer):
     return control_flow_ops.group(
         *update_ops + [update_beta1, update_beta2], name=name_scope)
 
-
-
-
 #import tensorflow.compat.v1 as tf1
 #import tensorflow.compat.v2 as tf
 
@@ -949,7 +995,6 @@ class myRMSprop(optimizer.Optimizer):
 #from tensorflow_probability.python.math import diag_jacobian
 
 from tensorflow.python.training import training_ops
-
 
 class StochasticGradientLangevinDynamics(optimizer.Optimizer):
     
@@ -1001,12 +1046,13 @@ class StochasticGradientLangevinDynamics(optimizer.Optimizer):
 
   def __init__(self,
                learning_rate,
-               preconditioner_decay_rate=0.95,
+               preconditioner_decay_rate = 0.95,
                data_size = 1,
                burnin = 25,
                diagonal_bias = 1e-8,
                name = None,
                parallel_iterations = 10):
+        
     default_name = 'StochasticGradientLangevinDynamics'
     with tf.name_scope(name, default_name, [
         learning_rate, preconditioner_decay_rate, data_size, burnin,
@@ -1025,8 +1071,8 @@ class StochasticGradientLangevinDynamics(optimizer.Optimizer):
                                           dtype = tf.int64)
           #dtype = dtype_util.common_dtype([burnin], dtype_hint=tf.int64))
       
-      self._diagonal_bias = tf.convert_to_tensor(
-          value=diagonal_bias, name='diagonal_bias')
+      self._diagonal_bias = tf.convert_to_tensor(value = diagonal_bias, 
+                                                 name = 'diagonal_bias')
       # TODO(b/124800185): Consider migrating `learning_rate` to be a
       # hyperparameter handled by the base Optimizer class. This would allow
       # users to plug in a `tf.keras.optimizers.schedules.LearningRateSchedule`

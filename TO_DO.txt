@@ -170,9 +170,7 @@ training error
   
 density average
 
-
 --------------- POINT LEARNED -------------------
-
 
 Model:
 
@@ -184,7 +182,6 @@ Model:
      average
      weighted sum/ linear combination
      
-
 Training-validation:
    
   hyper-para search: grid random bayesian 
@@ -248,7 +245,6 @@ Bayesian:
     MC-Dropout
     Posterior-sharpening
     
-    
   SGWA
 
 Variational inference and sampling methods:
@@ -269,12 +265,19 @@ Variational inference and sampling methods:
   random or grid? -> 
 
   constant, scalar, vec, pos_neg
-  
                  
   bias: mean    variance   gate
   l2: mean    variance   gate
   gate logits:
 
+
+Tuning logic:
+  network structure related to the representation ability, lr + batch_size, small epoch -> stable training/validation curve 
+  add regularization, e.g. l2 and/or dropout
+  increas epoch as well as adding training heuristic, e.g. lr decay, lr warm-up, early stop, etc, 
+  
+  adjust the initial value of learning rate OR network size OR epochs 
+  
 
 --------------- TO DO -------------------
 
@@ -298,6 +301,10 @@ correlated variable elimination
 
 *remove auto-regressive part
 
+kaggle
+  ASHRAE great energy predictor III
+
+
 ----- Survey
 
 domain transfer learning
@@ -318,12 +325,18 @@ Data:
   
   ** DATA augmentation
      outlier
-     lag effect 
+     lag effect
 
 Model:
 
   posterior for inference
   temporal dependence
+  
+  mlp layer scheduler:
+     2*input_size + 1
+     2/3 input_size +/- output_size
+     < 2*input_size
+     
 
   *** Versatility
   

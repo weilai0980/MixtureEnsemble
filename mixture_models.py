@@ -246,7 +246,7 @@ class mixture_statistic():
                                         bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                         bool_scope_reuse = [False, False, False],
                                         str_scope = "rnn",
-                                        rnn_size_layers = [int(self.hyper_para_dict['rnn_size'])],
+                                        rnn_size_layers = [ int(self.hyper_para_dict['rnn_size']) ],
                                         rnn_cell_type = "lstm",
                                         dropout_keep = self.keep_prob,
                                         dense_num = int(self.hyper_para_dict['dense_num']),
@@ -822,7 +822,8 @@ class mixture_statistic():
                                                          use_nesterov = True)
         elif self.optimization_method == 'adamW':
             
-            train_optimizer = tf.contrib.opt.AdamWOptimizer(weight_decay = 0.001,
+            # ref.: "Fixing Weight Decay Regularization in Adam", https://arxiv.org/abs/1711.05101
+            train_optimizer = tf.contrib.opt.AdamWOptimizer(weight_decay = self.l2,
                                                             learning_rate = optimizer_lr)
         # -- SG-MCMC
         # stochastic gradient Monto-Carlo Markov Chain
