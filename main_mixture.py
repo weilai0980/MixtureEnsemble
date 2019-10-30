@@ -111,7 +111,7 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
 # -- optimization
 para_loss_type = "heter_lk_inv"
-para_optimizer = "adam" 
+para_optimizer = "adam"
 # RMSprop, adam, sgd, adamW 
 # sg_mcmc_RMSprop, sg_mcmc_adam
 # [Note] for sg_mcmc family, "para_n_epoch" could be set to higher values
@@ -197,7 +197,7 @@ def log_train(path):
         text_file.write("loss type : %s \n"%(para_loss_type))
         text_file.write("learning rate decay : %s \n"%(str(para_optimizer_lr_decay)))
         text_file.write("learning rate decay epoch : %s \n"%(str(para_optimizer_lr_decay_epoch)))
-        text_file.write("learning rate warmup epoch : %s \n"%(str(para_optimizer_lr_warmup_epoch)))
+        text_file.write("learning rate warm-up epoch : %s \n"%(str(para_optimizer_lr_warmup_epoch)))
         text_file.write("\n")
         
         text_file.write("hyper-para search : %s \n"%(para_hpara_search))

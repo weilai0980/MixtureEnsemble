@@ -807,13 +807,19 @@ class mixture_statistic():
         # -- conventional 
         if self.optimization_method == 'adam':
             
-            train_optimizer = myAdamOptimizer(learning_rate = optimizer_lr)    
-            #train_optimizer = tf.train.AdamOptimizer(learning_rate = tmp_learning_rate)
+            train_optimizer = myAdamOptimizer(learning_rate = optimizer_lr)
+            
+        elif self.optimization_method == 'adam_origin':
+            
+            train_optimizer = tf.train.AdamOptimizer(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'RMSprop':
             
-            train_optimizer = myRMSprop(learning_rate = optimizer_lr)    
-            #train_optimizer = tf.train.RMSPropOptimizer(learning_rate = tmp_learning_rate)
+            train_optimizer = myRMSprop(learning_rate = optimizer_lr)
+            
+        elif self.optimization_method == 'RMSprop_origin':
+            
+            train_optimizer = tf.train.RMSPropOptimizer(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sgd':
             
@@ -829,19 +835,25 @@ class mixture_statistic():
         # stochastic gradient Monto-Carlo Markov Chain
         elif self.optimization_method == 'sg_mcmc_adam':
             
-            print("\n --- sg_mcmc_adam ---- \n")
-            
             train_optimizer = sg_mcmc_adam(learning_rate = optimizer_lr)
+            
+        elif self.optimization_method == 'sg_mcmc_adam_revision':
+            
+            train_optimizer = sg_mcmc_adam_revision(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sg_mcmc_RMSprop':
             
             train_optimizer = sg_mcmc_RMSprop(learning_rate = optimizer_lr)
             
+        elif self.optimization_method == 'sgld':
+            
+            train_optimizer = StochasticGradientLangevinDynamics(learning_rate = optimizer_lr)
+            
         else:
             print("\n --- OPTIMIZER ERROR ---- \n")
         
         # -- training operation
-        self.train_op = train_optimizer.minimize(self.loss, 
+        self.train_op = train_optimizer.minimize(self.loss,
                                                  global_step = global_step)
         # -- initialize the graph
         self.init = tf.global_variables_initializer()

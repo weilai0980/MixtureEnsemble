@@ -371,7 +371,10 @@ class data_loader(object):
     
     def __init__(self,
                  x,
-                 y,batch_size,num_ins,num_src):
+                 y,
+                 batch_size,
+                 num_ins,
+                 num_src):
         '''
         Argu.:
           x: numpy array
@@ -384,7 +387,7 @@ class data_loader(object):
         self.batch_size = batch_size
         self.num_src = num_src
         
-        self.num_batch = int(np.ceil(1.0*num_ins/batch_size))
+        self.num_batch = int(np.ceil(1.0*num_ins/int(batch_size)))
         
         self.ids = list(range(num_ins))
         np.random.shuffle(self.ids)
