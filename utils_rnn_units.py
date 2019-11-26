@@ -335,7 +335,7 @@ def plain_rnn(x,
         elif cell_type == 'gru':
             tmp_cell = tf.nn.rnn_cell.GRUCell(dim_layers[0],
                                               kernel_initializer = tf.contrib.keras.initializers.glorot_normal(seed = 1))
-        # ! only dropout on hidden states !
+        # !! only dropout on hidden states !!
         rnn_cell = tf.nn.rnn_cell.DropoutWrapper(tmp_cell,
                                                  state_keep_prob = dropout_keep_prob, 
                                                  seed = 1)

@@ -271,12 +271,16 @@ Variational inference and sampling methods:
   gate logits:
 
 
-Tuning logic:
+** Tuning logic:
+
   network structure related to the representation ability, lr + batch_size, small epoch -> stable training/validation curve 
+                                                                batch_size starts from large values for training stability
+                                                                
   add regularization, e.g. l2 and/or dropout
   increas epoch as well as adding training heuristic, e.g. lr decay, lr warm-up, early stop, etc, 
   
-  adjust the initial value of learning rate OR network size OR epochs 
+  observe the best hyper-para and best epoch in the space of hyper-parameters
+  adjust the space or (learning rate OR network size OR epochs)
   
 
 --------------- TO DO -------------------
@@ -367,6 +371,12 @@ Model:
   
      hidden transition
      moving averaging for neural network version
+     
+     
+  *** calibration metric:
+      refer to "on mixup training: improved calibration and predictive uncertainty" 
+  *** temporal dependence
+  *** sg mcmc
   
   
   loss decomposition 
@@ -397,9 +407,10 @@ Training:
      asymptotic analysis
      convergence analysis
   
-     thinning
-     ancestral sampling
-     simulated anealing
+     ** Sampling:
+          thinning
+          ancestral sampling
+          simulated anealing
      
      math operation check
      

@@ -86,6 +86,8 @@ def data_padding_x(x,
     # [S N T D]
     return target_x
 
+# ----- for multi-tasks
+
 def func_mape(y, 
               yhat):
     
@@ -377,14 +379,14 @@ class data_loader(object):
                  num_src):
         '''
         Argu.:
-          x: numpy array
-          y: numpy array
+          x: numpy array [S N T D]
+          y: numpy array [N ...]
         '''
         np.random.seed(1)
         
         self.x = x
         self.y = y
-        self.batch_size = batch_size
+        self.batch_size = int(batch_size)
         self.num_src = num_src
         
         self.num_batch = int(np.ceil(1.0*num_ins/int(batch_size)))
@@ -400,6 +402,7 @@ class data_loader(object):
         self.bool_last_batch = False
         
     def one_batch(self):
+        
         if self.batch_cnt >= self.num_batch:
             return None, None, None
         else:

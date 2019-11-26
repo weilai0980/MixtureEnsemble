@@ -7,6 +7,7 @@ import random
 from random import shuffle
 import time
 import json
+import pickle
 
 import tensorflow as tf
 from tensorflow.contrib.learn.python.learn.datasets.mnist import read_data_sets
@@ -94,7 +95,7 @@ para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
 para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [0, 3] # inproper value leads to non-convergence in training
 para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
-para_hpara_range['random']['rnn']['batch_size'] = [120, 140]
+para_hpara_range['random']['rnn']['batch_size'] = [100, 140]
 para_hpara_range['random']['rnn']['l2'] = [0.00001, 0.01]
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
@@ -140,7 +141,7 @@ para_regu_imbalanced_mean_var = False
 para_regu_mean_positive = False
 para_regu_global_gate = False  
 para_regu_latent_dependence = False
-para_regu_weight_on_latent = True
+para_regu_weight_on_latent = False
 
 para_bool_bias_in_mean = True
 para_bool_bias_in_var = True
@@ -308,7 +309,7 @@ def training_validating(xtr,
                           bool_bias_global_src = para_bool_global_bias,
                           optimization_method = para_optimizer,
                           optimization_lr_decay = para_optimizer_lr_decay,
-                          optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/hyper_para_dict["batch_size"]),
+                          optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/int(hyper_para_dict["batch_size"])),
                           optimization_burn_in_step = para_burn_in_epoch,
                           optimization_warmup_step = para_optimizer_lr_warmup_epoch*training_dict["batch_per_epoch"] - 1)
         
@@ -320,7 +321,7 @@ def training_validating(xtr,
         
         batch_gen = data_loader(x = xtr,
                                 y = ytr,
-                                batch_size = hyper_para_dict["batch_size"], 
+                                batch_size = int(hyper_para_dict["batch_size"]), 
                                 num_ins = training_dict["tr_num_ins"],  
                                 num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
         # -- begin training
@@ -377,9 +378,9 @@ def training_validating(xtr,
                                                      early_stop_window = para_early_stop_window)
                 
                 if retrain_bool == True and model_saver_flag != None:
-                    
                     print("\n    [MODEL SAVED] " + model_saver_flag + " \n " + path_model + para_model_type + '_' + str(global_step))
                 
+                # - next batch
                 batch_x, batch_y, bool_last = batch_gen.one_batch()
                 global_step += 1
             
@@ -395,8 +396,9 @@ def training_validating(xtr,
                 
         ed_time = time.time()
         
-    # ? the epoch with the lowest para_validation_metric ?
-    # [global_step, tr_metric, val_metric, epoch]
+    # ? sorted training log ?
+    # step_error: [global_step, tr_metric, val_metric, epoch]
+    # sort step_error based on para_validation_metric
     return sorted(step_error, key = lambda x:x[2][para_metric_map[para_validation_metric]]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
 
@@ -637,6 +639,8 @@ if __name__ == '__main__':
         
     # ----- re-train
     
+    # ? alternative strategy: save all epoches in re-training, then select snapshots ?
+    
     # best hyper-para and snapshot set 
     best_hpara, top_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
                                                                    val_snapshot_num = para_vali_snapshot_num, 
@@ -754,7 +758,6 @@ if __name__ == '__main__':
                          ensemble_str = "Importance Bayesian")
     
     # -- dump predictions on testing data
-    
-    import pickle
     pickle.dump(py_tuple, open(path_py, "wb"))
+    
     
