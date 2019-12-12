@@ -54,17 +54,30 @@ para_var_type = "square" # square, exp
 para_share_type_gate = "no_share"
 # no_share, share, mix
 
+para_model_type = 'rnn'
+
 # -- data
-para_x_src_seperated = True
-para_bool_target_seperate = False
+
+if para_model_type == 'rnn':
+    
+    para_x_src_seperated = True
+    para_bool_target_seperate = False
+    para_add_common_pattern = True
+    
+elif para_model_type == 'linear':
+    
+    para_x_src_seperated = False
+    para_bool_target_seperate = False
+    para_add_common_pattern = False
+
 # [Note] if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
-para_add_common_pattern = True
+
 
 # -- training and validation
 
 # hpara: hyper parameter
-para_model_type = 'rnn'
+
 para_hpara_search = "random" # random, grid 
 para_hpara_n_trial = 8
 
