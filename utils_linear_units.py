@@ -1,12 +1,10 @@
 #!/usr/bin/python
 
 import tensorflow as tf
-
 # local 
 from utils_libs import *
 
 # ----- utilities functions -----
-
 def multi_src_predictor_linear(x, 
                                n_src, 
                                steps, 
@@ -20,7 +18,6 @@ def multi_src_predictor_linear(x,
       x: [S B T D]
       bool_bias: [bool_bias_mean, bool_bias_var, bool_bias_gate]
       bool_scope_reuse: [mean, var, gate]
-    
     '''
     #[S B]
     tmp_mean, regu_mean = multi_src_bilinear(x,
@@ -29,14 +26,13 @@ def multi_src_predictor_linear(x,
                                              bool_bias = bool_bias[0],
                                              bool_scope_reuse = bool_scope_reuse[0], 
                                              num_src = n_src)
-        
     tmp_var, regu_var = multi_src_bilinear(x,
                                            [steps, dim],
                                            str_scope + "var",
                                            bool_bias = bool_bias[1],
                                            bool_scope_reuse = bool_scope_reuse[1],
                                            num_src = n_src)
-    
+
     tmp_logit, regu_gate = multi_src_logit_bilinear(x,
                                                     [steps, dim],
                                                     str_scope + 'gate',
@@ -47,7 +43,6 @@ def multi_src_predictor_linear(x,
     
     return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate
     
-    
 def multi_src_logit_bilinear(x, 
                             shape_x, 
                             scope, 
@@ -55,14 +50,11 @@ def multi_src_logit_bilinear(x,
                             bool_scope_reuse, 
                             num_src,
                             para_share_type):
-    
     # x: [S, B, T, D]
     # shape_x: [T, D]
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
-        
         if para_share_type == "no_share":
-            
             # [S  1  T  1]
             w_l = tf.get_variable('w_left', 
                                   [num_src, 1, shape_x[0], 1],
@@ -81,9 +73,8 @@ def multi_src_logit_bilinear(x,
             
             # [S B D]*[S 1 D] - > [S B]
             h = tf.reduce_sum(tmp_h * w_r, 2)
-        
+
         elif para_share_type == "share":
-            
             # [1  1  T  1]
             w_l = tf.get_variable('w_left', 
                                   [1, 1, shape_x[0], 1],
@@ -104,12 +95,10 @@ def multi_src_logit_bilinear(x,
             h = tf.reduce_sum(tmp_h * w_r, 2)
             
         elif para_share_type == "mix":
-            
             # x: [S, B, T, D] -> [B, T, D, S]
             tmpx = tf.transpose(x, [1, 2, 3, 0])
             # [B T D*S]
             tmpx_mix = tf.reshape(x, [-1, shape_x[0], shape_x[1]*num_src])
-            
             
             # [1 T 1]
             w_l = tf.get_variable('w_left', 
@@ -126,12 +115,10 @@ def multi_src_logit_bilinear(x,
             
             # [B T D*S] * [1 T 1] -> [B S*D]
             tmp_h = tf.reduce_sum(tmpx_mix * w_l, 1)
-            
             # [B S*D]*[S*D S] - > [S B]
             h = tf.transpose(tf.matmul(tmp_h, w_r), [1,0])
             
         if bool_bias == True:
-            
             # [S B]
             h = h + b
             
@@ -148,21 +135,17 @@ def multi_src_linear(x,
     # dim_x: T*D
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
-        
         # [S 1 T*D]
         w = tf.get_variable('w', 
                             shape = [num_src, 1, dim_x],
                             initializer = tf.contrib.layers.xavier_initializer())
-        
         b = tf.get_variable("b", 
                             shape = [num_src, 1], 
                             initializer = tf.zeros_initializer())
         
         if bool_bias == True:
-            
             # [S, B, T*D] * [S 1 T*D] -> [S B] + [S 1]
             h = tf.reduce_sum(x * w, -1) + b
-            
         else:
             h = tf.reduce_sum(x * w, -1)
         
@@ -196,13 +179,11 @@ def multi_src_bilinear(x,
         tmp_h = tf.reduce_sum(x * w_l, 2)
         
         if bool_bias == True:
-            
             # [S B D]*[S 1 D] - > [S B]
             h = tf.reduce_sum(tmp_h * w_r, 2) + b
-            
         else:
             h = tf.reduce_sum(tmp_h * w_r, 2)
-            
+
          # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
@@ -211,17 +192,15 @@ def linear(x,
            scope, 
            bool_bias,
            bool_scope_reuse):
-    
-    # x: [B D]
-    # dim_x: D
-    
+    '''
+     x: [B D]
+     dim_x: D
+    '''
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
-        
         w = tf.get_variable('w', 
                             [dim_x, 1],
                             initializer = tf.contrib.layers.xavier_initializer())
-        
         b = tf.get_variable("b", 
                             shape = [1,], 
                             initializer = tf.zeros_initializer())
@@ -239,20 +218,18 @@ def bilinear(x,
              scope,
              bool_bias,
              bool_scope_reuse):
-    
-    # shape of x: [b, l, r]
-    # shape_x: [l, r]
+    '''
+     shape of x: [b, l, r]
+     shape_x: [l, r]
+    '''
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
-        
         w_l = tf.get_variable('w_left', 
                               [shape_x[0], 1],
                               initializer = tf.contrib.layers.xavier_initializer())
-        
         w_r = tf.get_variable('w_right', 
                               [shape_x[1], 1],
                               initializer = tf.contrib.layers.xavier_initializer())
-        
         b = tf.get_variable("b", 
                             shape = [1,], 
                             initializer = tf.zeros_initializer())
@@ -264,8 +241,7 @@ def bilinear(x,
             h = tf.matmul(tmph, w_l) + b
         else:
             h = tf.matmul(tmph, w_l)
-            
-           # [B] 
+    # [B] 
     return tf.squeeze(h), tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
     
 # ------ linear factor process
@@ -306,7 +282,7 @@ def _linear_transition(args,
                        output_size,
                        bias,
                        kernel_initializer, 
-                       bias_initializer=None):
+                       bias_initializer = None):
   """
   Args:
     args: a 2D Tensor or a list of 2D, batch x n, Tensors.
@@ -322,7 +298,7 @@ def _linear_transition(args,
   """
   if args is None or (nest.is_sequence(args) and not args):
       raise ValueError("`args` must be specified")
-    
+
   if not nest.is_sequence(args):
       args = [args]
 
@@ -331,147 +307,97 @@ def _linear_transition(args,
   shapes = [a.get_shape() for a in args]
 
   for shape in shapes:
-    if shape.ndims != 2:
-      raise ValueError("linear is expecting 2D arguments: %s" % shapes)
-    if shape[1].value is None:
-      raise ValueError("linear expects shape[1] to be provided for shape %s, "
-                       "but saw %s" % (shape, shape[1]))
-    else:
-      total_arg_size += shape[1].value
-
+      if shape.ndims != 2:
+          raise ValueError("linear is expecting 2D arguments: %s" % shapes)
+      if shape[1].value is None:
+          raise ValueError("linear expects shape[1] to be provided for shape %s, "
+          "but saw %s" % (shape, shape[1]))
+      else:
+          total_arg_size += shape[1].value
   dtype = [a.dtype for a in args][0]
-
-  # --- begin linear update ---
-    
+  
+  # --- begin linear update ---  
   scope = vs.get_variable_scope()
   with vs.variable_scope(scope) as outer_scope:
-
-    # define relevant dimensions
-    input_dim  = args[0].get_shape()[1].value
-    hidden_dim = args[1].get_shape()[1].value
-    
-    # --- hidden update ---
-    #[D H]
-    weights_IH = vs.get_variable('input_hidden', 
-                                 [input_dim, hidden_dim],
-                                 dtype = dtype,
-                                 initializer = kernel_initializer)
-    #[H H]
-    weights_HH = vs.get_variable('hidden_hidden', 
-                                 [hidden_dim, hidden_dim],
-                                 dtype = dtype,
-                                 initializer = kernel_initializer)                  
-    # [B D]
-    tmp_input = args[0] 
-    # [B H]
-    tmp_h = args[1]
-    
-    #[B H]
-    new_h = math_ops.matmul(tmp_input, weights_IH) + math_ops.matmul(tmp_h, weights_HH)
-    
-    #[B H]
-    res = new_h
-    
-    # --- bias ---
-    
-    if not bias:
-      return res
-
-    with vs.variable_scope(outer_scope) as inner_scope:
-      inner_scope.set_partitioner(None)
+      # define relevant dimensions
+      input_dim  = args[0].get_shape()[1].value
+      #hidden_dim = args[1].get_shape()[1].value
+      hidden_dim = output_size
       
-      if bias_initializer is None:
-        bias_initializer = init_ops.constant_initializer(0.0, dtype=dtype)
+      # --- hidden update ---
+      #[D H]
+      weights_IH = vs.get_variable('input_hidden', 
+                                   [input_dim, hidden_dim],
+                                   dtype = dtype,
+                                   initializer = kernel_initializer)
+      #[H H]
+      weights_HH = vs.get_variable('hidden_hidden', 
+                                   [hidden_dim, hidden_dim],
+                                   dtype = dtype,
+                                   initializer = kernel_initializer)
+      # [B D]
+      tmp_input = args[0] 
+      # [B H]
+      tmp_h = args[1]
+      #[B H]
+      new_h = math_ops.matmul(tmp_input, weights_IH) + math_ops.matmul(tmp_h, weights_HH)
       
-      biases = vs.get_variable(_BIAS_VARIABLE_NAME, 
-                               [hidden_dim],
-                               dtype = dtype,
-                               initializer = bias_initializer)
-
-    return nn_ops.bias_add(res, biases)
+      # --- bias ---
+      if not bias:
+          return new_h
+          
+      with vs.variable_scope(outer_scope) as inner_scope:
+          inner_scope.set_partitioner(None)
+          if bias_initializer is None:
+              bias_initializer = init_ops.constant_initializer(0.0,
+                                                               dtype = dtype)
+          biases = vs.get_variable(_BIAS_VARIABLE_NAME, 
+                                   [hidden_dim],
+                                   dtype = dtype,
+                                   initializer = bias_initializer)
+      return nn_ops.bias_add(new_h, biases)
 
 class tempFactorCell(RNNCell):
 
   def __init__(self, 
                num_units, 
-               n_var, 
                initializer, 
-               memory_update_keep_prob, 
-               layer_norm, 
-               gate_type,
-               forget_bias = 1.0, 
-               state_is_tuple = True, 
-               activation = None, 
                reuse = None):
     """
     Args:
-      num_units: int, The number of units in the LSTM cell.
-      forget_bias: float, The bias added to forget gates (see above).
-        Must set to `0.0` manually when restoring from CudnnLSTM-trained
-        checkpoints.
-      state_is_tuple: If True, accepted and returned states are 2-tuples of
-        the `c_state` and `m_state`.  If False, they are concatenated
-        along the column axis.  The latter behavior will soon be deprecated.
-      activation: Activation function of the inner states.  Default: `tanh`.
-      reuse: (optional) Python boolean describing whether to reuse variables
-        in an existing scope.  If not `True`, and the existing scope already has
-        the given variables, an error is raised.
-      When restoring from CudnnLSTM-trained checkpoints, must use
-      CudnnCompatibleLSTMCell instead.
+      num_units: int, The number of units in the tempFactor cell.
     """
     super(tempFactorCell, self).__init__(_reuse=reuse)
-    if not state_is_tuple:
-      logging.warn("%s: Using a concatenated state is slower and will soon be "
-                   "deprecated.  Use state_is_tuple=True.", self)
     
     self._num_units = num_units
-    self._forget_bias = forget_bias
-    self._state_is_tuple = state_is_tuple
-    self._activation = activation or math_ops.tanh
     self._linear = None
-    
-    self._input_dim = None
-    
     self._kernel_ini = initializer
     
   @property
   def state_size(self):
-    return (LSTMStateTuple(self._num_units, self._num_units) if self._state_is_tuple else 2 * self._num_units)
+    return self._num_units
 
   @property
   def output_size(self):
     return self._num_units
 
-  def call(self, inputs, state):
+  def call(self, 
+           inputs, 
+           state):
     """
     Args:
       inputs: `2-D` tensor with shape `[batch_size x input_size]`.
-      state: An `LSTMStateTuple` of state tensors, each shaped
-        `[batch_size x self.state_size]`, if `state_is_tuple` has been set to
-        `True`.  Otherwise, a `Tensor` shaped
-        `[batch_size x 2 * self.state_size]`.
-    Returns:
-      A pair containing the new hidden state, and the new state (either a
-        `LSTMStateTuple` or a concatenated state, depending on
-        `state_is_tuple`).
     """
-
-    if self._state_is_tuple:
-      c, h = state
-    else:
-      c, h = array_ops.split(value=state, num_or_size_splits=2, axis=1)
-
+    h = state
+    
     if self._linear is None:
-      self._new_h = _linear_transition([inputs, h], 
-                                       self._num_units, 
-                                       True, 
-                                       kernel_initializer = self._kernel_ini)
+        self._new_h = _linear_transition([inputs, h], 
+                                         self._num_units, 
+                                         True, 
+                                         kernel_initializer = self._kernel_ini)
     else:
-      print('[ERROR]  factor cell type')
-    
-return _new_h, []
-    
-    
-    
-    
-    
+        print('[ERROR]  factor cell type')
+      
+    _new_state = _new_h
+    return _new_h, _new_state
+
