@@ -78,7 +78,7 @@ def data_padding_x(x,
         
         tmp_t = np.shape(x[tmp_src][0])[0]
         tmp_d = np.shape(x[tmp_src][0])[1]
-        # ?? front or end ??
+        
         zero_mask[:, :tmp_t, :tmp_d] = x[tmp_src]
         
         target_x.append(zero_mask)

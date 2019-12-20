@@ -31,7 +31,7 @@ def multi_src_predictor_rnn(x,
     if x_src_seperated == True:
         x_list = x
     else:
-        # shape: [S, [B T D]]
+        # shape: [ S, [B T D] ]
         tmp_x_list = tf.split(x,
                               num_or_size_splits = n_src, 
                               axis = 0)

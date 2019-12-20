@@ -5,14 +5,16 @@ import tensorflow as tf
 from utils_libs import *
 
 # ----- utilities functions -----
-def multi_src_predictor_linear(x, 
+def multi_src_predictor_linear(x,
                                n_src, 
-                               steps, 
-                               dim, 
-                               bool_bias, 
-                               bool_scope_reuse, 
+                               steps,
+                               dim,
+                               bool_bias,
+                               bool_scope_reuse,
                                str_scope,
-                               para_share_logit):
+                               para_share_logit,
+                               bool_common_factor,
+                               common_factor_dim):
     '''
     Argu.:
       x: [S B T D]
@@ -32,7 +34,6 @@ def multi_src_predictor_linear(x,
                                            bool_bias = bool_bias[1],
                                            bool_scope_reuse = bool_scope_reuse[1],
                                            num_src = n_src)
-
     tmp_logit, regu_gate = multi_src_logit_bilinear(x,
                                                     [steps, dim],
                                                     str_scope + 'gate',
@@ -40,7 +41,40 @@ def multi_src_predictor_linear(x,
                                                     bool_scope_reuse = bool_scope_reuse[2],
                                                     num_src = n_src,
                                                     para_share_type = para_share_logit)
-    
+    if bool_common_factor == True:
+        # x: [S B T D] -> [B T D*S]
+        pool_x = tf.reshape(tf.transpose(x, [1, 2, 0, 3]), [-1, steps, n_src*dim])
+        factorCell = tempFactorCell(num_units = common_factor_dim, 
+                                    initializer = tf.contrib.layers.xavier_initializer())
+        # [B F] F:factor dimension
+        factor, state = tf.nn.dynamic_rnn(cell = factorCell, 
+                                          inputs = pool_x, 
+                                          dtype = tf.float32)
+        # [B 1]
+        facor_mean, regu_factor_mean = linear(x = factor, 
+                                              dim_x = common_factor_dim, 
+                                              scope = "factor_mean", 
+                                              bool_bias = True,
+                                              bool_scope_reuse = False)
+        facor_var, regu_factor_var = linear(x = factor, 
+                                            dim_x = common_factor_dim, 
+                                            scope = "factor_var", 
+                                            bool_bias = True,
+                                            bool_scope_reuse = False)
+        facor_logit, regu_factor_logit = linear(x = factor, 
+                                                dim_x = common_factor_dim, 
+                                                scope = "factor_logit", 
+                                                bool_bias = True,
+                                                bool_scope_reuse = False)
+        # [S+1 B]
+        tmp_mean = tf.concat([tmp_mean, tf.transpose(facor_mean, [1, 0])], 0)
+        tmp_var = tf.concat([tmp_var, tf.transpose(facor_var, [1, 0])], 0)
+        tmp_logit = tf.concat([tmp_logit, tf.transpose(facor_logit, [1, 0])], 0)
+      
+        regu_mean += facor_mean
+        regu_var += facor_var
+        regu_logit += facor_logit
+      
     return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate
     
 def multi_src_logit_bilinear(x, 
@@ -141,8 +175,7 @@ def multi_src_linear(x,
                             initializer = tf.contrib.layers.xavier_initializer())
         b = tf.get_variable("b", 
                             shape = [num_src, 1], 
-                            initializer = tf.zeros_initializer())
-        
+                            initializer = tf.zeros_initializer())       
         if bool_bias == True:
             # [S, B, T*D] * [S 1 T*D] -> [S B] + [S 1]
             h = tf.reduce_sum(x * w, -1) + b
@@ -174,7 +207,6 @@ def multi_src_bilinear(x,
         b = tf.get_variable("b", 
                             shape = [num_src, 1], 
                             initializer = tf.zeros_initializer())
-        
         # [S B T D] * [S 1 T 1] -> [S B D]
         tmp_h = tf.reduce_sum(x * w_l, 2)
         
@@ -184,7 +216,7 @@ def multi_src_bilinear(x,
         else:
             h = tf.reduce_sum(tmp_h * w_r, 2)
 
-         # [S B] 
+           # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
 def linear(x, 
@@ -400,4 +432,4 @@ class tempFactorCell(RNNCell):
       
     _new_state = _new_h
     return _new_h, _new_state
-
+    

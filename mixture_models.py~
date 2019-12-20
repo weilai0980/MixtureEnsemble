@@ -54,6 +54,7 @@ class mixture_statistic():
                     x_dim,
                     x_steps,
                     x_bool_common_factor,
+                    x_factor_dim,
                     model_type,
                     model_distr_type,
                     model_distr_para,
@@ -142,7 +143,8 @@ class mixture_statistic():
         np.random.seed(1)
         tf.set_random_seed(1)
         
-        # ----- ini 
+        # ----- ini
+        
         self.hyper_para_dict = hyper_para_dict
         
         # build the network graph 
@@ -150,20 +152,12 @@ class mixture_statistic():
         self.l2 = self.hyper_para_dict["l2"]
         self.distr_type = model_distr_type
         
-        # initialize placeholders
-        # y: [B 1]
-        self.y = tf.placeholder(tf.float32, 
-                                [None, 1], 
-                                name = 'y')
-        # x: [S, [B T D]]
-        self.x = []
-        for i in range(self.num_src):
-            self.x.append(tf.placeholder(tf.float32, 
-                                         [None, x_steps[i], x_dim[i]], 
-                                         name = 'x' + str(i)))
-        '''        
+        # -- initialize placeholders
+        
+        self.y = tf.placeholder(tf.float32, [None, 1], name = 'y')
+        
         if x_src_seperated == True:
-            # shape: [S, [B T D]]
+            # shape: [S, B T D]
             self.x = []
             for i in range(self.num_src):
                 self.x.append(tf.placeholder(tf.float32, 
@@ -175,19 +169,16 @@ class mixture_statistic():
                                     [self.num_src, None, x_steps, x_dim], 
                                     name = 'x')
         
-        elif 
-          if x_bool_common_factor == True:
+        if x_bool_common_factor == True:
             self.x_factor = tf.placeholder(tf.float32, 
                                           [None, x_steps, x_factor_dim], 
                                           name = 'x_factor')
             self.x_factor_dim = x_factor_dim
-        '''
         
         if model_type == "rnn":
             self.keep_prob = tf.placeholder(tf.float32, 
                                             shape = (), 
                                             name = 'keep_prob')
-        
         # -- hyper-parameters
         self.x_src_seperated = x_src_seperated
         
