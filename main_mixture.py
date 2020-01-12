@@ -60,12 +60,12 @@ para_model_type = 'rnn'
 
 if para_model_type == 'rnn':
     
-    para_x_src_padding = True
+    para_x_src_padding = False
     para_add_common_factor = True
     
 elif para_model_type == 'linear':
     
-    para_x_src_padding = False
+    para_x_src_padding = True
     para_add_common_factor = False
 
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
@@ -511,10 +511,6 @@ if __name__ == '__main__':
     # -- source-wise data preparation 
 
     if para_x_src_padding == True:
-        # T and D different across data sources
-        # y: [N 1], x: [S [N T D]]    
-        shape_tr_x_dict = dict({"N": len(tr_x[0])})   
-    else:
         # padding to same T and D
         # y: [N 1], x: [S [N T D]]
         src_tr_x = data_padding_x(tr_x,
@@ -527,7 +523,11 @@ if __name__ == '__main__':
         shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
         
         print("Shapes after padding: ", np.shape(src_tr_x), np.shape(src_val_x), np.shape(src_ts_x))
-    
+    else:
+        # T and D different across data sources
+        # y: [N 1], x: [S [N T D]]    
+        shape_tr_x_dict = dict({"N": len(tr_x[0])}) 
+        
     if para_add_common_factor == True:
         # x: [S [N T D]]
         # assume T is same across data sources
