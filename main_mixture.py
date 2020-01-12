@@ -60,12 +60,12 @@ para_model_type = 'rnn'
 
 if para_model_type == 'rnn':
     
-    para_x_src_seperated = True
+    para_x_src_padding = True
     para_add_common_factor = True
     
 elif para_model_type == 'linear':
     
-    para_x_src_seperated = False
+    para_x_src_padding = False
     para_add_common_factor = False
 
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
@@ -168,12 +168,12 @@ def log_train(path):
         
         text_file.write("\n\n ------ Bayesian mixture : \n")
         
-        text_file.write("data source seperated : %s \n"%(para_x_src_seperated))
+        text_file.write("data source padding : %s \n"%(para_x_src_padding))
         text_file.write("data path : %s \n"%(path_data))
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
         text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
-        text_file.write("data added common factor : %s \n"%(para_add_common_factor))
+        text_file.write("data common factor : %s \n"%(para_add_common_factor))
         text_file.write("\n")
         
         text_file.write("model type : %s \n"%(para_model_type))
@@ -297,7 +297,6 @@ def training_validating(xtr,
         model.network_ini(hyper_para_dict,
                           x_dim = dim_x,
                           x_steps = steps_x, 
-                          x_src_seperated = para_x_src_seperated,
                           x_bool_common_factor = para_add_common_factor,
                           model_type = para_model_type, 
                           model_distr_type = para_distr_type,
@@ -356,7 +355,6 @@ def training_validating(xtr,
                 # one-step training on a batch of training data
                 model.train_batch(batch_x, 
                                   batch_y,
-                                  x_src_seperated = para_x_src_seperated,
                                   global_step = epoch)
                 
                 # - batch-wise validation
@@ -365,7 +363,6 @@ def training_validating(xtr,
                 
                 val_metric, monitor_metric = model.validation(xval,
                                                               yval,
-                                                              x_src_seperated = para_x_src_seperated,
                                                               snapshot_type = para_snapshot_type,
                                                               snapshot_Bernoulli = para_snapshot_Bernoulli,
                                                               step = global_step,
@@ -375,7 +372,6 @@ def training_validating(xtr,
                     # tr_metric [tr_rmse, tr_mae, tr_mape, tr_nnllk]
                     tr_metric, _ = model.inference(xtr,
                                                    ytr, 
-                                                   x_src_seperated = para_x_src_seperated,
                                                    bool_py_eval = False)
                     step_error.append([global_step, tr_metric, val_metric, epoch])
                     
@@ -455,7 +451,6 @@ def testing(model_snapshots,
             # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
             error_tuple, py_tuple = model.inference(xts,
                                                     yts, 
-                                                    x_src_seperated = para_x_src_seperated,
                                                     bool_py_eval = bool_instance_eval)
             if bool_instance_eval == True:
                 
@@ -515,19 +510,19 @@ if __name__ == '__main__':
     
     # -- source-wise data preparation 
 
-    if para_x_src_seperated == True:
+    if para_x_src_padding == True:
         # T and D different across data sources
         # y: [N 1], x: [S [N T D]]    
         shape_tr_x_dict = dict({"N": len(tr_x[0])})   
     else:
         # padding to same T and D
         # y: [N 1], x: [S [N T D]]
-        src_tr_x = data_padding_x(tr_x, 
-                              num_src = len(tr_x))
-        src_val_x = data_padding_x(val_x, 
-                               num_src = len(tr_x))
-        src_ts_x = data_padding_x(ts_x, 
-                              num_src = len(tr_x))
+        src_tr_x = data_padding_x(tr_x,
+                                  num_src = len(tr_x))
+        src_val_x = data_padding_x(val_x,
+                                   num_src = len(tr_x))
+        src_ts_x = data_padding_x(ts_x,
+                                  num_src = len(tr_x))
         # y [N 1], x [S N T D]  
         shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
         
@@ -609,8 +604,8 @@ if __name__ == '__main__':
         
         # -- logging
         
-        log_train_val_performance(path_log_error, 
-                                  hpara = hpara_log[-1][0], 
+        log_train_val_performance(path_log_error,
+                                  hpara = hpara_log[-1][0],
                                   hpara_error = hpara_log[-1][1][0],
                                   train_time = hp_epoch_time)
         # NAN loss exception
@@ -626,26 +621,26 @@ if __name__ == '__main__':
     
     # best hyper-para and snapshot set 
     best_hpara, top_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
-                                                                   val_snapshot_num = para_vali_snapshot_num, 
-                                                                   test_snapshot_num = para_test_snapshot_num,
-                                                                   metric_idx = para_metric_map[para_validation_metric])
-    tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
+                                                                                                        val_snapshot_num = para_vali_snapshot_num, 
+                                                                                                        test_snapshot_num = para_test_snapshot_num,
+                                                                                                        metric_idx = para_metric_map[para_validation_metric])
+    tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict,
                                 hpara_dict = best_hpara)
     
-    step_error, _ = training_validating(src_tr_x, 
+    step_error, _ = training_validating(src_tr_x,
                                         tr_y,
-                                        src_val_x, 
+                                        src_val_x,
                                         val_y,
                                         dim_x = para_dim_x,
                                         steps_x = para_steps_x,
                                         hyper_para_dict = best_hpara,
                                         training_dict = tr_dict,
                                         retrain_bool = True,
-                                        retrain_snapshot_steps = top_steps, 
+                                        retrain_snapshot_steps = top_steps,
                                         retrain_bayes_steps = bayes_steps)
     
-    log_val_hyper_para(path = path_log_error, 
-                       hpara_tuple = [best_hpara, top_steps], 
+    log_val_hyper_para(path = path_log_error,
+                       hpara_tuple = [best_hpara, top_steps],
                        error_tuple = step_error[0])
     
     print('\n----- Best epoch hyper-parameters: ', best_hpara, top_steps, '\n')
@@ -662,7 +657,7 @@ if __name__ == '__main__':
                              file_path = path_model,
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
-                             num_src = len(src_ts_x), 
+                             num_src = len(src_ts_x),
                              snapshot_features = [],
                              hpara_dict = best_hpara)
     
@@ -726,8 +721,8 @@ if __name__ == '__main__':
                                     file_path = path_model,
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
-                                    num_src = llen(src_ts_x), 
-                                    snapshot_features = bayes_steps_features, 
+                                    num_src = len(src_ts_x),
+                                    snapshot_features = bayes_steps_features,
                                     hpara_dict = best_hpara)
     
     log_test_performance(path = path_log_error,

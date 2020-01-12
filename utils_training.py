@@ -46,7 +46,6 @@ def data_reshape(data,
         print(np.shape(tmpx[-1]))
     
     else:
-        
         for src_idx in range(src_num):
             tmpx.append(np.asarray([tmp[2][src_idx] for tmp in data]))
             print("src " + str(src_idx) + " : ", np.shape(tmpx[-1]))
@@ -94,7 +93,6 @@ def func_mape(y,
     tmp_list = []
     
     for idx, val in enumerate(y):
-        
         if abs(val) > 1e-5:
             tmp_list.append(abs(1.0*(yhat[idx]-val)/val))
     
@@ -116,7 +114,6 @@ def log_train_val_performance(path,
                               hpara, 
                               hpara_error, 
                               train_time):
-    
     with open(path, "a") as text_env:
         text_env.write("%s, %s, %s\n"%(str(hpara), str(hpara_error), str(train_time)))
         
@@ -168,19 +165,14 @@ class hyper_para_grid_search(object):
         # lr_range, batch_size_range, l2_range
         self.n_hpara = len(hpara_range)
         self.hpara_range = hpara_range
-        
         self.ini_flag = True
-        
         self.idx = [0 for _ in range(self.n_hpara)]
         
     def one_trial(self):
         
         if self.ini_flag == True or self.trial_search(self.idx, 0, False) == True:
-            
             self.ini_flag = False
-            
             return [self.hpara_range[i][self.idx[i]] for i in range(self.n_hpara)]
-        
         else:
             return None
         
@@ -193,11 +185,9 @@ class hyper_para_grid_search(object):
             return False
         
         if bool_restart == True:
-            
             self.idx[cur_n] = 0
             self.trial_search(idx, cur_n + 1, True)
             return True
-
         else:
             if self.trial_search(self.idx, cur_n + 1, False) == False:
                 if self.idx[cur_n] + 1 < len(self.hpara_range[cur_n]):
@@ -240,10 +230,8 @@ class hyper_para_random_search(object):
     def one_trial(self):
         
         if self.cur_trial < self.n_trial:
-            
             self.cur_trial += 1
             return self.trial_search()
-        
         else:
             return None
         
@@ -258,7 +246,6 @@ class hyper_para_random_search(object):
             
             tmp_hpara = ()
             for i in self.hpara_range:
-                
                 tmp_hpara = tmp_hpara + (i[0] + (i[1] - i[0])*np.random.random(), )
             
             # -- reconstruct the name-value hyper-para dictionary
@@ -303,7 +290,6 @@ def hyper_para_selection(hpara_log,
     
     best_hyper_para_dict = sorted_hp[0][0]
     # best hp, snapshot_steps, bayes_steps
-    
     return best_hyper_para_dict,\
            snapshot_steps,\
            bayes_steps,\
@@ -419,4 +405,4 @@ class data_loader(object):
             if self.batch_cnt >= self.num_batch:
                 self.bool_last_batch = True
             
-            return batch_x, batch_y, self.bool_last_batch 
+            return batch_x, batch_y, self.bool_last_batch

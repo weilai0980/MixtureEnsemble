@@ -15,7 +15,6 @@ np.random.seed(1)
 tf.set_random_seed(1)
 
 def multi_src_predictor_rnn(x, 
-                            x_src_seperated,
                             n_src, 
                             bool_bias, 
                             bool_scope_reuse, 
@@ -25,18 +24,31 @@ def multi_src_predictor_rnn(x,
                             dropout_keep,
                             dense_num,
                             max_norm_cons):
+    
+    '''
+    Argu.:
+      x: [S [B T D]] when bool_common_factor = False, or
+         [S+1 [B T D]] when bool_common_factor = True
+      bool_bias: [bool_bias_mean, bool_bias_var, bool_bias_gate]
+      bool_scope_reuse: [mean, var, gate]
+    '''
     np.random.seed(1)
     tf.set_random_seed(1)
     
+    '''
     if x_src_seperated == True:
         x_list = x
+        
     else:
         # shape: [S, [B T D]]
         tmp_x_list = tf.split(x,
                               num_or_size_splits = n_src, 
                               axis = 0)
         x_list = [tf.squeeze(tmp_x, 0) for tmp_x in tmp_x_list]
-        
+    '''
+    
+    x_list = x
+    
     h_list = []
     for i in range(n_src):
         h, _  = plain_rnn(x = x_list[i],

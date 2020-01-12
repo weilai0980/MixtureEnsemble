@@ -340,7 +340,8 @@ Model:
      2/3 input_size +/- output_size
      < 2*input_size
      
-
+  ** residual layers
+  
   *** Versatility
   
   feature interaction component 
@@ -353,12 +354,10 @@ Model:
        deseasonalized 
      
     end2end augment
-  
 
   ** boosting jump component/ statistical boosting
      integrated learning
      boosting learning, burn-in phase
-     
   
   ** Neural version
      
@@ -371,27 +370,22 @@ Model:
      hidden transition
      moving averaging for neural network version
      
-     
   *** calibration metric:
       refer to "on mixup training: improved calibration and predictive uncertainty" 
   *** temporal dependence
   *** sg mcmc
   
-  
   loss decomposition 
-  
   
   imbalanced target values:
     data augmentation by sampling
     boosting
     weighted loss function
     
-
 Training:
 
   boosting
   data augments: spikes
-  
   
   Cyclical learning rates
   
@@ -428,17 +422,13 @@ Training:
   
   epoch/batch ensembling
     difference between training and validation 
-    
-    
 
 Testing:
 
   ** supervised jump detection 
      extream value theory KDD paper
 
-
 Monitoring and diagnostic:
-
 
 Inference:
   
@@ -447,7 +437,6 @@ Inference:
   ** truncated Gaussian on source contribution uncertainty
   
   kernel density inference 
-
 
 Bayesian:
   epoch/batch level
@@ -485,6 +474,4 @@ Boosting:
   ARMAX_GARCHX  
   
   stochvol and fGarch
-  
-  
   
