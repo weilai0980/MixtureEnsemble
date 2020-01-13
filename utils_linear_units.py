@@ -23,6 +23,10 @@ def multi_src_predictor_linear(x,
       bool_scope_reuse: [mean, var, gate]
     '''
     
+    # Note: by default, data is padded and thus steps and dim have constant elements.
+    step_padding = steps[0]
+    dim_padding = dim[0]
+    
     if bool_common_factor == True:
         # [B T sum(D)]
         x_common = x[-1]
@@ -31,22 +35,22 @@ def multi_src_predictor_linear(x,
     else:
         # [S [B T D]] -> [S B T D]
         x_src = tf.stack(x, 0)
-    
+        
     #[S B]
     tmp_mean, regu_mean = multi_src_bilinear(x_src,
-                                             [steps, dim],
+                                             [step_padding, dim_padding],
                                              str_scope + "mean",
                                              bool_bias = bool_bias[0],
                                              bool_scope_reuse = bool_scope_reuse[0], 
                                              num_src = n_src)
     tmp_var, regu_var = multi_src_bilinear(x_src,
-                                           [steps, dim],
+                                           [step_padding, dim_padding],
                                            str_scope + "var",
                                            bool_bias = bool_bias[1],
                                            bool_scope_reuse = bool_scope_reuse[1],
                                            num_src = n_src)
     tmp_logit, regu_gate = multi_src_logit_bilinear(x_src,
-                                                    [steps, dim],
+                                                    [step_padding, dim_padding],
                                                     str_scope + 'gate',
                                                     bool_bias = bool_bias[2],
                                                     bool_scope_reuse = bool_scope_reuse[2],
@@ -56,10 +60,13 @@ def multi_src_predictor_linear(x,
         
         factorCell = tempFactorCell(num_units = common_factor_dim, 
                                     initializer = tf.contrib.layers.xavier_initializer())
-        # [B F] F:factor dimension
-        factor, state = tf.nn.dynamic_rnn(cell = factorCell, 
-                                          inputs = x_common, 
-                                          dtype = tf.float32)
+        # [B T F] F:factor dimension
+        factors, _ = tf.nn.dynamic_rnn(cell = factorCell,
+                                       inputs = x_common, 
+                                       dtype = tf.float32)
+        # [B F] the last hidden state
+        factor = tf.transpose(factors, [1,0,2])[-1]
+        
         # [B 1]
         facor_mean, regu_factor_mean = linear(x = factor, 
                                               dim_x = common_factor_dim, 
@@ -252,8 +259,8 @@ def linear(x,
         else:
             h = tf.matmul(x, w)
            
-           # [B]          l2: regularization
-    return tf.squeeze(h), tf.reduce_sum(tf.square(w))
+    #      [B 1]  l2: regularization
+    return h, tf.reduce_sum(tf.square(w))
 
 def bilinear(x, 
              shape_x, 
@@ -359,6 +366,7 @@ def _linear_transition(args,
     # --- begin linear update ---  
     scope = vs.get_variable_scope()
     with vs.variable_scope(scope) as outer_scope:
+        
         # define relevant dimensions
         input_dim  = args[0].get_shape()[1].value
         #hidden_dim = args[1].get_shape()[1].value
@@ -400,9 +408,9 @@ def _linear_transition(args,
 
 class tempFactorCell(RNNCell):
     
-    def __init__(self, 
-                 num_units, 
-                 initializer, 
+    def __init__(self,
+                 num_units,
+                 initializer,
                  reuse = None):
         """
         Args:
@@ -429,13 +437,9 @@ class tempFactorCell(RNNCell):
         """
         h = state
         
-        if self._linear is None:
-            self._new_h = _linear_transition([inputs, h], 
-                                             self._num_units, 
-                                             True, 
-                                             kernel_initializer = self._kernel_ini)
-        else:
-            print('[ERROR]  factor cell type')
-            
+        _new_h = _linear_transition([inputs, h], 
+                                    self._num_units, 
+                                    True, 
+                                    kernel_initializer = self._kernel_ini)            
         _new_state = _new_h
         return _new_h, _new_state

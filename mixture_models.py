@@ -249,7 +249,9 @@ class mixture_statistic():
                                                                                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
                                                                                                           bool_scope_reuse= [False, False, False], 
                                                                                                           str_scope = "linear", 
-                                                                                                          para_share_logit = model_para_share_type)
+                                                                                                          para_share_logit = model_para_share_type, 
+                                                                                                          bool_common_factor = x_bool_common_factor,
+                                                                                                          common_factor_dim = 10)
             elif model_type == "rnn":
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,

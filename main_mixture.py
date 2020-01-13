@@ -54,26 +54,22 @@ para_var_type = "square" # square, exp
 para_share_type_gate = "no_share"
 # no_share, share, mix
 
-para_model_type = 'rnn'
+para_model_type = 'linear'
 
 # -- data
 
 if para_model_type == 'rnn':
-    
     para_x_src_padding = False
     para_add_common_factor = True
     
 elif para_model_type == 'linear':
-    
     para_x_src_padding = True
     para_add_common_factor = False
 
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
 
-
 # -- training and validation
-
 # hpara: hyper parameter
 
 para_hpara_search = "random" # random, grid 
