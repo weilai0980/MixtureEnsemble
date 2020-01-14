@@ -266,6 +266,11 @@ class mixture_statistic():
                                                                                                        max_norm_cons = self.hyper_para_dict['max_norm_cons'])
         # ----- individual means and variance
         
+        # [S B]
+        self.tmp_mean_shape = tf.shape(tmp_mean)
+        self.tmp_var_shape = tf.shape(tmp_var)
+        self.tmp_gate_shape = tf.shape(tmp_logit)
+        
         # -- mean
         if bool_bias_global_src == True:
             
@@ -971,7 +976,8 @@ class mixture_statistic():
             data_dict["y:0"] = y
             
             for i in range(len(x)):
-                    data_dict["x" + str(i) + ":0"] = x[i]
+                data_dict["x" + str(i) + ":0"] = x[i]
+                
             '''
             if x_src_seperated == True:
                 # x: [S, B T D]
@@ -992,11 +998,16 @@ class mixture_statistic():
                                                           tf.get_collection('nnllk')[0],
                                                           tf.get_collection('loss')[0]],
                                                           feed_dict = data_dict)
+            
+            tmp_shape =  self.sess.run([self.tmp_mean_shape, self.tmp_var_shape, self.tmp_gate_shape],
+                                                          feed_dict = data_dict)
+            
+            
             # validation error log for early stopping
             self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
             
             # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-            return [rmse, mae, mape, nnllk], [loss]
+            return [rmse, mae, mape, nnllk], [tmp_shape, np.shape(loss), loss]
         
         return None, None
         

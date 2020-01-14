@@ -32,9 +32,11 @@ def multi_src_predictor_linear(x,
         x_common = x[-1]
         # [S B T D]
         x_src = tf.stack(x[:-1], 0)
+        n_src_indi = n_src - 1
     else:
         # [S [B T D]] -> [S B T D]
         x_src = tf.stack(x, 0)
+        n_src_indi = n_src
         
     #[S B]
     tmp_mean, regu_mean = multi_src_bilinear(x_src,
@@ -42,19 +44,19 @@ def multi_src_predictor_linear(x,
                                              str_scope + "mean",
                                              bool_bias = bool_bias[0],
                                              bool_scope_reuse = bool_scope_reuse[0], 
-                                             num_src = n_src)
+                                             num_src = n_src_indi)
     tmp_var, regu_var = multi_src_bilinear(x_src,
                                            [step_padding, dim_padding],
                                            str_scope + "var",
                                            bool_bias = bool_bias[1],
                                            bool_scope_reuse = bool_scope_reuse[1],
-                                           num_src = n_src)
-    tmp_logit, regu_gate = multi_src_logit_bilinear(x_src,
+                                           num_src = n_src_indi)
+    tmp_logit, regu_logit = multi_src_logit_bilinear(x_src,
                                                     [step_padding, dim_padding],
                                                     str_scope + 'gate',
                                                     bool_bias = bool_bias[2],
                                                     bool_scope_reuse = bool_scope_reuse[2],
-                                                    num_src = n_src,
+                                                    num_src = n_src_indi,
                                                     para_share_type = para_share_logit)
     if bool_common_factor == True:
         
@@ -88,11 +90,11 @@ def multi_src_predictor_linear(x,
         tmp_var = tf.concat([tmp_var, tf.transpose(facor_var, [1, 0])], 0)
         tmp_logit = tf.concat([tmp_logit, tf.transpose(facor_logit, [1, 0])], 0)
       
-        regu_mean += facor_mean
-        regu_var += facor_var
-        regu_logit += facor_logit
+        regu_mean += regu_factor_mean
+        regu_var += regu_factor_var
+        regu_logit += regu_factor_logit
       
-    return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate
+    return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_logit
     
 def multi_src_logit_bilinear(x, 
                              shape_x, 

@@ -64,7 +64,7 @@ if para_model_type == 'rnn':
     
 elif para_model_type == 'linear':
     para_x_src_padding = True
-    para_add_common_factor = False
+    para_add_common_factor = True
 
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
@@ -168,7 +168,7 @@ def log_train(path):
         text_file.write("data path : %s \n"%(path_data))
         text_file.write("data source timesteps : %s \n"%(para_steps_x))
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
-        text_file.write("data source number : %d \n"%(len(ts_x) if type(ts_x)==list else np.shape(ts_x)[0]))
+        text_file.write("data source number : %d \n"%( len(src_ts_x) ))
         text_file.write("data common factor : %s \n"%(para_add_common_factor))
         text_file.write("\n")
         
@@ -285,7 +285,7 @@ def training_validating(xtr,
         
         model = mixture_statistic(session = sess, 
                                   loss_type = para_loss_type,
-                                  num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0],
+                                  num_src = len(xtr),
                                   hyper_para_dict = hyper_para_dict, 
                                   model_type = para_model_type)
         
@@ -329,7 +329,7 @@ def training_validating(xtr,
                                 y = ytr,
                                 batch_size = int(hyper_para_dict["batch_size"]), 
                                 num_ins = training_dict["tr_num_ins"],  
-                                num_src = len(xtr) if type(xtr) == list else np.shape(xtr)[0])
+                                num_src = len(xtr))
         # -- begin training
         
         # training and validation error log
@@ -516,13 +516,18 @@ if __name__ == '__main__':
         src_ts_x = data_padding_x(ts_x,
                                   num_src = len(tr_x))
         # y [N 1], x [S N T D]  
-        shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
+        #shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
         
         print("Shapes after padding: ", np.shape(src_tr_x), np.shape(src_val_x), np.shape(src_ts_x))
-    else:
+    #else:
         # T and D different across data sources
         # y: [N 1], x: [S [N T D]]    
-        shape_tr_x_dict = dict({"N": len(tr_x[0])}) 
+    
+    shape_tr_x_dict = dict({"N": len(tr_x[0])})
+        
+    #["src", "N", "T", "D"]
+    
+    #shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
         
     if para_add_common_factor == True:
         # x: [S [N T D]]
@@ -535,7 +540,9 @@ if __name__ == '__main__':
         src_tr_x.append(factor_tr_x)
         src_val_x.append(factor_val_x)
         src_ts_x.append(factor_ts_x)
-
+    
+    #shape_tr_x_dict
+    
     # steps and dimensionality of each source
     para_steps_x = []
     para_dim_x = []
