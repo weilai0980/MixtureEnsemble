@@ -53,7 +53,7 @@ def multi_src_predictor_linear(x,
                                            num_src = n_src_indi)
     tmp_logit, regu_logit = multi_src_logit_bilinear(x_src,
                                                     [step_padding, dim_padding],
-                                                    str_scope + 'gate',
+                                                    str_scope + 'gate_logit',
                                                     bool_bias = bool_bias[2],
                                                     bool_scope_reuse = bool_scope_reuse[2],
                                                     num_src = n_src_indi,
@@ -244,8 +244,9 @@ def linear(x,
            bool_bias,
            bool_scope_reuse):
     '''
-     x: [B D]
-     dim_x: D
+    Argu.:
+      x: [B D]
+      dim_x: D
     '''
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
@@ -270,8 +271,9 @@ def bilinear(x,
              bool_bias,
              bool_scope_reuse):
     '''
-     shape of x: [b, l, r]
-     shape_x: [l, r]
+    Argu.:
+      shape of x: [b, l, r]
+      shape_x: [l, r]
     '''
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):

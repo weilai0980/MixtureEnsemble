@@ -251,7 +251,7 @@ class mixture_statistic():
                                                                                                           str_scope = "linear", 
                                                                                                           para_share_logit = model_para_share_type, 
                                                                                                           bool_common_factor = x_bool_common_factor,
-                                                                                                          common_factor_dim = 10)
+                                                                                                          common_factor_dim = self.hyper_para_dict['factor_size'])
             elif model_type == "rnn":
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,
@@ -259,17 +259,12 @@ class mixture_statistic():
                                                                                                        bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                                                                                        bool_scope_reuse = [False, False, False],
                                                                                                        str_scope = "rnn",
-                                                                                                       rnn_size_layers = [ int(self.hyper_para_dict['rnn_size']) ],
+                                                                                                       rnn_size_layers = [int(self.hyper_para_dict['rnn_size'])],
                                                                                                        rnn_cell_type = "lstm",
                                                                                                        dropout_keep = self.keep_prob,
                                                                                                        dense_num = int(self.hyper_para_dict['dense_num']),
                                                                                                        max_norm_cons = self.hyper_para_dict['max_norm_cons'])
         # ----- individual means and variance
-        
-        # [S B]
-        self.tmp_mean_shape = tf.shape(tmp_mean)
-        self.tmp_var_shape = tf.shape(tmp_var)
-        self.tmp_gate_shape = tf.shape(tmp_logit)
         
         # -- mean
         if bool_bias_global_src == True:
@@ -879,7 +874,8 @@ class mixture_statistic():
                     y,
                     global_step):
         '''
-        global_step: in epoch 
+        Argu.:
+          global_step: in epoch 
         '''
         data_dict = {}
         data_dict["y:0"] = y
@@ -965,8 +961,9 @@ class mixture_statistic():
                    step,
                    bool_end_of_epoch):
         '''
-        x: [S B T D] or [S, B T D]
-        y: [B 1]
+        Argu.:
+          x: [S [B T D]]
+          y: [B 1]
         '''
         if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
@@ -977,18 +974,7 @@ class mixture_statistic():
             
             for i in range(len(x)):
                 data_dict["x" + str(i) + ":0"] = x[i]
-                
-            '''
-            if x_src_seperated == True:
-                # x: [S, B T D]
-                for i in range(len(x)):
-                    data_dict["x" + str(i) + ":0"] = x[i]
-            else:
-                # x: [S B T D]
-                data_dict["x:0"] = x
-            
-            ''' 
-                
+                                
             if self.model_type == "rnn":
                 data_dict["keep_prob:0"] = 1.0
                 
@@ -999,15 +985,11 @@ class mixture_statistic():
                                                           tf.get_collection('loss')[0]],
                                                           feed_dict = data_dict)
             
-            tmp_shape =  self.sess.run([self.tmp_mean_shape, self.tmp_var_shape, self.tmp_gate_shape],
-                                                          feed_dict = data_dict)
-            
-            
             # validation error log for early stopping
             self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
             
             # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-            return [rmse, mae, mape, nnllk], [tmp_shape, np.shape(loss), loss]
+            return [rmse, mae, mape, nnllk], [loss]
         
         return None, None
         
@@ -1018,7 +1000,7 @@ class mixture_statistic():
                   bool_py_eval):
         '''
         Argu.:
-          x: [S B T D] or [S, B T D]
+          x: [S [B T D]]
           y: [B 1]
         '''
         # --
@@ -1026,16 +1008,7 @@ class mixture_statistic():
         data_dict['y:0'] = y
         
         for i in range(len(x)):
-                data_dict["x" + str(i) + ":0"] = x[i]
-        
-        '''
-        if x_src_seperated == True:
-            # x: [S, N T D]
-            for i in range(len(x)):
-                data_dict["x" + str(i) + ":0"] = x[i]
-        else:
-            data_dict["x:0"] = x
-        '''
+            data_dict["x" + str(i) + ":0"] = x[i]
             
         if self.model_type == "rnn":
             data_dict["keep_prob:0"] = 1.0

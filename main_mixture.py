@@ -95,6 +95,7 @@ para_hpara_range['random'] = {}
 para_hpara_range['random']['linear'] = {}
 para_hpara_range['random']['rnn'] = {}
 
+para_hpara_range['random']['linear']['factor_size'] = [5, 15]
 para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 para_hpara_range['random']['linear']['l2'] = [1e-7, 0.01]
@@ -507,6 +508,7 @@ if __name__ == '__main__':
     # -- source-wise data preparation 
 
     if para_x_src_padding == True:
+        # T and D different across data sources
         # padding to same T and D
         # y: [N 1], x: [S [N T D]]
         src_tr_x = data_padding_x(tr_x,
@@ -515,20 +517,11 @@ if __name__ == '__main__':
                                    num_src = len(tr_x))
         src_ts_x = data_padding_x(ts_x,
                                   num_src = len(tr_x))
-        # y [N 1], x [S N T D]  
-        #shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
         
         print("Shapes after padding: ", np.shape(src_tr_x), np.shape(src_val_x), np.shape(src_ts_x))
-    #else:
-        # T and D different across data sources
-        # y: [N 1], x: [S [N T D]]    
-    
+        
     shape_tr_x_dict = dict({"N": len(tr_x[0])})
-        
-    #["src", "N", "T", "D"]
     
-    #shape_tr_x_dict = dict(zip(para_x_shape_acronym, np.shape(src_tr_x)))
-        
     if para_add_common_factor == True:
         # x: [S [N T D]]
         # assume T is same across data sources
@@ -540,8 +533,6 @@ if __name__ == '__main__':
         src_tr_x.append(factor_tr_x)
         src_val_x.append(factor_val_x)
         src_ts_x.append(factor_ts_x)
-    
-    #shape_tr_x_dict
     
     # steps and dimensionality of each source
     para_steps_x = []
@@ -702,7 +693,7 @@ if __name__ == '__main__':
     
     # -- bayesian steps
     
-    error_tuple, py_tuple = testing(model_snapshots = bayes_steps,
+    error_tuple, _ = testing(model_snapshots = bayes_steps,
                                     xts = src_ts_x,
                                     yts = ts_y,
                                     file_path = path_model,
