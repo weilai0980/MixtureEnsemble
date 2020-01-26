@@ -52,13 +52,36 @@ def multi_src_predictor_linear(x,
                                            bool_scope_reuse = bool_scope_reuse[1],
                                            num_src = n_src_indi)
     tmp_logit, regu_logit = multi_src_logit_bilinear(x_src,
-                                                    [step_padding, dim_padding],
-                                                    str_scope + 'gate_logit',
-                                                    bool_bias = bool_bias[2],
-                                                    bool_scope_reuse = bool_scope_reuse[2],
-                                                    num_src = n_src_indi,
-                                                    para_share_type = para_share_logit)
+                                                     [step_padding, dim_padding],
+                                                     str_scope + 'gate_logit',
+                                                     bool_bias = bool_bias[2],
+                                                     bool_scope_reuse = bool_scope_reuse[2],
+                                                     num_src = n_src_indi,
+                                                     para_share_type = para_share_logit)
     if bool_common_factor == True:
+        
+        
+        # [B 1]
+        facor_mean, regu_factor_mean = bilinear(x = x_common, 
+                                                shape_x = [steps[-1], dim[-1]], 
+                                                scope = "factor_mean",
+                                                bool_bias = True,
+                                                bool_scope_reuse = False)
+        # [B 1]
+        facor_var, regu_factor_var = bilinear(x = x_common, 
+                                              shape_x = [steps[-1], dim[-1]], 
+                                              scope = "factor_var",
+                                              bool_bias = True,
+                                              bool_scope_reuse = False)
+        # [B 1]
+        facor_logit, regu_factor_logit = bilinear(x = x_common,
+                                                  shape_x = [steps[-1], dim[-1]], 
+                                                  scope = "factor_logit",
+                                                  bool_bias = True,
+                                                  bool_scope_reuse = False)
+        '''
+        
+        
         
         factorCell = tempFactorCell(num_units = common_factor_dim, 
                                     initializer = tf.contrib.layers.xavier_initializer())
@@ -85,6 +108,8 @@ def multi_src_predictor_linear(x,
                                                 scope = "factor_logit", 
                                                 bool_bias = True,
                                                 bool_scope_reuse = False)
+        
+        '''
         # [S+1 B]
         tmp_mean = tf.concat([tmp_mean, tf.transpose(facor_mean, [1, 0])], 0)
         tmp_var = tf.concat([tmp_var, tf.transpose(facor_var, [1, 0])], 0)
@@ -294,8 +319,8 @@ def bilinear(x,
             h = tf.matmul(tmph, w_l) + b
         else:
             h = tf.matmul(tmph, w_l)
-    # [B] 
-    return tf.squeeze(h), tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
+    # [B 1] 
+    return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
     
 # ------ linear factor process
 
@@ -441,9 +466,9 @@ class tempFactorCell(RNNCell):
         """
         h = state
         
-        _new_h = _linear_transition([inputs, h], 
-                                    self._num_units, 
-                                    True, 
+        _new_h = _linear_transition([inputs, h],
+                                    self._num_units,
+                                    bias = False, 
                                     kernel_initializer = self._kernel_ini)            
         _new_state = _new_h
         return _new_h, _new_state

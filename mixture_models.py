@@ -160,35 +160,11 @@ class mixture_statistic():
             self.x.append(tf.placeholder(tf.float32, 
                                          [None, x_steps[i], x_dim[i]], 
                                          name = 'x' + str(i)))
-        '''        
-        if x_src_seperated == True:
-            # shape: [S, [B T D]]
-            self.x = []
-            for i in range(self.num_src):
-                self.x.append(tf.placeholder(tf.float32, 
-                                             [None, x_steps[i], x_dim[i]], 
-                                             name = 'x' + str(i)))
-        else:
-            # shape: [S B T D]
-            self.x = tf.placeholder(tf.float32, 
-                                    [self.num_src, None, x_steps, x_dim], 
-                                    name = 'x')
-        
-        elif 
-          if x_bool_common_factor == True:
-            self.x_factor = tf.placeholder(tf.float32, 
-                                          [None, x_steps, x_factor_dim], 
-                                          name = 'x_factor')
-            self.x_factor_dim = x_factor_dim
-        '''
-        
         if model_type == "rnn":
             self.keep_prob = tf.placeholder(tf.float32, 
                                             shape = (), 
                                             name = 'keep_prob')
-        
         # -- hyper-parameters
-#         self.x_src_seperated = x_src_seperated
         
         self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
         self.bool_regu_imbalance = bool_regu_imbalance
@@ -251,7 +227,7 @@ class mixture_statistic():
                                                                                                           str_scope = "linear", 
                                                                                                           para_share_logit = model_para_share_type, 
                                                                                                           bool_common_factor = x_bool_common_factor,
-                                                                                                          common_factor_dim = self.hyper_para_dict['factor_size'])
+                                                                                                          common_factor_dim = int(self.hyper_para_dict['factor_size']))
             elif model_type == "rnn":
                 #[S B]
                 tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,
@@ -291,7 +267,6 @@ class mixture_statistic():
             # square
             var_stack = tf.transpose(tf.square(tmp_var), [1, 0])
             inv_var_stack = tf.transpose(tf.square(tmp_var), [1, 0])
-        
         elif model_var_type == "exp":
             # exp
             var_stack = tf.transpose(tf.exp(tmp_var), [1, 0])
@@ -386,17 +361,14 @@ class mixture_statistic():
         if model_distr_type == 'gaussian':
             
             # -- mean
-            
             # component mean
             # [B S] 
             self.py_mean_src = mean_stack
-            
             # mixture mean
             # [B 1]                      [B S]        [B S]
             self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
             
             # -- variance
-            
             if self.loss_type == 'heter_lk':
                 
                 # component variance
@@ -656,7 +628,6 @@ class mixture_statistic():
             '''
         
         # ----- regularization
-        
         self.regu_var = regu_var 
         self.regu_mean = regu_mean         
         
@@ -688,7 +659,6 @@ class mixture_statistic():
             self.global_logits = tf.get_variable('global_logits', 
                                                  [1, self.num_src],
                                                  initializer = tf.contrib.layers.xavier_initializer())
-            
             # [B S]        [1 S]
             logits_diff_sq = tf.reduce_sum(tf.square(gate_logits - self.global_logits), 1)
             regu_global_logits = tf.reduce_sum(logits_diff_sq) + tf.nn.l2_loss(self.global_logits)
@@ -722,32 +692,41 @@ class mixture_statistic():
     def train_ini(self):
         
         # ----- loss 
+        self.monitor = []
         
-        # loss, nllk
+        # loss
         if self.loss_type == 'mse':
             
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + \
                         self.l2*self.regularization + self.l2*self.regu_mean
-                
+            self.monitor = [tf.reduce_mean(tf.square(self.y - self.py_mean)), self.l2*self.regu_mean]
+            
+        # nllk        
         elif self.loss_type in ['heter_lk', 'heter_lk_inv', 'homo_lk_inv']:
             
             self.loss = self.nllk + self.l2*self.regularization 
+            self.monitor = [self.nllk]
             
             if self.bool_regu_mean == True:
                 self.loss += (self.l2*self.regu_mean)
+                self.monitor.append(self.l2*self.regu_mean)
                 
             if self.bool_regu_var == True:
                 
                 if self.bool_regu_imbalance == True:
                     self.loss += (100*self.l2*self.regu_var)
+                    self.monitor.append(100*self.l2*self.regu_var)
                 else:
                     self.loss += (self.l2*self.regu_var)
+                    self.monitor.append(self.l2*self.regu_var)
                     
             if self.bool_regu_l2_on_latent == True:
                 self.loss += self.l2*self.latent_depend
+                #self.monitor.append(self.l2*self.latent_depend)
+                
             else:
                 self.loss += self.latent_depend
-            
+                #self.monitor.append(self.latent_depend)
         '''
         elif self.loss_type == 'elbo':
             
@@ -776,7 +755,6 @@ class mixture_statistic():
         
         # -- decay
         if self.optimization_lr_decay == True:
-                        
             decay_learning_rate = tf.train.exponential_decay(tf_learning_rate, 
                                                              global_step,
                                                              decay_steps = self.optimization_lr_decay_steps, 
@@ -787,7 +765,6 @@ class mixture_statistic():
         
         # -- learning rate warm-up
         # ref: https://github.com/google-research/bert/blob/ffbda2a1aafe530525212d13194cc84d92ed0313/optimization.py#L29-L65
-        
         if self.optimization_warmup_step > 0:
             
             global_steps_int = tf.cast(global_step, 
@@ -815,47 +792,37 @@ class mixture_statistic():
         
         # -- conventional 
         if self.optimization_method == 'adam':
-            
             train_optimizer = myAdamOptimizer(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'adam_origin':
-            
             train_optimizer = tf.train.AdamOptimizer(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'RMSprop':
-            
             train_optimizer = myRMSprop(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'RMSprop_origin':
-            
             train_optimizer = tf.train.RMSPropOptimizer(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sgd':
-            
             train_optimizer = tf.train.MomentumOptimizer(learning_rate = optimizer_lr,
                                                          momentum = 0.9,
                                                          use_nesterov = True)
         elif self.optimization_method == 'adamW':
-            
             # ref.: "Fixing Weight Decay Regularization in Adam", https://arxiv.org/abs/1711.05101
             train_optimizer = tf.contrib.opt.AdamWOptimizer(weight_decay = self.l2,
                                                             learning_rate = optimizer_lr)
         # -- SG-MCMC
         # stochastic gradient Monto-Carlo Markov Chain
         elif self.optimization_method == 'sg_mcmc_adam':
-            
             train_optimizer = sg_mcmc_adam(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sg_mcmc_adam_revision':
-            
             train_optimizer = sg_mcmc_adam_revision(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sg_mcmc_RMSprop':
-            
             train_optimizer = sg_mcmc_RMSprop(learning_rate = optimizer_lr)
             
         elif self.optimization_method == 'sgld':
-            
             train_optimizer = StochasticGradientLangevinDynamics(learning_rate = optimizer_lr)
             
         else:
@@ -884,15 +851,6 @@ class mixture_statistic():
         for i in range(len(x)):
             data_dict["x" + str(i) + ":0"] = x[i]
         
-        '''
-        if x_src_seperated == True:
-            # x: [S, [B T D]]
-            for i in range(len(x)):
-                data_dict["x" + str(i) + ":0"] = x[i]
-        else:
-            data_dict["x:0"] = x
-        '''
-        
         if self.model_type == "rnn":
             data_dict["keep_prob:0"] = self.hyper_para_dict['dropout_keep_prob']
             
@@ -905,8 +863,7 @@ class mixture_statistic():
     
     def inference_ini(self):
         
-        # evaluation metric
-        
+        # --- error metric
         # RMSE
         self.rmse = tf.sqrt(tf.losses.mean_squared_error(self.y, self.py_mean))
         
@@ -923,28 +880,23 @@ class mixture_statistic():
         self.mape = tf.reduce_mean(tf.abs((y_mask - y_hat_mask)/(y_mask + 1e-10)))
         
         # NNLLK 
-        # nnllk - normalized negative log likelihood by the number of data samples
-        
+        # normalized negative log likelihood by the number of data samples
         # x: [S, [B T D]]
         self.nnllk = self.nllk / tf.to_float(tf.shape(self.x[0])[0])
         
-        '''
-        if self.x_src_seperated == True:
-            # x: [S, [B T D]]
-            self.nnllk = self.nllk / tf.to_float(tf.shape(self.x[0])[0])
-        else:
-            # shape of x: [S, B T D]
-            self.nnllk = self.nllk / tf.to_float(tf.shape(self.x)[1])
-        '''
-            
-        # for model restore and inference
+        # ---for model restore and inference
+        
+        # error metric
         tf.add_to_collection("rmse", self.rmse)
         tf.add_to_collection("mae", self.mae)
         tf.add_to_collection("mape", self.mape)
         tf.add_to_collection("nnllk", self.nnllk)
         
-        tf.add_to_collection("loss", self.loss)
+        # monitor metric
+        for tmp_idx, tmp_monitor_metric in enumerate(self.monitor):
+            tf.add_to_collection(str(tmp_idx), tmp_monitor_metric)
         
+        # prediction
         tf.add_to_collection("py_mean", self.py_mean)
         tf.add_to_collection("py_var", self.py_var)
         tf.add_to_collection("py_gate", self.gates)
@@ -967,8 +919,7 @@ class mixture_statistic():
         '''
         if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
-            # -- validation inference
-            
+            # data preproc
             data_dict = {}
             data_dict["y:0"] = y
             
@@ -977,19 +928,23 @@ class mixture_statistic():
                                 
             if self.model_type == "rnn":
                 data_dict["keep_prob:0"] = 1.0
-                
-            rmse, mae, mape, nnllk, loss = self.sess.run([tf.get_collection('rmse')[0],
-                                                          tf.get_collection('mae')[0],
-                                                          tf.get_collection('mape')[0],
-                                                          tf.get_collection('nnllk')[0],
-                                                          tf.get_collection('loss')[0]],
-                                                          feed_dict = data_dict)
+            
+            # errors           
+            rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
+                                                    tf.get_collection('mae')[0],
+                                                    tf.get_collection('mape')[0],
+                                                    tf.get_collection('nnllk')[0]],
+                                                   feed_dict = data_dict)
+            # monitor metric
+            monitor_metric = self.sess.run([tf.get_collection(str(tmp_idx))[0] for tmp_idx in range(len(self.monitor))],
+                                           feed_dict = data_dict)
             
             # validation error log for early stopping
             self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
             
-            # error metric tuple [rmse, mae, mape, nnllk], monitoring tuple []
-            return [rmse, mae, mape, nnllk], [loss]
+            # error metric tuple: [rmse, mae, mape, nnllk]
+            # monitor tuple: []
+            return [rmse, mae, mape, nnllk], monitor_metric
         
         return None, None
         
@@ -1025,7 +980,7 @@ class mixture_statistic():
                                                                                    tf.get_collection('py_gate')[0],
                                                                                    tf.get_collection('py_mean_src')[0],
                                                                                    tf.get_collection('py_var_src')[0]],
-                                                                                   feed_dict = data_dict)
+                                                                                  feed_dict = data_dict)
         else:
             py_mean = None
             py_var = None
@@ -1037,7 +992,6 @@ class mixture_statistic():
         return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
     
     def model_stored_id(self):
-        
         return self.stored_step_id
     
     def model_saver(self, 
@@ -1074,17 +1028,13 @@ class mixture_statistic():
                     self.log_error_up_flag = False
         
         # -- best snapshots
-        
         if len(snapshot_steps) != 0 and step in snapshot_steps:
-            
             saver = tf.train.Saver()
             saver.save(self.sess, path)
             return "best_snapshots"
         
         # -- bayesian ensembles
-        
         elif len(bayes_steps) != 0 and step in bayes_steps:
-            
             saver = tf.train.Saver()
             saver.save(self.sess, path)
             return "bayeisan_snapshots"
