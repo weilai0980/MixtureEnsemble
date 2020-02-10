@@ -3,15 +3,10 @@
 import numpy as np
 import tensorflow as tf
 
-# fix random seed
-np.random.seed(1)
-tf.set_random_seed(1)
-
 # local 
 from utils_libs import *
 
 # ----- randomness
-
 def fix_randomness(seed):
     np.random.seed(seed)
     tf.set_random_seed(seed)
@@ -121,7 +116,7 @@ def log_val_hyper_para(path,
                        hpara_tuple, 
                        error_tuple):
     with open(path, "a") as text_file:
-        text_file.write("\n  best hyper-parameters: %s \n"%(str(hpara_tuple)))
+        text_file.write("\n  hyper-parameters: %s \n"%(str(hpara_tuple)))
         text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
         
 def log_test_performance(path, 
@@ -284,17 +279,51 @@ def hyper_para_selection(hpara_log,
     bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
     bayes_steps_features = [ [k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
     
-    # -- snapshot steps
+    # -- top steps
     snapshot_steps = full_steps[:len(bayes_steps)]
     snapshot_steps_features = [ [k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
     
     best_hyper_para_dict = sorted_hp[0][0]
-    # best hp, snapshot_steps, bayes_steps
+    # best hyper-para, top_steps, bayes_steps
     return best_hyper_para_dict,\
            snapshot_steps,\
            bayes_steps,\
            snapshot_steps_features,\
            bayes_steps_features
+
+def snapshot_selection(train_log, 
+                       snapshot_num,
+                       total_step_num, 
+                       metric_idx, 
+                       val_snapshot_num):
+    '''
+    Argu.:
+      train_log: [[step, tr_metric, val_metric, epoch]] 
+    '''
+    full_steps = [k[0] for k in train_log]
+    
+    val_error = np.mean([tmp_step[2][metric_idx] for tmp_step in train_log][:val_snapshot_num])
+    
+    step_error_pairs = []
+    for tmp_record in train_log:
+        step_error_pairs.append([tmp_record[0], tmp_record[2][metric_idx]])
+        
+    
+    # -- bayes steps    
+    bayes_steps = [i for i in full_steps if i >= (total_step_num - snapshot_num)]  
+    bayes_steps_features = [[k[2]] for k in train_log if k[0] >= (total_step_num - snapshot_num)]
+    
+    # -- top steps
+    snapshot_steps = full_steps[:len(bayes_steps)]
+    snapshot_steps_features = [ [k[2]] for k in train_log[:len(bayes_steps)] ]
+    
+    # top_steps, bayes_steps
+    return snapshot_steps,\
+           bayes_steps,\
+           snapshot_steps_features,\
+           bayes_steps_features,\
+           val_error,\
+           step_error_pairs
 
 def hyper_para_select_top_steps(hpara_log, 
                                 val_snapshot_num, 

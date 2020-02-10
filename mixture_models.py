@@ -17,8 +17,8 @@ from utils_training import *
 from utils_optimization import *
 
 # reproducibility by fixing the random seed
-np.random.seed(1)
-tf.set_random_seed(1)
+#np.random.seed(1)
+#tf.set_random_seed(1)
 
 # ----- Mixture statistic -----
 
@@ -138,8 +138,8 @@ class mixture_statistic():
         '''
         
         # ----- fix the random seed to reproduce the results
-        np.random.seed(1)
-        tf.set_random_seed(1)
+        #np.random.seed(1)
+        #tf.set_random_seed(1)
         
         # ----- ini 
         self.hyper_para_dict = hyper_para_dict
@@ -182,6 +182,14 @@ class mixture_statistic():
         # ----- individual models
         
         if latent_dependence != "none" :
+            
+            # x: [S, [B T D]]
+            self.pre_x = []
+            self.cur_x = []
+            for i in range(self.num_src):
+                self.pre_x.append(tf.slice(self.x[i], [0, 0, 0], [-1, x_steps[i]-1, -1]))
+                self.cur_x.append(tf.slice(self.x[i], [0, 1, 0], [-1, x_steps[i]-1, -1]))
+            
             '''
             # [S B T-1 D]
             pre_x = tf.slice(self.x, [0, 0, 0, 0], [-1, -1, x_steps - 1, -1])
@@ -634,23 +642,19 @@ class mixture_statistic():
         self.regularization = 0
         
         # -- non-negative hinge regularization 
-        
         if bool_regu_positive_mean == True:
             # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
             self.regularization += regu_mean_pos
         
         # -- latent dependence parameter
-        
         if bool_regu_latent_dependence == True:
             self.regularization += regu_latent_dependence
         
         # -- weights in gates  
-        
         if bool_regu_gate == True:
             self.regularization += regu_gate
         
         # -- global logits
-        
         # implicitly regularization on weights of gate functions
         if bool_regu_global_gate == True:
             
@@ -666,11 +670,9 @@ class mixture_statistic():
             self.regularization += regu_global_logits
         
         # -- gate smoothing
-        
         if latent_prob_type != "none":
             
             if latent_prob_type == "pos_neg_diff_sq":
-                
                 # exact llk
                 # self.latent_depend = -1.0*tf.reduce_sum(tf.log(latent_prob))
                 
@@ -679,7 +681,6 @@ class mixture_statistic():
                                                                 + \
                                      0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
             else:
-                
                 # ! numertical stable version of log(sigmoid()) !
                 # avoid the overflow of exp(-x) in sigmoid, when -x is positive large 
                 # [B 1]
@@ -917,7 +918,8 @@ class mixture_statistic():
           x: [S [B T D]]
           y: [B 1]
         '''
-        if bool_end_of_epoch == True or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
+        if bool_end_of_epoch == True:
+        #or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
             # data preproc
             data_dict = {}
@@ -948,7 +950,7 @@ class mixture_statistic():
         
         return None, None
         
-    # infer givn testing data
+    # infer given testing data
     def inference(self, 
                   x, 
                   y,
@@ -972,7 +974,7 @@ class mixture_statistic():
                                                 tf.get_collection('mae')[0],
                                                 tf.get_collection('mape')[0],
                                                 tf.get_collection('nnllk')[0]],
-                                                feed_dict = data_dict)
+                                               feed_dict = data_dict)
         if bool_py_eval == True:
             # [B 1]  [B 1]   [B S]
             py_mean, py_var, py_gate_src, py_mean_src, py_var_src = self.sess.run([tf.get_collection('py_mean')[0],
@@ -998,14 +1000,15 @@ class mixture_statistic():
                     path,
                     epoch,
                     step,
-                    snapshot_steps,
-                    bayes_steps,
+                    top_snapshots,
+                    bayes_snapshots,
                     early_stop_bool,
-                    early_stop_window):
+                    early_stop_window, 
+                    tf_saver):
         
         # -- early stopping
         # self.log_step_error: [self.training_step, [rmse, mae, mape, nnllk]]
-        
+        '''
         if early_stop_bool == True:
             
             if len(self.stored_step_id) < 5 and self.training_step >= early_stop_window:
@@ -1026,17 +1029,15 @@ class mixture_statistic():
                         return True
                 else:
                     self.log_error_up_flag = False
-        
+        '''
         # -- best snapshots
-        if len(snapshot_steps) != 0 and step in snapshot_steps:
-            saver = tf.train.Saver()
-            saver.save(self.sess, path)
+        if len(top_snapshots) != 0 and epoch in top_snapshots:
+            tf_saver.save(self.sess, path)
             return "best_snapshots"
         
         # -- bayesian ensembles
-        elif len(bayes_steps) != 0 and step in bayes_steps:
-            saver = tf.train.Saver()
-            saver.save(self.sess, path)
+        elif len(bayes_snapshots) != 0 and epoch in bayes_snapshots:            
+            tf_saver.save(self.sess, path)
             return "bayeisan_snapshots"
         
         return None
@@ -1044,9 +1045,8 @@ class mixture_statistic():
     #   restore the model from the files
     def model_restore(self,
                       path_meta, 
-                      path_data):
-        saver = tf.train.import_meta_graph(path_meta, 
-                                           clear_devices = True)
+                      path_data, 
+                      saver):
         saver.restore(self.sess, 
                       path_data)
         return

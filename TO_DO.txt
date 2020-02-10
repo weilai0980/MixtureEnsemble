@@ -169,6 +169,14 @@ training error
   
 density average
 
+Bayesian:
+  epoch/batch level
+  random seed level model averaging
+  hyper-para level
+  
+  one shot one retrainone-shot multi retraintop shots, multi retraintop shots one retrain
+Bayes shots one retrainBayes shots multi retrain
+
 --------------- POINT LEARNED -------------------
 
 Model:
@@ -342,8 +350,6 @@ Model:
      
   ** residual layers
   
-  *** Versatility
-  
   feature interaction component 
   
   generic feature extractor on time series: 
@@ -439,9 +445,6 @@ Inference:
   kernel density inference 
 
 Bayesian:
-  epoch/batch level
-  random seed level model averaging
-  hyper-para level 
 
 Boosting:
   

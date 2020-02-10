@@ -4,6 +4,7 @@ import sys
 import os
 import numpy as np
 import random
+from random import randint
 from random import shuffle
 import time
 import json
@@ -60,11 +61,13 @@ para_model_type = 'linear'
 
 if para_model_type == 'rnn':
     para_x_src_padding = False
-    para_add_common_factor = True
+    para_add_common_factor = False
+    para_common_factor_type = "pool" if para_add_common_factor == True else ""
     
 elif para_model_type == 'linear':
     para_x_src_padding = True
     para_add_common_factor = False
+    para_common_factor_type = "factor" if para_add_common_factor == True else ""
 
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
@@ -73,8 +76,8 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 # hpara: hyper parameter
 
 para_hpara_search = "random" # random, grid 
-para_hpara_train_trial = 8
-para_hpara_retrain_num = 3
+para_hpara_train_trial = 3
+para_hpara_retrain_num = 5
 
 para_hpara_range = {}
 
@@ -96,10 +99,13 @@ para_hpara_range['random'] = {}
 para_hpara_range['random']['linear'] = {}
 para_hpara_range['random']['rnn'] = {}
 
-para_hpara_range['random']['linear']['factor_size'] = [5, 15] if para_add_common_factor == True else [0, 0]
+para_hpara_range['random']['linear']['factor_size'] = [10, 10] if para_add_common_factor == True else [0, 0]
 para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
-para_hpara_range['random']['linear']['l2'] = [1e-8, 1e-7]
+# source-wise
+para_hpara_range['random']['linear']['l2'] = [1e-7, 1e-6]
+
+
 
 para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
 para_hpara_range['random']['rnn']['dense_num'] = [0, 3] # inproper value leads to non-convergence in training
@@ -111,8 +117,8 @@ para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
 # [Note] if best epoch is close to "para_n_epoch", possible to increase "para_n_epoch".
 # [Note] if best epoch is around the middle place of the training trajectory, ensemble expects to take effect. 
-para_n_epoch = 80
-para_burn_in_epoch = 20
+para_n_epoch = 7
+para_burn_in_epoch = 4
 # model snapshot sample: epoch_wise or batch_wise
 #   epoch_wise: vali. and test snapshot numbers are explicited determined 
 #   batch_wise: vali. and test snapshot numbers are arbitary 
@@ -131,7 +137,7 @@ para_optimizer = "adam"
 para_optimizer_lr_decay = True 
 para_optimizer_lr_decay_epoch = 10 # after the warm-up
 # [Note] when sg_mcmc is on, turn off the learning rate warm-up
-para_optimizer_lr_warmup_epoch = int(0.1*para_n_epoch)
+para_optimizer_lr_warmup_epoch = max(1, int(0.1*para_n_epoch))
 
 para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
 para_snapshot_Bernoulli = 0.001
@@ -170,6 +176,7 @@ def log_train(path):
         text_file.write("data source feature dimensionality : %s \n"%(para_dim_x))
         text_file.write("data source number : %d \n"%( len(src_ts_x) ))
         text_file.write("data common factor : %s \n"%(para_add_common_factor))
+        text_file.write("data common factor type : %s \n"%(para_common_factor_type))
         text_file.write("\n")
         
         text_file.write("model type : %s \n"%(para_model_type))
@@ -211,6 +218,7 @@ def log_train(path):
         text_file.write("hyper-para search : %s \n"%(para_hpara_search))
         text_file.write("hyper-para range : %s \n"%(str(para_hpara_range[para_hpara_search][para_model_type])))
         text_file.write("hyper-para random search trials in training : %s \n"%(str(para_hpara_train_trial)))
+        text_file.write("hyper-para retraining : %s \n"%(str(para_hpara_retrain_num)))
         text_file.write("\n")
         
         text_file.write("epochs in total : %s \n"%(para_n_epoch))
@@ -235,10 +243,11 @@ def training_validating(xtr,
                         steps_x,
                         hyper_para_dict,
                         training_dict,
-                        retrain_snapshot_steps, 
+                        retrain_top_steps, 
                         retrain_bayes_steps,
                         retrain_bool,
-                        rand_seed):
+                        retrain_idx,
+                        random_seed):
     '''
     Argu.:
       xtr: [num_src, N, T, D]
@@ -273,10 +282,10 @@ def training_validating(xtr,
         tf.reset_default_graph()
         
         # fix the random seed to stabilize the network
-        os.environ['PYTHONHASHSEED'] = str(1)
-        random.seed(rand_seed)  # `python` built-in pseudo-random generator
-        np.random.seed(rand_seed)
-        tf.set_random_seed(rand_seed)
+        os.environ['PYTHONHASHSEED'] = str(random_seed)
+        random.seed(random_seed)  # `python` built-in pseudo-random generator
+        np.random.seed(random_seed)
+        tf.set_random_seed(random_seed)
         
         # session set-up
         config = tf.ConfigProto()
@@ -320,12 +329,14 @@ def training_validating(xtr,
                           optimization_burn_in_step = para_burn_in_epoch,
                           optimization_warmup_step = para_optimizer_lr_warmup_epoch*training_dict["batch_per_epoch"] - 1)
         
+        # !! the order of Saver
+        saver = tf.train.Saver(max_to_keep = None)
+        
         model.train_ini()
         model.inference_ini()
         #tf.get_default_graph().finalize()
         
         # -- set up training batch parameters
-        
         batch_gen = data_loader(x = xtr,
                                 y = ytr,
                                 batch_size = int(hyper_para_dict["batch_size"]), 
@@ -341,12 +352,11 @@ def training_validating(xtr,
         st_time = time.time()
         
         for epoch in range(para_n_epoch):
-            
-            # loop over all batches
             # shuffle traning instances each epoch
             batch_gen.re_shuffle()
             batch_x, batch_y, bool_last = batch_gen.one_batch()
             
+            # loop over all batches
             while batch_x != None:
                     
                 # one-step training on a batch of training data
@@ -355,7 +365,6 @@ def training_validating(xtr,
                                   global_step = epoch)
                 
                 # - batch-wise validation
-                
                 # val_metric: [val_rmse, val_mae, val_mape, val_nnllk]
                 # nnllk: normalized negative log likelihood
                 val_metric, monitor_metric = model.validation(xval,
@@ -365,38 +374,37 @@ def training_validating(xtr,
                                                               step = global_step,
                                                               bool_end_of_epoch = bool_last)
                 if val_metric:
-                    
                     # tr_metric [tr_rmse, tr_mae, tr_mape, tr_nnllk]
                     tr_metric, _ = model.inference(xtr,
                                                    ytr, 
                                                    bool_py_eval = False)
-                    step_error.append([global_step, tr_metric, val_metric, epoch])
+                    #step_error.append([global_step, tr_metric, val_metric, epoch])
+                    step_error.append([epoch, tr_metric, val_metric, epoch])
                     
-                # - model saver 
-                model_saver_flag = model.model_saver(path = path_model + para_model_type + '_' + str(global_step),
-                                                     epoch = epoch,
-                                                     step = global_step,
-                                                     snapshot_steps = retrain_snapshot_steps,
-                                                     bayes_steps = retrain_bayes_steps,
-                                                     early_stop_bool = para_early_stop_bool,
-                                                     early_stop_window = para_early_stop_window)
-                
-                if retrain_bool == True and model_saver_flag != None:
-                    print("\n    [MODEL SAVED] " + model_saver_flag + " \n " + path_model + para_model_type + '_' + str(global_step))
-                
                 # - next batch
                 batch_x, batch_y, bool_last = batch_gen.one_batch()
                 global_step += 1
-            
+                    
+            # - model saver 
+            model_saver_flag = model.model_saver(path = path_model + para_model_type + '_' + str(retrain_idx) + '_' + str(epoch),
+                                                 epoch = epoch,
+                                                 step = global_step,
+                                                 top_snapshots = retrain_top_steps,
+                                                 bayes_snapshots = retrain_bayes_steps,
+                                                 early_stop_bool = para_early_stop_bool,
+                                                 early_stop_window = para_early_stop_window, 
+                                                 tf_saver = saver)
             # -- epoch-wise
-            
             print("\n --- At epoch %d : \n  %s "%(epoch, str(step_error[-1])))
-            print("\n loss : \n", monitor_metric)
+            print("\n   loss and regualization : \n", monitor_metric)
             
             # NAN value exception 
             if np.isnan(monitor_metric[-1]) == True:
                 print("\n --- NAN loss !! \n" )
                 break
+            # --
+            if retrain_bool == True and model_saver_flag != None:
+                print("\n    [MODEL SAVED] " + model_saver_flag + " \n " + path_model + para_model_type + '_' + str(retrain_idx) + '_' + str(epoch))
                 
         ed_time = time.time()
         
@@ -406,7 +414,8 @@ def training_validating(xtr,
     return sorted(step_error, key = lambda x:x[2][para_metric_map[para_validation_metric]]),\
            1.0*(ed_time - st_time)/(epoch + 1e-5), \
 
-def testing(model_snapshots,
+def testing(retrain_snapshots,
+            retrain_ids,
             xts,
             yts,
             file_path,
@@ -419,52 +428,61 @@ def testing(model_snapshots,
     # ensemble of model snapshots
     infer = ensemble_inference()
     
+    print("---- test \n\n ", retrain_snapshots, retrain_ids)
+    
     with tf.device('/device:GPU:0'):
         
-        for tmp_model_id in model_snapshots:
-            
-            # path of the stored models 
-            tmp_meta = file_path + para_model_type + '_' + str(tmp_model_id) + '.meta'
-            tmp_data = file_path + para_model_type + '_' + str(tmp_model_id)
+        config = tf.ConfigProto()
+        config.allow_soft_placement = True
+        config.gpu_options.allow_growth = True
         
-            # clear graph
-            tf.reset_default_graph()
+        for tmp_idx, tmp_retrain_id in enumerate(retrain_ids):
             
-            config = tf.ConfigProto()
-            config.allow_soft_placement = True
-            config.gpu_options.allow_growth = True
-            sess = tf.Session(config = config)
+            #sess = tf.Session(config = config)
+            
+            for tmp_model_id in retrain_snapshots[tmp_idx]:
+                
+                # path of the stored models 
+                tmp_meta = file_path + para_model_type + '_' + str(tmp_retrain_id) + '_' + str(tmp_model_id) + '.meta'
+                tmp_data = file_path + para_model_type + '_' + str(tmp_retrain_id) + '_' + str(tmp_model_id)
         
-            model = mixture_statistic(session = sess, 
-                                      loss_type = para_loss_type,
-                                      num_src = num_src,
-                                      hyper_para_dict = hpara_dict, 
-                                      model_type = para_model_type)
-            # restore the model
-            model.model_restore(tmp_meta, 
-                                tmp_data)
-            
-            # one-shot inference sample
-            # [rmse, mae, mape, nnllk],  [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
-            error_tuple, py_tuple = model.inference(xts,
-                                                    yts, 
-                                                    bool_py_eval = bool_instance_eval)
-            if bool_instance_eval == True:
-                # store the samples
-                infer.add_samples(py_mean = py_tuple[0],
-                                  py_var = py_tuple[1],
-                                  py_mean_src = py_tuple[2],
-                                  py_var_src = py_tuple[3],
-                                  py_gate_src = py_tuple[4])
-            
-    # return: error tuple [rmse, mae, mape, nnllk], 
-    #         prediction tuple []
-    if len(model_snapshots) == 0:
+                # clear graph
+                tf.reset_default_graph()
+                saver = tf.train.import_meta_graph(tmp_meta, 
+                                                   clear_devices = True)
+                sess = tf.Session(config = config)
+                
+                model = mixture_statistic(session = sess, 
+                                          loss_type = para_loss_type,
+                                          num_src = num_src,
+                                          hyper_para_dict = hpara_dict, 
+                                          model_type = para_model_type)
+                # restore the model
+                model.model_restore(tmp_meta, 
+                                    tmp_data, 
+                                    saver)
+                
+                # one-shot inference sample
+                # error_tuple: [rmse, mae, mape, nnllk],  
+                # py_tuple: [py_mean, py_var, py_mean_src, py_var_src, py_gate_src]
+                error_tuple, py_tuple = model.inference(xts,
+                                                        yts, 
+                                                        bool_py_eval = bool_instance_eval)
+                if bool_instance_eval == True:
+                    # store the samples
+                    infer.add_samples(py_mean = py_tuple[0],
+                                      py_var = py_tuple[1],
+                                      py_mean_src = py_tuple[2],
+                                      py_var_src = py_tuple[3],
+                                      py_gate_src = py_tuple[4])
+    
+    num_snapshots = sum([len(i) for i in retrain_snapshots])
+    
+    # return: error tuple, prediction tuple
+    if num_snapshots == 0:
         return ["None"], ["None"]
-    
-    elif len(model_snapshots) == 1:
-        return error_tuple, py_tuple
-    
+    elif num_snapshots == 1:
+        return error_tuple, py_tuple    
     else:
         # ensemble inference
         if len(snapshot_features) == 0:
@@ -475,10 +493,6 @@ def testing(model_snapshots,
 # ----- main process  
 
 if __name__ == '__main__':
-    
-    # fix random seed
-    np.random.seed(1)
-    tf.set_random_seed(1)
     
     # ----- data
     
@@ -525,28 +539,46 @@ if __name__ == '__main__':
     if para_add_common_factor == True:
         # x: [S [N T D]]
         # assume T is same across data sources
+        
         # [N T sum(D)]
-        factor_tr_x = np.concatenate(tr_x, -1)
-        factor_val_x = np.concatenate(val_x, -1)
-        factor_ts_x = np.concatenate(ts_x, -1)
+        tr_x_concat = np.concatenate(tr_x, -1)
+        val_x_concat = np.concatenate(val_x, -1)
+        ts_x_concat = np.concatenate(ts_x, -1)
         
-        tmp_dim = np.shape(factor_tr_x)[-1]
-        tmp_step = np.shape(factor_tr_x)[1]
-        
-        '''
-         from sklearn.decomposition import FactorAnalysis
-        transformer = FactorAnalysis(n_components = 10, 
-                                     random_state = 0)
-        factor_tr_x = np.reshape(transformer.fit_transform(np.reshape(factor_tr_x,[-1, tmp_dim])), [-1, tmp_step, 10])
-        factor_val_x = np.reshape(transformer.fit_transform(np.reshape(factor_val_x,[-1, tmp_dim])), [-1, tmp_step, 10])
-        factor_ts_x = np.reshape(transformer.fit_transform(np.reshape(factor_ts_x,[-1, tmp_dim])), [-1, tmp_step, 10])
-        
-        '''
+        if para_common_factor_type == "pool":
+            tr_x_factor = tr_x_concat
+            val_x_factor = val_x_concat
+            ts_x_factor = ts_x_concat
+            
+        elif para_common_factor_type == "factor":
+            tmp_dim = np.shape(tr_x_concat)[-1]
+            tmp_step = np.shape(tr_x_concat)[1]
+            
+            from sklearn.decomposition import FactorAnalysis
+            transformer = FactorAnalysis(n_components = 10, 
+                                         random_state = 0)
+            # [N T d]
+            tr_x_factor = []
+            for tmp_x in tr_x_concat:
+                # tmp_x: [T sum(D)] -> [T d]
+                tr_x_factor.append(transformer.fit_transform(tmp_x))
+            val_x_factor = []
+            for tmp_x in val_x_concat:
+                # tmp_x: [T sum(D)] -> [T d]
+                val_x_factor.append(transformer.fit_transform(tmp_x))
+            ts_x_factor = []
+            for tmp_x in ts_x_concat:
+                # tmp_x: [T sum(D)] -> [T d]
+                ts_x_factor.append(transformer.fit_transform(tmp_x))
+                
+        #factor_tr_x = np.reshape(transformer.fit_transform(np.reshape(factor_tr_x,[-1, tmp_dim])), [-1, tmp_step, 10])
+        #factor_val_x = np.reshape(transformer.fit_transform(np.reshape(factor_val_x,[-1, tmp_dim])), [-1, tmp_step, 10])
+        #factor_ts_x = np.reshape(transformer.fit_transform(np.reshape(factor_ts_x,[-1, tmp_dim])), [-1, tmp_step, 10])
         
         # [S+1 [N T D]]
-        src_tr_x.append(factor_tr_x)
-        src_val_x.append(factor_val_x)
-        src_ts_x.append(factor_ts_x)
+        src_tr_x.append(tr_x_factor)
+        src_val_x.append(val_x_factor)
+        src_ts_x.append(ts_x_factor)
     
     # steps and dimensionality of each source
     para_steps_x = []
@@ -571,9 +603,6 @@ if __name__ == '__main__':
         hpara_generator = hyper_para_grid_search(para_hpara_range[para_hpara_search][para_model_type])
             
     # -- begin hyper-para search
-    # fix random seed
-    np.random.seed(1)
-    tf.set_random_seed(1)
     
     hpara_log = []
     
@@ -585,7 +614,7 @@ if __name__ == '__main__':
         tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict, 
                                     hpara_dict = hpara_dict)
         # hp_: hyper-parameter
-        # hp_step_error: [ [step, train_metric, val_metric, epoch] ]
+        # hp_step_error: [[step, train_metric, val_metric, epoch]]
         hp_step_error, hp_epoch_time = training_validating(src_tr_x,
                                                            tr_y,
                                                            src_val_x,
@@ -595,19 +624,16 @@ if __name__ == '__main__':
                                                            hyper_para_dict = hpara_dict,
                                                            training_dict = tr_dict,
                                                            retrain_bool = False,
-                                                           retrain_snapshot_steps = [],
-                                                           retrain_bayes_steps = [], 
+                                                           retrain_top_steps = [],
+                                                           retrain_bayes_steps = [],
+                                                           retrain_idx = 0,
                                                            random_seed = 1)
         
         #[ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
-        hpara_dict["burn_in_steps"] = para_burn_in_epoch*tr_dict["batch_per_epoch"] - 1
+        hpara_dict["burn_in_steps"] = para_burn_in_epoch #*tr_dict["batch_per_epoch"] - 1
         hpara_log.append([hpara_dict, hp_step_error])
         
         # -- prepare for the next trial
-        
-        # stabilize the network by fixing random seeds
-        # np.random.seed(1)
-        # tf.set_random_seed(1)
         
         # sample the next hyper-para
         hpara_dict = hpara_generator.one_trial()
@@ -625,19 +651,18 @@ if __name__ == '__main__':
         print('\n Training time: \n', hp_epoch_time, '\n')
         
     # ----- re-train
-    
-    # ? alternative strategy: save all epoches in re-training, then select snapshots ?
+    #save all epoches in re-training, then select snapshots
     
     # best hyper-para and snapshot set 
-    best_hpara, top_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(hpara_log, 
-                                                                                                        val_snapshot_num = para_vali_snapshot_num, 
-                                                                                                        test_snapshot_num = para_test_snapshot_num,
-                                                                                                        metric_idx = para_metric_map[para_validation_metric])
+    best_hpara, _, _, _, _ = hyper_para_selection(hpara_log, 
+                                                  val_snapshot_num = para_vali_snapshot_num, 
+                                                  test_snapshot_num = para_test_snapshot_num,
+                                                  metric_idx = para_metric_map[para_validation_metric])
+    retrain_hpara_steps = []
+    retrain_step_error = []
+    retrain_random_seeds = [1] + [randint(0, 1000) for _ in range(para_hpara_retrain_num-1)]
     
-    retrain_hpara_log = []
-    retrain_idx_steps = []
-    #.append([hpara_dict, hp_step_error])
-    for tmp_retrain_cnt in range(para_hpara_retrain_num):
+    for tmp_retrain_id in range(para_hpara_retrain_num):
         
         tr_dict = training_para_gen(shape_x_dict = shape_tr_x_dict,
                                     hpara_dict = best_hpara)
@@ -651,104 +676,220 @@ if __name__ == '__main__':
                                             hyper_para_dict = best_hpara,
                                             training_dict = tr_dict,
                                             retrain_bool = True,
-                                            retrain_snapshot_steps = top_steps,
-                                            retrain_bayes_steps = bayes_steps, 
-                                            random_seed = 1)
+                                            retrain_top_steps = list(range(para_n_epoch)), #top_steps,
+                                            retrain_bayes_steps = list(range(para_n_epoch)), #bayes_steps,
+                                            retrain_idx = tmp_retrain_id,
+                                            random_seed = retrain_random_seeds[tmp_retrain_id])
         
-        retrain_hpara_log.append([best_hpara, step_error])
+        top_steps, bayes_steps, top_steps_features, bayes_steps_features, val_error, step_error_pairs = snapshot_selection(train_log = step_error, 
+                                                                                                         snapshot_num = para_test_snapshot_num,
+                                                                                                         total_step_num = para_n_epoch, 
+                                                                                                         metric_idx = para_metric_map[para_validation_metric], 
+                                                                                                         val_snapshot_num = para_vali_snapshot_num)
         
-        _, top_steps, bayes_steps, top_steps_features, bayes_steps_features = hyper_para_selection(retrain_hpara_log, 
-                                                                                                   val_snapshot_num = para_vali_snapshot_num, 
-                                                                                                   test_snapshot_num = para_test_snapshot_num,
-                                                                                                   metric_idx = para_metric_map[para_validation_metric])
+        retrain_hpara_steps.append([top_steps, bayes_steps, top_steps_features, bayes_steps_features, tmp_retrain_id, val_error])
         
-        retrain_idx_steps.append([top_steps, bayes_steps, top_steps_features, bayes_steps_features])
+        retrain_step_error.append([step_error_pairs, tmp_retrain_id])
         
         log_val_hyper_para(path = path_log_error,
                            hpara_tuple = [best_hpara, top_steps],
                            error_tuple = step_error[0])
     
-        print('\n----- Best epoch hyper-parameters: ', best_hpara, top_steps, '\n')
-        print('\n----- Re-training validation performance: ', step_error[0], '\n')
+        print('\n----- Retrain hyper-parameters: ', best_hpara, top_steps, '\n')
+        print('\n----- Retrain validation performance: ', step_error[0], '\n')
     
+    sort_retrain_hpara_steps = sorted(retrain_hpara_steps, key = lambda x:x[-1])
+    
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [i[-2:] for i in sort_retrain_hpara_steps], 
+                         ensemble_str = "Retrain Ids and Vali. Errors: ")
     # ----- testing
     # error tuple: [rmse, mae, mape, nnllk]
+    # py_tuple
     
-    # -- best one snapshot 
-    error_tuple, _ = testing(model_snapshots = top_steps[:1],
-                             xts = src_ts_x,
-                             yts = ts_y,
-                             file_path = path_model,
+    # -- one snapshot one retrain
+    error_tuple, _ = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][0][:1]],
+                             retrain_ids = [ sort_retrain_hpara_steps[0][-2] ],
+                             xts = src_ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model, 
                              bool_instance_eval = True,
                              loss_type = para_loss_type,
                              num_src = len(src_ts_x),
                              snapshot_features = [],
                              hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "One-shot-one-retrain")
     
-    log_test_performance(path = path_log_error,
-                         error_tuple = [error_tuple],
-                         ensemble_str = "One-shot")
-    
-    # -- best snapshot steps 
-    error_tuple, _ = testing(model_snapshots = top_steps,
-                             xts = src_ts_x,
-                             yts = ts_y,
-                             file_path = path_model,
-                             bool_instance_eval = True,
-                             loss_type = para_loss_type,
-                             num_src = len(src_ts_x),
-                             snapshot_features = [],
-                             hpara_dict = best_hpara)
-    
-    log_test_performance(path = path_log_error,
-                         error_tuple = [error_tuple],
-                         ensemble_str = "Top-rank")
-    
-    # -- importance weighted best snapshot steps 
-    error_tuple, _ = testing(model_snapshots = top_steps,
-                             xts = src_ts_x,
-                             yts = ts_y,
-                             file_path = path_model,
-                             bool_instance_eval = True,
-                             loss_type = para_loss_type,
-                             num_src = len(src_ts_x), 
-                             snapshot_features = top_steps_features, 
-                             hpara_dict = best_hpara)
-    
-    log_test_performance(path = path_log_error,
-                         error_tuple = [error_tuple],
-                         ensemble_str = "Importance Top-rank")
-    
-    # -- bayesian steps
-    error_tuple, _ = testing(model_snapshots = bayes_steps,
+    # -- one snapshot multi retrain
+    error_tuple, py_tuple = testing(retrain_snapshots = [tmp_steps[0][:1] for tmp_steps in sort_retrain_hpara_steps], 
+                                    retrain_ids = [i[-2] for i in sort_retrain_hpara_steps],
                                     xts = src_ts_x,
-                                    yts = ts_y,
+                                    yts = ts_y, 
                                     file_path = path_model,
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
                                     num_src = len(src_ts_x), 
-                                    snapshot_features = [],
+                                    snapshot_features = [], 
                                     hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "One-shot-multi-retrain")
     
-    log_test_performance(path = path_log_error,
-                         error_tuple = [error_tuple],
-                         ensemble_str = "Bayesian")
+    # -- top snapshots one retrain
+    error_tuple, _ = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][0]], 
+                             retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
+                             xts = src_ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model,
+                             bool_instance_eval = True, 
+                             loss_type = para_loss_type, 
+                             num_src = len(src_ts_x), 
+                             snapshot_features = [], 
+                             hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "Top-shots-one-retrain")
     
-    # -- importance weighted bayesian steps
-    error_tuple, py_tuple = testing(model_snapshots = bayes_steps,
+    # -- top snapshots multi retrain
+    error_tuple, _ = testing(retrain_snapshots = [tmp_steps[0] for tmp_steps in sort_retrain_hpara_steps], 
+                             retrain_ids = [i[-2] for i in sort_retrain_hpara_steps], 
+                             xts = src_ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model,
+                             bool_instance_eval = True, 
+                             loss_type = para_loss_type, 
+                             num_src = len(src_ts_x), 
+                             snapshot_features = [], 
+                             hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "Top-shots-multi-retrain")
+    
+    # -- bayesian snapshots one retrain
+    error_tuple, _ = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][1]], 
+                             retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
+                             xts = src_ts_x, 
+                             yts = ts_y, 
+                             file_path = path_model, 
+                             bool_instance_eval = True, 
+                             loss_type = para_loss_type, 
+                             num_src = len(src_ts_x), 
+                             snapshot_features = [], 
+                             hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "Bayesian-one-retrain")
+    
+    # -- bayesian snapshots multi retrain
+    error_tuple, py_tuple = testing(retrain_snapshots = [tmp_steps[1] for tmp_steps in sort_retrain_hpara_steps], 
+                                    retrain_ids = [i[-2] for i in sort_retrain_hpara_steps],
                                     xts = src_ts_x,
-                                    yts = ts_y,
+                                    yts = ts_y, 
                                     file_path = path_model,
                                     bool_instance_eval = True,
                                     loss_type = para_loss_type,
-                                    num_src = len(src_ts_x),
-                                    snapshot_features = bayes_steps_features,
+                                    num_src = len(src_ts_x), 
+                                    snapshot_features = [], 
                                     hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "Bayesian-multi-retrain")
     
-    log_test_performance(path = path_log_error,
-                         error_tuple = [error_tuple],
-                         ensemble_str = "Importance Bayesian")
+    # -- global top1 and topK steps
     
+    def global_top_steps_multi_retrain(retrain_step_error, 
+                                       num_step):
+        '''
+        retrain_step_error: [step_error_pairs, tmp_retrain_id]
+        '''
+        
+        retrain_id_step_error = []
+        
+        for tmp in retrain_step_error:
+            
+            tmp_step_errors = tmp[0]
+            tmp_retrain_id = tmp[1]
+            
+            for tmp_step_error in tmp_step_errors:
+                #                        id             step               error
+                retrain_id_step.append([tmp_retrain_id, tmp_step_error[0], tmp_step_error[1]])
+                
+        sorted_id_step_error = sorted(retrain_id_step, key = lambda x:x[-1])
+        top_id_step_error = sorted_id_step_error[:num_step]
+        
+        id_steps = {}
+        for i in top_id_step_error:
+            tmp_retrain_id = i[0]
+            tmp_step = i[1]
+            tmp_error = i[2]
+            
+            if tmp_retrain_id not in id_steps:
+                id_steps[tmp_retrain_id] = []
+                
+            id_steps[tmp_retrain_id].append(tmp_step)
+                
+        retrain_ids = [tmp_id for tmp_id in id_steps]
+        retrain_id_steps = [id_steps[tmp_id] for tmp_id in id_steps]
+        
+        return retrain_ids, retrain_id_steps
+    
+    retrain_ids, retrain_id_steps = global_top_steps_multi_retrain(retrain_step_error = retrain_step_error, 
+                                                                   num_step = int(para_vali_snapshot_num*para_hpara_retrain_num))
+    
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [retrain_ids, retrain_id_steps], 
+                         ensemble_str = "Global-top-steps: ")
+    
+    # -- bayesian snapshots multi retrain
+    error_tuple, py_tuple = testing(retrain_snapshots = retrain_id_steps, 
+                                    retrain_ids = retrain_ids,
+                                    xts = src_ts_x,
+                                    yts = ts_y, 
+                                    file_path = path_model,
+                                    bool_instance_eval = True,
+                                    loss_type = para_loss_type,
+                                    num_src = len(src_ts_x), 
+                                    snapshot_features = [], 
+                                    hpara_dict = best_hpara)
+    log_test_performance(path = path_log_error, 
+                         error_tuple = [error_tuple], 
+                         ensemble_str = "Global-top-steps-multi-retrain ")
+    
+    '''
+    # -- importance weighted best snapshot steps 
+    error_tuple, _ = testing(model_snapshots = top_steps,
+                             xts = src_ts_x,
+                             yts = ts_y,
+                             file_path = path_model,
+                             bool_instance_eval = True,
+                             loss_type = para_loss_type,
+                             num_src = len(src_ts_x), 
+                             snapshot_features = top_steps_features, 
+                             hpara_dict = best_hpara)
+    
+    log_test_performance(path = path_log_error,
+                         error_tuple = [error_tuple],
+                         ensemble_str = "Importance Top-rank")
+    '''
+    
+    '''
+    # -- importance weighted bayesian steps
+    error_tuple, py_tuple = testing(model_snapshots = bayes_steps,
+                                    xts = src_ts_x,
+                                    yts = ts_y,
+                                    file_path = path_model,
+                                    bool_instance_eval = True,
+                                    loss_type = para_loss_type,
+                                    num_src = len(src_ts_x),
+                                    snapshot_features = bayes_steps_features,
+                                    hpara_dict = best_hpara)
+    
+    log_test_performance(path = path_log_error,
+                         error_tuple = [error_tuple],
+                         ensemble_str = "Importance Bayesian")
+    '''
     # -- dump predictions on testing data
     pickle.dump(py_tuple, open(path_py, "wb"))
     
