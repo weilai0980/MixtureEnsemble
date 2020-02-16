@@ -103,6 +103,12 @@ def func_rmse(y,
     
     return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
 
+def func_pearson(y, 
+                 yhat):
+    
+    import scipy as sp
+    return sp.stats.pearsonr(y, yhat)
+
 # ----- logging
 
 def log_train_val_performance(path, 
@@ -123,7 +129,7 @@ def log_test_performance(path,
                          error_tuple,
                          ensemble_str):
     with open(path, "a") as text_file:
-        text_file.write("\n  test performance %s : %s \n"%(ensemble_str, str(error_tuple)))
+        text_file.write("\n  %s : %s \n"%(ensemble_str, str(error_tuple)))
         
 def log_null_loss_exception(epoch_errors, 
                             log_path):

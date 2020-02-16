@@ -72,20 +72,62 @@ elif para_model_type == 'linear':
 para_bool_target_seperate = False # [Note] if yes, the last source corresponds to the auto-regressive target variable
 para_x_shape_acronym = ["src", "N", "T", "D"]
 
-# -- training
+# -- training and validation
+# hpara: hyper parameter
+
+para_hpara_search = "random" # random, grid 
+para_hpara_train_trial = 5
+para_hpara_retrain_num = 5
+
+para_hpara_range = {}
+
+para_hpara_range['random'] = {}
+para_hpara_range['random']['linear'] = {}
+para_hpara_range['random']['rnn'] = {}
+
+# -- linear
+para_hpara_range['random']['linear']['factor_size'] = [10, 10] if para_add_common_factor == True else [0, 0]
+para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
+para_hpara_range['random']['linear']['batch_size'] = [10, 80]
+
+para_hpara_range['random']['linear']['l2'] = [1e-7, 1e-3]
+para_hpara_range['random']['linear']['l2_mean'] = [1e-7, 1e-3]
+para_hpara_range['random']['linear']['l2_var'] = [1e-7, 1e-3]
+
+# source-wise
+# para_num_source = 4
+# for i in range(para_num_source):
+#    para_hpara_range['random']['linear']['l2' + "_" + str(i)] = [1e-7, 1e-3]
+
+# -- rnn
+# source-wise
+para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
+para_hpara_range['random']['rnn']['dense_num'] = [0, 3] # inproper value leads to non-convergence in training
+
+para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
+para_hpara_range['random']['rnn']['batch_size'] = [100, 140]
+
+# source-wise
+para_hpara_range['random']['rnn']['l2'] = [1e-6, 1e-4]
+
+para_hpara_range['random']['rnn']['l2_mean'] = [1e-7, 1e-3]
+para_hpara_range['random']['rnn']['l2_var'] = [1e-7, 1e-3]
+
+para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
+
+para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
 # [Note] if best epoch is close to "para_n_epoch", possible to increase "para_n_epoch".
 # [Note] if best epoch is around the middle place of the training trajectory, ensemble expects to take effect. 
 para_n_epoch = 80
 para_burn_in_epoch = 60
+# model snapshot sample: epoch_wise or batch_wise
+#   epoch_wise: vali. and test snapshot numbers are explicited determined 
+#   batch_wise: vali. and test snapshot numbers are arbitary 
 para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 
-para_hpara_search = "random" # random, grid 
-para_hpara_train_trial = 5
-para_hpara_retrain_num = 8
-
-# optimization
+# -- optimization
 para_loss_type = "heter_lk_inv"
 para_optimizer = "adam"
 # RMSprop, adam, sgd, adamW 
@@ -99,60 +141,33 @@ para_optimizer_lr_decay_epoch = 10 # after the warm-up
 # [Note] when sg_mcmc is on, turn off the learning rate warm-up
 para_optimizer_lr_warmup_epoch = max(1, int(0.1*para_n_epoch))
 
+para_snapshot_type = "epoch_wise"  # batch_wise, epoch_wise
+para_snapshot_Bernoulli = 0.001
+
 para_early_stop_bool = False
 para_early_stop_window = 0
 
 para_validation_metric = 'rmse'
 para_metric_map = {'rmse':0, 'mae':1, 'mape':2, 'nnllk':3} 
 
-# regularization
+# -- regularization
 para_regu_mean = True
 para_regu_var = True
 para_regu_gate = False
 para_regu_mean_positive = False
 
+
+para_regu_weight_on_latent = False
+
 para_bool_bias_in_mean = True
 para_bool_bias_in_var = True
 para_bool_bias_in_gate = True
 
-# -- hpara: hyper parameter
-para_hpara_range = {}
-para_hpara_range['random'] = {}
-para_hpara_range['random']['linear'] = {}
-para_hpara_range['random']['rnn'] = {}
+#para_bool_global_bias = False
 
-# - linear
-if para_add_common_factor == True:
-    para_hpara_range['random']['linear']['factor_size'] = [10, 10]
-para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
-para_hpara_range['random']['linear']['batch_size'] = [10, 80]
-para_hpara_range['random']['linear']['l2_mean'] = [1e-7, 1e-3]
-para_hpara_range['random']['linear']['l2_var'] = [1e-7, 1e-3]
-if para_regu_gate == True:
-    para_hpara_range['random']['linear']['l2_gate'] = [1e-7, 1e-3]
-# source-wise
-# para_num_source = 4
-# for i in range(para_num_source):
-#    para_hpara_range['random']['linear']['l2' + "_" + str(i)] = [1e-7, 1e-3]
+#para_latent_dependence = "none"
+#para_latent_prob_type = "none"
 
-# - rnn
-# source-wise
-para_hpara_range['random']['rnn']['rnn_size'] =  [16, 16]
-para_hpara_range['random']['rnn']['dense_num'] = [0, 3] # inproper value leads to non-convergence in training
-
-para_hpara_range['random']['rnn']['lr'] = [0.001, 0.001]
-para_hpara_range['random']['rnn']['batch_size'] = [100, 140]
-
-# source-wise
-para_hpara_range['random']['rnn']['l2_mean'] = [1e-7, 1e-3]
-para_hpara_range['random']['rnn']['l2_var'] = [1e-7, 1e-3]
-if para_regu_gate == True:
-    para_hpara_range['random']['linear']['l2_gate'] = [1e-7, 1e-3]
-
-para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
-para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
-
-# -- log
 def log_train(path):
     with open(path, "a") as text_file:
         text_file.write("\n\n ------ Bayesian mixture : \n")
@@ -178,11 +193,20 @@ def log_train(path):
         text_file.write("regularization on variance : %s \n"%(para_regu_var))
         text_file.write("regularization on mixture gates : %s \n"%(para_regu_gate))
         text_file.write("regularization on positive means : %s \n"%(para_regu_mean_positive))
+        text_file.write("regularization by global gate : %s \n"%(para_regu_global_gate))
+        text_file.write("regularization on latent dependence parameters : %s \n"%(para_regu_latent_dependence))
+        text_file.write("regularization l2 on latent variable : %s \n"%(para_regu_weight_on_latent))
         text_file.write("\n")
         
         text_file.write("adding bias terms in mean : %s \n"%(para_bool_bias_in_mean))
         text_file.write("adding bias terms in variance : %s \n"%(para_bool_bias_in_var))
         text_file.write("adding bias terms in gates : %s \n"%(para_bool_bias_in_gate))
+        text_file.write("global bias terms : %s \n"%(para_bool_global_bias))
+        text_file.write("\n")
+        
+        text_file.write("temporal dependence of latent variables : %s \n"%(para_latent_dependence))
+        text_file.write("latent dependence probability type : %s \n"%(para_latent_prob_type))
+        text_file.write("latent dependence as a regularization : %s \n"%(True if para_latent_prob_type != "none" else False))
         text_file.write("\n")
         
         text_file.write("optimizer : %s \n"%(para_optimizer))
@@ -200,7 +224,9 @@ def log_train(path):
         
         text_file.write("epochs in total : %s \n"%(para_n_epoch))
         text_file.write("burn_in_epoch : %s \n"%(para_burn_in_epoch))
-        text_file.write("num. snapshots in validating : %s \n"%(para_vali_snapshot_num))
+        text_file.write("snapshot type : %s \n"%(para_snapshot_type))
+        text_file.write("snapshot_Bernoulli : %s \n"%(para_snapshot_Bernoulli))
+        text_file.write("num. snapshots in validation : %s \n"%(para_vali_snapshot_num))
         text_file.write("num. snapshots in testing : %s \n"%(para_test_snapshot_num))
         text_file.write("validation metric : %s \n"%(para_validation_metric))
         text_file.write("early-stoping : %s \n"%(para_early_stop_bool))
@@ -288,9 +314,15 @@ def training_validating(xtr,
                           bool_regu_var = para_regu_var,
                           bool_regu_gate = para_regu_gate,
                           bool_regu_positive_mean = para_regu_mean_positive,
+                          bool_regu_global_gate = para_regu_global_gate, 
+                          bool_regu_latent_dependence = para_regu_latent_dependence,
+                          bool_regu_l2_on_latent = para_regu_weight_on_latent,
+                          latent_dependence = para_latent_dependence,
+                          latent_prob_type = para_latent_prob_type,
                           bool_bias_mean = para_bool_bias_in_mean,
                           bool_bias_var = para_bool_bias_in_var,
                           bool_bias_gate = para_bool_bias_in_gate,
+                          bool_bias_global_src = para_bool_global_bias,
                           optimization_method = para_optimizer,
                           optimization_lr_decay = para_optimizer_lr_decay,
                           optimization_lr_decay_steps = para_optimizer_lr_decay_epoch*int(len(xtr[0])/int(hyper_para_dict["batch_size"])),
@@ -337,6 +369,8 @@ def training_validating(xtr,
                 # nnllk: normalized negative log likelihood
                 val_metric, monitor_metric = model.validation(xval,
                                                               yval,
+                                                              snapshot_type = para_snapshot_type,
+                                                              snapshot_Bernoulli = para_snapshot_Bernoulli,
                                                               step = global_step,
                                                               bool_end_of_epoch = bool_last)
                 if val_metric:
@@ -768,9 +802,9 @@ if __name__ == '__main__':
     def global_top_steps_multi_retrain(retrain_step_error, 
                                        num_step):
         '''
-        Argu.:
-          retrain_step_error: [[step_error_pairs, retrain_id]]
+        retrain_step_error: [[step_error_pairs, retrain_id]]
         '''
+        
         retrain_id_step_error = []
         
         for tmp in retrain_step_error:
@@ -803,6 +837,7 @@ if __name__ == '__main__':
     
     retrain_ids, retrain_id_steps = global_top_steps_multi_retrain(retrain_step_error = retrain_step_error, 
                                                                    num_step = int(para_test_snapshot_num*para_hpara_retrain_num))
+    
     #log_test_performance(path = path_log_error, 
     #                     error_tuple = [retrain_step_error], 
     #                     ensemble_str = "TEST: ")

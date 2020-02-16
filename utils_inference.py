@@ -162,7 +162,7 @@ class ensemble_inference(object):
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
-        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), func_pearson(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
         
     def bayesian_inference(self, 
@@ -283,6 +283,6 @@ class ensemble_inference(object):
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
-        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
+        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, func_pearson(tmpy, bayes_mean), uni_nnllk_vol, uni_nnllk_var],\
                [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
     

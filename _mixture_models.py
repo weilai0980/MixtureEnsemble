@@ -62,9 +62,16 @@ class mixture_statistic():
                     bool_regu_var,
                     bool_regu_gate,
                     bool_regu_positive_mean,
+                    bool_regu_global_gate,
+                    bool_regu_latent_dependence,
+                    bool_regu_l2_on_latent,
+                    bool_regu_imbalance,
+                    latent_dependence,
+                    latent_prob_type,
                     bool_bias_mean,
                     bool_bias_var,
                     bool_bias_gate,
+                    bool_bias_global_src,
                     optimization_method,
                     optimization_lr_decay,
                     optimization_lr_decay_steps,
@@ -100,6 +107,7 @@ class mixture_statistic():
         
         bool_regu_gate: if regularization the gate functions
         
+        bool_regu_global_gate: if global gate regularization is applied
         
         latent_dependence: string, dependence of latent logits, "none", "independent", "markov"
         
@@ -138,6 +146,15 @@ class mixture_statistic():
         
         # build the network graph 
         self.lr = self.hyper_para_dict["lr"]
+        
+        self.l2_mean = self.hyper_para_dict["l2_mean"]
+        self.l2_var = self.hyper_para_dict["l2_var"]
+        
+        #self.l2 = self.hyper_para_dict["l2"]
+        #self.l2 = []
+        #for i in range(self.num_src):
+        #    self.l2.append(self.hyper_para_dict["l2" + "_" + str(i)])
+        
         self.distr_type = model_distr_type
         
         # initialize placeholders
@@ -156,6 +173,10 @@ class mixture_statistic():
                                             shape = (), 
                                             name = 'keep_prob')
         # -- hyper-parameters
+        
+        self.bool_regu_l2_on_latent = bool_regu_l2_on_latent
+        self.bool_regu_imbalance = bool_regu_imbalance
+        
         self.optimization_method = optimization_method
         self.optimization_lr_decay = optimization_lr_decay
         self.optimization_lr_decay_steps = optimization_lr_decay_steps 
@@ -163,23 +184,57 @@ class mixture_statistic():
         
         self.bool_regu_mean = bool_regu_mean
         self.bool_regu_var = bool_regu_var
-        self.bool_regu_gate = bool_regu_gate
         
         self.training_step = 0
         
         # ----- individual models
-        '''
+        
+        if latent_dependence != "none" :
+            
             # x: [S, [B T D]]
             self.pre_x = []
             self.cur_x = []
             for i in range(self.num_src):
                 self.pre_x.append(tf.slice(self.x[i], [0, 0, 0], [-1, x_steps[i]-1, -1]))
                 self.cur_x.append(tf.slice(self.x[i], [0, 1, 0], [-1, x_steps[i]-1, -1]))
-        '''
-        
-        if model_type == "linear":
-            #[S B]
-            tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_linear(x = self.x, 
+            
+            '''
+            # [S B T-1 D]
+            pre_x = tf.slice(self.x, [0, 0, 0, 0], [-1, -1, x_steps - 1, -1])
+            # [S B T-1 D]
+            curr_x = tf.slice(self.x, [0, 0, 1, 0], [-1, -1, x_steps - 1, -1])
+            
+            if model_type == "linear":
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_curr_logit, regu_gate = \
+                multi_src_predictor_linear(x = curr_x, 
+                                           n_src = self.num_src, 
+                                           steps = x_steps - 1, 
+                                           dim = x_dim, 
+                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                           bool_scope_reuse= [False, False, False], 
+                                           str_scope = "",
+                                           para_share_logit = model_para_share_type)
+                #[S B]
+                _, _, _, _, tmp_pre_logit, _ = \
+                multi_src_predictor_linear(x = pre_x, 
+                                           n_src = self.num_src, 
+                                           steps = x_steps - 1, 
+                                           dim = x_dim, 
+                                           bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                           bool_scope_reuse= [True, True, True], 
+                                           str_scope = "",
+                                           para_share_logit = model_para_share_type)
+            elif model_type == "rnn":
+                a = 1
+            '''
+            placeholder_var = 1
+            
+        else:
+            
+            if model_type == "linear":
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_linear(x = self.x, 
                                                                                                           n_src = self.num_src, 
                                                                                                           steps = x_steps, 
                                                                                                           dim = x_dim, 
@@ -188,11 +243,10 @@ class mixture_statistic():
                                                                                                           str_scope = "linear", 
                                                                                                           para_share_logit = model_para_share_type, 
                                                                                                           bool_common_factor = x_bool_common_factor,
-                                                                                                          common_factor_dim = 0)
-            #int(self.hyper_para_dict['factor_size'])
-        elif model_type == "rnn":
-            #[S B]
-            tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,
+                                                                                                          common_factor_dim = int(self.hyper_para_dict['factor_size']))
+            elif model_type == "rnn":
+                #[S B]
+                tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,
                                                                                                        n_src = self.num_src,
                                                                                                        bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
                                                                                                        bool_scope_reuse = [False, False, False],
@@ -205,7 +259,24 @@ class mixture_statistic():
         # ----- individual means and variance
         
         # -- mean
-        mean_stack = tf.transpose(tmp_mean, [1, 0])
+        if bool_bias_global_src == True:
+            
+            # global bias term
+            global_b = tf.get_variable('global_b',
+                                       shape = [1, ],
+                                       initializer = tf.zeros_initializer())
+            #[1 B]                    [S B]
+            tmp_target_src = tf.slice(tmp_mean, [0, 0], [1, -1]) 
+            #[S-1 B]
+            tmp_rest_src = tf.slice(tmp_mean, [1, 0], [-1, -1])
+        
+            tmp_target_src = tmp_target_src + global_b
+            # [B S]            [S B]
+            mean_stack = tf.transpose(tf.concat([tmp_target_src, tmp_rest_src], axis = 0), [1, 0])
+        
+        else:
+            # [B S]
+            mean_stack = tf.transpose(tmp_mean, [1, 0])
         
         # -- variance
         if model_var_type == "square":
@@ -219,8 +290,85 @@ class mixture_statistic():
             
         # ----- gates
         
-        # [B S]
-        gate_logits = tf.transpose(tmp_logit, [1, 0])
+        regu_latent_dependence = 0.0
+        
+        # -- latent logits dependence
+        
+        if latent_dependence == "markov":
+            
+            # [B S]
+            pre_logit = tf.transpose(tmp_pre_logit, [1, 0])
+            curr_logit = tf.transpose(tmp_curr_logit, [1, 0])
+            
+            if latent_prob_type == "constant_diff_sq":
+            
+                # [B 1]
+                latent_prob_logits = tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
+                
+                # regularization
+                regu_latent_dependence = 0.0
+                
+            elif latent_prob_type == "scalar_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [],
+                                          initializer = tf.contrib.layers.xavier_initializer())
+                # [B 1]
+                latent_prob_logits = w_logit*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
+            
+                # regularization
+                regu_latent_dependence = tf.square(w_logit)
+                
+            elif latent_prob_type == "vector_diff_sq":
+                
+                # [1]
+                w_logit = tf.get_variable('w_logit',
+                                          [self.num_src, 1],
+                                          initializer = tf.contrib.layers.xavier_initializer())
+            
+                latent_prob_logits = tf.matmul(tf.square(curr_logit - pre_logit), w_logit)
+                
+                # regularization
+                regu_latent_dependence = tf.reduce_sum(tf.square(w_logit))
+            
+            elif latent_prob_type == "pos_neg_diff_sq":
+                
+                # [1]
+                w_pos = tf.get_variable('w_pos',
+                                        [],
+                                        initializer = tf.contrib.layers.xavier_initializer())
+                
+                w_neg = tf.get_variable('w_neg',
+                                        [],
+                                        initializer = tf.contrib.layers.xavier_initializer())
+                # [B 1]
+                pos_logits = 1.0*tf.square(w_pos)*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
+                # [B 1]
+                neg_logits = -1.0*tf.square(w_neg)*tf.reduce_sum(tf.square(curr_logit - pre_logit), 1, keep_dims = True)
+                
+                # [B 1]
+                latent_prob = 0.5*tf.sigmoid(pos_logits) + 0.5*tf.sigmoid(neg_logits)
+                
+                # regularization
+                regu_latent_dependence = tf.square(w_pos) + tf.square(w_neg)
+                
+        # -- latent logits 
+        
+        if latent_dependence == "independent" or latent_dependence == "markov":
+            
+            # [B S]
+            pre_logit = tf.transpose(tmp_pre_logit, [1, 0])
+            curr_logit = tf.transpose(tmp_curr_logit, [1, 0])
+            
+            # [B S]
+            gate_logits = curr_logit
+        
+        elif latent_dependence == "none":
+            
+            # [B S]
+            gate_logits = tf.transpose(tmp_logit, [1, 0])
+        
         # obtain the gate values
         self.gates = tf.nn.softmax(gate_logits, axis = -1)
         
@@ -384,8 +532,8 @@ class mixture_statistic():
                                + 0.5*tf.log(2*np.pi)
             
                 self.nllk_var_mix_inv = tf.reduce_sum(tmp_nllk_mix_inv)
-            '''
-            
+            ''' 
+         
         '''
         elif model_distr_type == 'student_t':
             
@@ -457,6 +605,7 @@ class mixture_statistic():
                 lk = tf.multiply(lk_src, self.gates) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
+                
             elif self.loss_type == 'elbo':
                 
                 # component variance
@@ -497,8 +646,7 @@ class mixture_statistic():
         # ----- regularization
         # [S]
         self.regu_var = regu_var 
-        self.regu_mean = regu_mean
-        self.regu_gate = regu_gate
+        self.regu_mean = regu_mean         
         
         self.regularization = 0
         
@@ -506,6 +654,49 @@ class mixture_statistic():
         if bool_regu_positive_mean == True:
             # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
             self.regularization += regu_mean_pos
+        
+        # -- latent dependence parameter
+        if bool_regu_latent_dependence == True:
+            self.regularization += regu_latent_dependence
+        
+        # -- weights in gates  
+        if bool_regu_gate == True:
+            self.regularization += regu_gate
+        
+        # -- global logits
+        # implicitly regularization on weights of gate functions
+        if bool_regu_global_gate == True:
+            
+            # for regularization
+            # [1 S]
+            self.global_logits = tf.get_variable('global_logits', 
+                                                 [1, self.num_src],
+                                                 initializer = tf.contrib.layers.xavier_initializer())
+            # [B S]        [1 S]
+            logits_diff_sq = tf.reduce_sum(tf.square(gate_logits - self.global_logits), 1)
+            regu_global_logits = tf.reduce_sum(logits_diff_sq) + tf.nn.l2_loss(self.global_logits)
+            
+            self.regularization += regu_global_logits
+        
+        # -- gate smoothing
+        if latent_prob_type != "none":
+            
+            if latent_prob_type == "pos_neg_diff_sq":
+                # exact llk
+                # self.latent_depend = -1.0*tf.reduce_sum(tf.log(latent_prob))
+                
+                # lower bound, comparable perforamcne to exact llk 
+                self.latent_depend = 0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*pos_logits))))\
+                                                                + \
+                                     0.5*(tf.reduce_sum(tf.log(1.0 + tf.exp(neg_logits)) - 1.0*neg_logits))
+            else:
+                # ! numertical stable version of log(sigmoid()) !
+                # avoid the overflow of exp(-x) in sigmoid, when -x is positive large 
+                # [B 1]
+                self.latent_depend = (tf.reduce_sum(tf.log(1.0 + tf.exp(-1.0*tf.abs(latent_prob_logits))) \
+                                           + tf.maximum(0.0, -1.0*latent_prob_logits))) 
+        else:
+            self.latent_depend = 0.0
         
     #   initialize loss and optimization operations for training
     def train_ini(self):
@@ -516,39 +707,63 @@ class mixture_statistic():
         # loss
         if self.loss_type == 'mse':
             
-            self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + self.l2*self.regu_mean
+            self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + \
+                        self.l2*self.regularization + self.l2*self.regu_mean
             self.monitor = [tf.reduce_mean(tf.square(self.y - self.py_mean)), self.l2*self.regu_mean]
             
         # nllk        
         elif self.loss_type in ['heter_lk', 'heter_lk_inv', 'homo_lk_inv']:
             
-            self.loss = self.nllk 
-            #+ self.l2*self.regularization 
+            self.loss = self.nllk + self.l2*self.regularization 
             self.monitor = [self.nllk]
             
             if self.bool_regu_mean == True:
-                self.loss += ( self.hyper_para_dict["l2_mean"]*self.regu_mean )
-                self.monitor.append( self.hyper_para_dict["l2_mean"]*self.regu_mean )
+                self.loss += (self.l2_mean*self.regu_mean)
+                self.monitor.append(self.l2_mean*self.regu_mean)
                 
+            #    tmp_regu_mean = sum([self.l2[i]*self.regu_mean[i] for i in range(self.num_src)])
+            #    self.loss += tmp_regu_mean
+            #    self.monitor.append(tmp_regu_mean)
+                                
             if self.bool_regu_var == True:
-                self.loss += (self.hyper_para_dict["l2_var"]*self.regu_var)
-                self.monitor.append(self.hyper_para_dict["l2_var"]**self.regu_var)
+                self.loss += (self.l2_var*self.regu_var)
+                self.monitor.append(self.l2_var*self.regu_var)
                 
-            if self.bool_regu_gate == True:
-                self.loss += (self.hyper_para_dict["l2_gate"]*self.regu_gate)
-                self.monitor.append((self.hyper_para_dict["l2_gate"]*self.regu_gate))
+                '''
+                if self.bool_regu_imbalance == True:
+                    self.loss += (100*self.l2*self.regu_var)
+                    self.monitor.append(100*self.l2*self.regu_var)
+                else:
+                    self.loss += (self.l2_var*self.regu_var)
+                    self.monitor.append(self.l2_var*self.regu_var)
+                '''
                 
+            #    tmp_regu_var = sum([self.l2[i]*self.regu_var[i] for i in range(self.num_src)])
+            #    self.loss += tmp_regu_var
+            #    self.monitor.append(tmp_regu_var)
+                                
+            if self.bool_regu_l2_on_latent == True:
+                self.loss += self.l2*self.latent_depend
+                #self.monitor.append(self.l2*self.latent_depend)
+                
+            else:
+                self.loss += self.latent_depend
+                #self.monitor.append(self.latent_depend)
         '''
         elif self.loss_type == 'elbo':
+            
             self.loss = self.nllk_elbo + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
             
+            
         elif self.loss_type == 'simple_mix':
+            
             # ?
             self.loss = self.nllk_mix + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
                         
          
         elif self.loss_type == 'simple_mix_inv':
+            
             # ?
             self.loss = self.nllk_mix_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
@@ -715,6 +930,8 @@ class mixture_statistic():
     def validation(self,
                    x,
                    y,
+                   snapshot_type,
+                   snapshot_Bernoulli,
                    step,
                    bool_end_of_epoch):
         '''
@@ -723,6 +940,7 @@ class mixture_statistic():
           y: [B 1]
         '''
         if bool_end_of_epoch == True:
+        #or (snapshot_type == "batch_wise" and np.random.binomial(1, snapshot_Bernoulli) == 1):
             
             # data preproc
             data_dict = {}

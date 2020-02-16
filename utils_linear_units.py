@@ -22,7 +22,6 @@ def multi_src_predictor_linear(x,
       bool_bias: [bool_bias_mean, bool_bias_var, bool_bias_gate]
       bool_scope_reuse: [mean, var, gate]
     '''
-    
     # Note: by default, data is padded and thus steps and dim have constant elements.
     step_padding = steps[0]
     dim_padding = dim[0]
@@ -38,7 +37,7 @@ def multi_src_predictor_linear(x,
         x_src = tf.stack(x, 0)
         n_src_indi = n_src
         
-    #[S B]
+    #[S B]    [S]
     tmp_mean, regu_mean = multi_src_bilinear(x_src,
                                              [step_padding, dim_padding],
                                              str_scope + "mean",
@@ -61,7 +60,7 @@ def multi_src_predictor_linear(x,
     if bool_common_factor == True:
         
         
-        # [B 1]
+        # [B 1]     
         facor_mean, regu_factor_mean = bilinear(x = x_common, 
                                                 shape_x = [steps[-1], dim[-1]], 
                                                 scope = "factor_mean",
@@ -80,9 +79,6 @@ def multi_src_predictor_linear(x,
                                                   bool_bias = True,
                                                   bool_scope_reuse = False)
         '''
-        
-        
-        
         factorCell = tempFactorCell(num_units = common_factor_dim, 
                                     initializer = tf.contrib.layers.xavier_initializer())
         # [B T F] F:factor dimension
@@ -108,16 +104,18 @@ def multi_src_predictor_linear(x,
                                                 scope = "factor_logit", 
                                                 bool_bias = True,
                                                 bool_scope_reuse = False)
-        
         '''
         # [S+1 B]
         tmp_mean = tf.concat([tmp_mean, tf.transpose(facor_mean, [1, 0])], 0)
         tmp_var = tf.concat([tmp_var, tf.transpose(facor_var, [1, 0])], 0)
         tmp_logit = tf.concat([tmp_logit, tf.transpose(facor_logit, [1, 0])], 0)
-      
-        regu_mean += regu_factor_mean
-        regu_var += regu_factor_var
-        regu_logit += regu_factor_logit
+        
+        regu_mean = tf.concat([regu_mean, regu_factor_mean], 0)
+        regu_var = tf.concat([regu_var, regu_factor_var], 0)
+        regu_logit = tf.concat([regu_logit, regu_factor_logit], 0)
+        #regu_mean += regu_factor_mean
+        #regu_var += regu_factor_var
+        #regu_logit += regu_factor_logit
       
     return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_logit
     
@@ -132,6 +130,7 @@ def multi_src_logit_bilinear(x,
     # shape_x: [T, D]
     with tf.variable_scope(scope, 
                            reuse = bool_scope_reuse):
+        
         if para_share_type == "no_share":
             # [S  1  T  1]
             w_l = tf.get_variable('w_left', 
@@ -202,6 +201,8 @@ def multi_src_logit_bilinear(x,
             
            # [S B] 
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
+    #      [S B]  [S]
+    #return h, tf.reduce_sum(tf.squeeze(tf.square(w_l)), 1) + tf.reduce_sum(tf.squeeze(tf.square(w_r)), 1)
 
 def multi_src_linear(x, 
                      dim_x, 
@@ -260,7 +261,8 @@ def multi_src_bilinear(x,
         else:
             h = tf.reduce_sum(tmp_h * w_r, 2)
 
-           # [S B] 
+    #      [S B]   [S]
+    #return h, tf.reduce_sum(tf.squeeze(tf.square(w_l)), 1) + tf.reduce_sum(tf.squeeze(tf.square(w_r)), 1)
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
 
 def linear(x, 
@@ -319,7 +321,8 @@ def bilinear(x,
             h = tf.matmul(tmph, w_l) + b
         else:
             h = tf.matmul(tmph, w_l)
-    # [B 1] 
+    # [B 1]   [1]
+    #return h, tf.reduce_sum(tf.square(w_l), 0) + tf.reduce_sum(tf.square(w_r), 0)
     return h, tf.reduce_sum(tf.square(w_l)) + tf.reduce_sum(tf.square(w_r))
     
 # ------ linear factor process
