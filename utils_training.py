@@ -84,7 +84,6 @@ def data_padding_x(x,
 
 def func_mape(y, 
               yhat):
-    
     tmp_list = []
     
     for idx, val in enumerate(y):
@@ -95,20 +94,38 @@ def func_mape(y,
 
 def func_mae(y, 
              yhat):
-    
     return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
     
 def func_rmse(y, 
               yhat):
-    
     return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
 
 def func_pearson(y, 
                  yhat):
-    
     import scipy as sp
     return sp.stats.pearsonr(y, yhat)
 
+def func_pred_interval_coverage_prob(y,
+                                     yhat_low,
+                                     yhat_up):
+    in_cnt = 0
+    for i in range(len(y)):
+        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
+            in_cnt += 1
+    return 1.0*in_cnt/len(y)
+
+def func_pred_interval_width(y,
+                             yhat_low,
+                             yhat_up):
+    in_cnt = 0
+    in_width_sum = 0.0
+    for i in range(len(y)):
+        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
+            in_cnt += 1
+            in_width_sum += (yhat_up[i]-yhat_low[i])
+            
+    return 1.0*in_width_sum/in_cnt
+            
 # ----- logging
 
 def log_train_val_performance(path, 
@@ -120,10 +137,11 @@ def log_train_val_performance(path,
         
 def log_val_hyper_para(path, 
                        hpara_tuple, 
-                       error_tuple):
+                       error_tuple, 
+                       log_string):
     with open(path, "a") as text_file:
-        text_file.write("\n  hyper-parameters: %s \n"%(str(hpara_tuple)))
-        text_file.write("\n  validation performance: %s \n"%(str(error_tuple)))
+        text_file.write("\n" + log_string + " hyper-parameters: %s \n"%(str(hpara_tuple)))
+        text_file.write("\n   validation performance: %s \n"%(str(error_tuple)))
         
 def log_test_performance(path, 
                          error_tuple,
@@ -211,6 +229,7 @@ class hyper_para_random_search(object):
         Argu.:
           hpara_range_dict: [[lower_boud, up_bound]]
         '''
+        # fix local random seed
         np.random.seed(1)
         
         self.n_trial = n_trial
@@ -314,10 +333,9 @@ def snapshot_selection(train_log,
     for tmp_record in train_log:
         step_error_pairs.append([tmp_record[0], tmp_record[2][metric_idx]])
         
-    
     # -- bayes steps    
     bayes_steps = [i for i in full_steps if i >= (total_step_num - snapshot_num)]  
-    bayes_steps_features = [[k[2]] for k in train_log if k[0] >= (total_step_num - snapshot_num)]
+    bayes_steps_features = [ [k[2]] for k in train_log if k[0] >= (total_step_num - snapshot_num) ]
     
     # -- top steps
     snapshot_steps = full_steps[:len(bayes_steps)]

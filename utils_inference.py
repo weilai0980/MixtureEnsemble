@@ -162,8 +162,20 @@ class ensemble_inference(object):
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
-        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), func_pearson(tmpy, bayes_mean), nnllk, uni_nnllk_vol, uni_nnllk_var],\
-               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        return [func_rmse(tmpy, bayes_mean), 
+                func_mae(tmpy, bayes_mean), 
+                func_mape(tmpy, bayes_mean), 
+                func_pearson(tmpy, bayes_mean), 
+                nnllk, 
+                uni_nnllk_vol, 
+                uni_nnllk_var],\
+               [bayes_mean, 
+                bayes_total_var, 
+                bayes_vola, 
+                bayes_unc, 
+                bayes_gate_src, 
+                bayes_gate_src_var, 
+                g_src_sample]
         
     def bayesian_inference(self, 
                            y):
@@ -280,9 +292,65 @@ class ensemble_inference(object):
                 tr_gau_batch_src[-1].append([tmp_para[2], tmp_para[3]])
         '''
         # -- output
+        # [B]
         tmpy = np.squeeze(y)
         
         # error tuple [], prediction tuple []
-        return [func_rmse(tmpy, bayes_mean), func_mae(tmpy, bayes_mean), func_mape(tmpy, bayes_mean), nnllk, func_pearson(tmpy, bayes_mean), uni_nnllk_vol, uni_nnllk_var],\
-               [bayes_mean, bayes_total_var, bayes_vola, bayes_unc, bayes_gate_src, bayes_gate_src_var, g_src_sample]
+        y_low_unc = bayes_mean - 2.0*np.sqrt(bayes_unc)
+        y_up_unc = bayes_mean + 2.0*np.sqrt(bayes_unc)
+        
+        y_low_total = bayes_mean - 2.0*np.sqrt(bayes_total_var)
+        y_up_total = bayes_mean + 2.0*np.sqrt(bayes_total_var)
+        
+        return [func_rmse(tmpy, bayes_mean),
+                func_mae(tmpy, bayes_mean),
+                func_mape(tmpy, bayes_mean),
+                nnllk,
+                func_pearson(tmpy, bayes_mean),
+                func_pred_interval_coverage_prob(tmpy, yhat_low = y_low_unc, yhat_up = y_up_unc),
+                func_pred_interval_coverage_prob(tmpy, yhat_low = y_low_total, yhat_up = y_up_total),
+                func_pred_interval_width(tmpy, yhat_low = y_low_total, yhat_up = y_up_total)],\
+               [bayes_mean,
+                bayes_total_var,
+                bayes_vola,
+                bayes_unc,
+                bayes_gate_src,
+                bayes_gate_src_var,
+                g_src_sample]
+    
+def global_top_steps_multi_retrain(retrain_step_error,
+                                       num_step):
+        '''
+        Argu.:
+          retrain_step_error: [[step_error_pairs, retrain_id]]
+        '''
+        retrain_id_step_error = []
+        
+        for tmp in retrain_step_error:
+            
+            tmp_step_errors = tmp[0]
+            tmp_retrain_id = tmp[1]
+            
+            for tmp_step_error in tmp_step_errors:
+                #                        id             step               error
+                retrain_id_step_error.append([tmp_retrain_id, tmp_step_error[0], tmp_step_error[1]])
+                
+        sorted_id_step_error = sorted(retrain_id_step_error, key = lambda x:x[-1])
+        top_id_step_error = sorted_id_step_error[:num_step]
+        
+        id_steps = {}
+        for i in top_id_step_error:
+            tmp_retrain_id = i[0]
+            tmp_step = i[1]
+            tmp_error = i[2]
+            
+            if tmp_retrain_id not in id_steps:
+                id_steps[tmp_retrain_id] = []
+                
+            id_steps[tmp_retrain_id].append(tmp_step)
+                
+        retrain_ids = [tmp_id for tmp_id in id_steps]
+        retrain_id_steps = [id_steps[tmp_id] for tmp_id in id_steps]
+        
+        return retrain_ids, retrain_id_steps
     

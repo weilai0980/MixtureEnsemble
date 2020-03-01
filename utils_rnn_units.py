@@ -93,6 +93,7 @@ def multi_src_predictor_rnn(x,
     
     # --- variance
     # !! watch out for the explosion of variance due to square aferwards !!
+    # activation_type = "tanh"
     # [S B d]
     h_var, reg_var_h, dim_src_var = multi_mv_dense(num_layers = dense_num,
                                                    keep_prob = dropout_keep,

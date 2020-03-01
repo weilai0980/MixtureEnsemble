@@ -110,12 +110,13 @@ def multi_src_predictor_linear(x,
         tmp_var = tf.concat([tmp_var, tf.transpose(facor_var, [1, 0])], 0)
         tmp_logit = tf.concat([tmp_logit, tf.transpose(facor_logit, [1, 0])], 0)
         
-        regu_mean = tf.concat([regu_mean, regu_factor_mean], 0)
-        regu_var = tf.concat([regu_var, regu_factor_var], 0)
-        regu_logit = tf.concat([regu_logit, regu_factor_logit], 0)
-        #regu_mean += regu_factor_mean
-        #regu_var += regu_factor_var
-        #regu_logit += regu_factor_logit
+        #regu_mean = tf.concat([regu_mean, regu_factor_mean], 0)
+        #regu_var = tf.concat([regu_var, regu_factor_var], 0)
+        #regu_logit = tf.concat([regu_logit, regu_factor_logit], 0)
+        
+        regu_mean += regu_factor_mean
+        regu_var += regu_factor_var
+        regu_logit += regu_factor_logit
       
     return tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_logit
     

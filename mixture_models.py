@@ -44,7 +44,6 @@ class mixture_statistic():
         self.hyper_para_dict = hyper_para_dict
         self.model_type = model_type
         
-        self.log_step_error = []
         self.log_error_up_flag = False
         self.stored_step_id = []
         
@@ -128,7 +127,6 @@ class mixture_statistic():
            T: time steps
            D: data dimensionality at each time step
         '''
-        
         # ----- fix the random seed to reproduce the results
         #np.random.seed(1)
         #tf.set_random_seed(1)
@@ -180,28 +178,28 @@ class mixture_statistic():
         if model_type == "linear":
             #[S B]
             tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_linear(x = self.x, 
-                                                                                                          n_src = self.num_src, 
-                                                                                                          steps = x_steps, 
-                                                                                                          dim = x_dim, 
-                                                                                                          bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
-                                                                                                          bool_scope_reuse= [False, False, False], 
-                                                                                                          str_scope = "linear", 
-                                                                                                          para_share_logit = model_para_share_type, 
-                                                                                                          bool_common_factor = x_bool_common_factor,
-                                                                                                          common_factor_dim = 0)
+                                                                                                      n_src = self.num_src, 
+                                                                                                      steps = x_steps, 
+                                                                                                      dim = x_dim, 
+                                                                                                      bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate], 
+                                                                                                      bool_scope_reuse= [False, False, False], 
+                                                                                                      str_scope = "linear", 
+                                                                                                      para_share_logit = model_para_share_type, 
+                                                                                                      bool_common_factor = x_bool_common_factor,
+                                                                                                      common_factor_dim = 0)
             #int(self.hyper_para_dict['factor_size'])
         elif model_type == "rnn":
             #[S B]
             tmp_mean, regu_mean, tmp_var, regu_var, tmp_logit, regu_gate = multi_src_predictor_rnn(x = self.x,
-                                                                                                       n_src = self.num_src,
-                                                                                                       bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
-                                                                                                       bool_scope_reuse = [False, False, False],
-                                                                                                       str_scope = "rnn",
-                                                                                                       rnn_size_layers = [int(self.hyper_para_dict['rnn_size'])],
-                                                                                                       rnn_cell_type = "lstm",
-                                                                                                       dropout_keep = self.keep_prob,
-                                                                                                       dense_num = int(self.hyper_para_dict['dense_num']),
-                                                                                                       max_norm_cons = self.hyper_para_dict['max_norm_cons'])
+                                                                                                   n_src = self.num_src,
+                                                                                                   bool_bias = [bool_bias_mean, bool_bias_var, bool_bias_gate],
+                                                                                                   bool_scope_reuse = [False, False, False],
+                                                                                                   str_scope = "rnn",
+                                                                                                   rnn_size_layers = [int(self.hyper_para_dict['rnn_size'])],
+                                                                                                   rnn_cell_type = "lstm",
+                                                                                                   dropout_keep = self.keep_prob,
+                                                                                                   dense_num = int(self.hyper_para_dict['dense_num']),
+                                                                                                   max_norm_cons = self.hyper_para_dict['max_norm_cons'])
         # ----- individual means and variance
         
         # -- mean
@@ -493,16 +491,14 @@ class mixture_statistic():
                 # [B 1]                     [B S]         [B S]
                 self.py_var = tf.reduce_sum(inv_var_stack * self.gates, 1, keepdims = True)
             '''
-        
         # ----- regularization
         # [S]
         self.regu_var = regu_var 
         self.regu_mean = regu_mean
         self.regu_gate = regu_gate
         
+        # -- non-negative hinge regularization
         self.regularization = 0
-        
-        # -- non-negative hinge regularization 
         if bool_regu_positive_mean == True:
             # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
             self.regularization += regu_mean_pos
@@ -512,16 +508,12 @@ class mixture_statistic():
         
         # ----- loss 
         self.monitor = []
-        
         # loss
         if self.loss_type == 'mse':
-            
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + self.l2*self.regu_mean
             self.monitor = [tf.reduce_mean(tf.square(self.y - self.py_mean)), self.l2*self.regu_mean]
-            
         # nllk        
         elif self.loss_type in ['heter_lk', 'heter_lk_inv', 'homo_lk_inv']:
-            
             self.loss = self.nllk 
             #+ self.l2*self.regularization 
             self.monitor = [self.nllk]
@@ -538,6 +530,8 @@ class mixture_statistic():
                 self.loss += (self.hyper_para_dict["l2_gate"]*self.regu_gate)
                 self.monitor.append((self.hyper_para_dict["l2_gate"]*self.regu_gate))
                 
+        # self.gates [B S]
+        self.monitor.append(tf.slice(self.gates, [0, 0], [5, -1]))
         '''
         elif self.loss_type == 'elbo':
             self.loss = self.nllk_elbo + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
@@ -553,7 +547,6 @@ class mixture_statistic():
             self.loss = self.nllk_mix_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
                         #self.nllk_gate + \
         '''
-        
         # ----- learning rate set-up
         tf_learning_rate = tf.constant(value = self.lr, 
                                        shape = [], 
@@ -588,8 +581,7 @@ class mixture_statistic():
             warmup_learning_rate = tf_learning_rate * warmup_percent_done
                 
             is_warmup = tf.cast(global_steps_int < warmup_steps_int, 
-                                tf.float32)
-                
+                                tf.float32)        
             optimizer_lr = ((1.0 - is_warmup) * decay_learning_rate + is_warmup * warmup_learning_rate)
         
         else:
@@ -743,9 +735,6 @@ class mixture_statistic():
             # monitor metric
             monitor_metric = self.sess.run([tf.get_collection(str(tmp_idx))[0] for tmp_idx in range(len(self.monitor))],
                                            feed_dict = data_dict)
-            
-            # validation error log for early stopping
-            self.log_step_error.append([self.training_step, [rmse, mae, mape, nnllk]])
             
             # error metric tuple: [rmse, mae, mape, nnllk]
             # monitor tuple: []
