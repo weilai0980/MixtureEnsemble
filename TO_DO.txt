@@ -181,6 +181,8 @@ error metric: correlation,
 
 global top shots  
 like predictive interval coverage
+
+
 --------------- POINT LEARNED -------------------
 
 Model:
@@ -344,6 +346,10 @@ Data:
      lag effect
 
 Model:
+  
+  ** gate with individual encoder
+  ** exp way of variance
+  ** Softplus function
 
   posterior for inference
   temporal dependence
@@ -352,7 +358,7 @@ Model:
      2*input_size + 1
      2/3 input_size +/- output_size
      < 2*input_size
-     
+  
   ** residual layers
   
   feature interaction component 
@@ -376,7 +382,6 @@ Model:
        batch
        layer 
        weight normalization
-       
   
      hidden transition
      moving averaging for neural network version
@@ -394,7 +399,11 @@ Model:
     weighted loss function
     
 Training:
-
+  
+  **sampling interval
+  **analyzing optimization behavior
+  **interval width under different multiplier of VAR
+  
   source-specific hyper-param
   monitor： number of instances
   error metric: interval coverage
@@ -485,4 +494,6 @@ Boosting:
   ARMAX_GARCHX  
   
   stochvol and fGarch
+
+
   

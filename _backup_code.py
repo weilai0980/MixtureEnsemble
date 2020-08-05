@@ -1,3 +1,15 @@
+    '''
+    if x_src_seperated == True:
+        x_list = x
+        
+    else:
+        # shape: [S, [B T D]]
+        tmp_x_list = tf.split(x,
+                              num_or_size_splits = n_src, 
+                              axis = 0)
+        x_list = [tf.squeeze(tmp_x, 0) for tmp_x in tmp_x_list]
+    '''
+
 # -- top snapshots 
     error_tuple, _ = testing(model_snapshots = [retrain_idx_steps[0][0]], model_retrain_num = 1, xts = src_ts_x, yts = ts_y, file_path = path_model,
                              bool_instance_eval = True, loss_type = para_loss_type, num_src = len(src_ts_x), snapshot_features = [], hpara_dict = best_hpara)

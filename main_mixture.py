@@ -78,9 +78,10 @@ para_x_shape_acronym = ["src", "N", "T", "D"]
 # [Note] if best epoch is close to "para_n_epoch", possible to increase "para_n_epoch".
 # [Note] if best epoch is around the middle place of the training trajectory, ensemble expects to take effect. 
 para_n_epoch = 80
-para_burn_in_epoch = 70
+para_burn_in_epoch = 60
 para_vali_snapshot_num = max(1, int(0.05*para_n_epoch))
 para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
+para_test_snapshot_sample_interval = 2
 
 para_hpara_search = "random" # random, grid 
 para_hpara_train_trial_num = 10
@@ -148,6 +149,7 @@ para_hpara_range['random']['rnn']['l2_mean'] = [1e-7, 1e-3]
 para_hpara_range['random']['rnn']['l2_var'] = [1e-7, 1e-3]
 if para_regu_gate == True:
     para_hpara_range['random']['linear']['l2_gate'] = [1e-7, 1e-3]
+    
 para_hpara_range['random']['rnn']['dropout_keep_prob'] = [0.7, 1.0]
 para_hpara_range['random']['rnn']['max_norm_cons'] = [0.0, 0.0]
 
@@ -778,9 +780,6 @@ if __name__ == '__main__':
     
     retrain_ids, retrain_id_steps = global_top_steps_multi_retrain(retrain_step_error = retrain_step_error, 
                                                                    num_step = int(para_test_snapshot_num*para_hpara_ensemble_num))
-    #log_test_performance(path = path_log_error, 
-    #                     error_tuple = [retrain_step_error], 
-    #                     ensemble_str = "TEST: ")
     
     log_test_performance(path = path_log_error, 
                          error_tuple = [retrain_ids, retrain_id_steps], 

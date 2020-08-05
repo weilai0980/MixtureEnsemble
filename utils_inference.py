@@ -227,13 +227,13 @@ class ensemble_inference(object):
         # normalized                                                                                         
         nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
         
+        '''
         # -- uniform nnllk
         # take the mixture mean and variance to parameterize one Gaussian distribution
-        
         # [B]
         uni_nnllk_vol = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_vola + 1e-5) + 0.5*np.log(bayes_vola + 1e-5) + 0.5*np.log(2*np.pi))
-
         uni_nnllk_var = np.mean(0.5*np.square(np.squeeze(y) - bayes_mean)/(bayes_total_var + 1e-5) + 0.5*np.log(bayes_total_var + 1e-5) + 0.5*np.log(2*np.pi))
+        '''
         
         # -- gate
         # [B S]                 [A B S]

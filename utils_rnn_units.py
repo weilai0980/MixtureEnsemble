@@ -35,18 +35,6 @@ def multi_src_predictor_rnn(x,
     np.random.seed(1)
     tf.set_random_seed(1)
     
-    '''
-    if x_src_seperated == True:
-        x_list = x
-        
-    else:
-        # shape: [S, [B T D]]
-        tmp_x_list = tf.split(x,
-                              num_or_size_splits = n_src, 
-                              axis = 0)
-        x_list = [tf.squeeze(tmp_x, 0) for tmp_x in tmp_x_list]
-    '''
-    
     x_list = x
     
     h_list = []
@@ -56,7 +44,6 @@ def multi_src_predictor_rnn(x,
                           scope = str_scope + "_rnn_" + str(i),
                           dropout_keep_prob = dropout_keep,
                           cell_type = rnn_cell_type)
-        
         # obtain the last hidden state
         # [B T d] -> [T B d]
         tmp_h = tf.transpose(h, [1,0,2])

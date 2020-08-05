@@ -497,30 +497,25 @@ class mixture_statistic():
         self.regu_mean = regu_mean
         self.regu_gate = regu_gate
         
-        # -- non-negative hinge regularization
-        self.regularization = 0
-        if bool_regu_positive_mean == True:
-            # regu_mean_pos = tf.reduce_sum(tf.maximum(0.0, -1.0*mean_v) + tf.maximum(0.0, -1.0*mean_x))
-            self.regularization += regu_mean_pos
-        
     #   initialize loss and optimization operations for training
     def train_ini(self):
         
         # ----- loss 
         self.monitor = []
-        # loss
+        
+        # mse
         if self.loss_type == 'mse':
             self.loss = tf.reduce_mean(tf.square(self.y - self.py_mean)) + self.l2*self.regu_mean
             self.monitor = [tf.reduce_mean(tf.square(self.y - self.py_mean)), self.l2*self.regu_mean]
+            
         # nllk        
         elif self.loss_type in ['heter_lk', 'heter_lk_inv', 'homo_lk_inv']:
-            self.loss = self.nllk 
-            #+ self.l2*self.regularization 
+            self.loss = self.nllk
             self.monitor = [self.nllk]
             
             if self.bool_regu_mean == True:
                 self.loss += ( self.hyper_para_dict["l2_mean"]*self.regu_mean )
-                self.monitor.append( self.hyper_para_dict["l2_mean"]*self.regu_mean )
+                self.monitor.append(self.hyper_para_dict["l2_mean"]*self.regu_mean)
                 
             if self.bool_regu_var == True:
                 self.loss += (self.hyper_para_dict["l2_var"]*self.regu_var)
@@ -532,21 +527,7 @@ class mixture_statistic():
                 
         # self.gates [B S]
         self.monitor.append(tf.slice(self.gates, [0, 0], [5, -1]))
-        '''
-        elif self.loss_type == 'elbo':
-            self.loss = self.nllk_elbo + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
-            
-        elif self.loss_type == 'simple_mix':
-            # ?
-            self.loss = self.nllk_mix + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
-                        #self.nllk_gate + \
-                        
-         
-        elif self.loss_type == 'simple_mix_inv':
-            # ?
-            self.loss = self.nllk_mix_inv + 0.1*self.l2*self.regularization + self.l2*(self.regu_mean + self.regu_var)
-                        #self.nllk_gate + \
-        '''
+        
         # ----- learning rate set-up
         tf_learning_rate = tf.constant(value = self.lr, 
                                        shape = [], 

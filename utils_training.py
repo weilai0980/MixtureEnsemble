@@ -230,7 +230,7 @@ class hyper_para_random_search(object):
           hpara_range_dict: [[lower_boud, up_bound]]
         '''
         # fix local random seed
-        np.random.seed(1)
+        np.random.seed(100)
         
         self.n_trial = n_trial
         self.cur_trial = 0
