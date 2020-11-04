@@ -23,7 +23,7 @@ from utils_inference import *
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', '-d', help = "data set path", type = str, default = "../dataset/bitcoin/market2_tar5_len10/")
+parser.add_argument('--dataset', '-d', help = "data set path", type = str, default = "../datasets/bitcoin/market2_tar5_len10/")
 parser.add_argument('--gpu_id', '-g', help = "gpu_id", type = str, default = "0")
 parser.add_argument('--py', '-p', help = "prediction data", type = str, default = "")
 
@@ -38,19 +38,20 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 # ----- data and log paths
 path_data = args.dataset
-path_log_error = "../results/mixture/log_error_mix_" + str(args.gpu_id) + ".txt"
+path_log_error = "../results/log_error_mix_" + str(args.gpu_id) + ".txt"
 path_model = "../results/mixture/"
 path_py = "../results/mixture/py_" + args.py
 
 # ----- set-up
 
 # -- model
+
 para_distr_type = "gaussian"
 # gaussian, student_t
 para_distr_para = []
 # gaussian: [] 
 # student_t: [nu], nu >= 3
-para_var_type = "square" # square, exp
+para_var_type = "exp" # square, exp
 # [Note] for one-dimensional feature, variance derivation should be re-defined? 
 # always positive correlation of the feature to the variance
 para_share_type_gate = "no_share"
@@ -84,12 +85,13 @@ para_test_snapshot_num = para_n_epoch - para_burn_in_epoch
 para_test_snapshot_sample_interval = 2
 
 para_hpara_search = "random" # random, grid 
-para_hpara_train_trial_num = 10
+para_hpara_train_trial_num = 5
 para_hpara_retrain_num = 10
 para_hpara_ensemble_num = 5
 
 # optimization
 para_loss_type = "heter_lk_inv"
+# "heter_lk_inv"
 para_optimizer = "adam"
 # RMSprop, adam, sgd, adamW 
 # sg_mcmc_RMSprop, sg_mcmc_adam
@@ -128,11 +130,11 @@ para_hpara_range['random']['rnn'] = {}
 # - linear
 if para_add_common_factor == True:
     para_hpara_range['random']['linear']['factor_size'] = [10, 10]
-para_hpara_range['random']['linear']['lr'] = [0.001, 0.001]  
+para_hpara_range['random']['linear']['lr'] = [1e-3, 1e-3]  
 para_hpara_range['random']['linear']['batch_size'] = [10, 80]
 # source-wise
-para_hpara_range['random']['linear']['l2_mean'] = [1e-7, 1e-3]
-para_hpara_range['random']['linear']['l2_var'] = [1e-7, 1e-3]
+para_hpara_range['random']['linear']['l2_mean'] = [1e-4, 1e-2]
+para_hpara_range['random']['linear']['l2_var'] = [1e-4, 1e-2]
 if para_regu_gate == True:
     para_hpara_range['random']['linear']['l2_gate'] = [1e-7, 1e-3]
 
@@ -644,7 +646,7 @@ if __name__ == '__main__':
         top_steps, bayes_steps, top_steps_features, bayes_steps_features, val_error, step_error_pairs = snapshot_selection(train_log = step_error,
                                                                                                                            snapshot_num = para_test_snapshot_num,
                                                                                                                            total_step_num = para_n_epoch,
-                                                                                                                metric_idx = para_metric_map[para_validation_metric], 
+                                                                                                                           metric_idx = para_metric_map[para_validation_metric],
                                                                                                                            val_snapshot_num = para_vali_snapshot_num)
         
         retrain_hpara_steps.append([top_steps, bayes_steps, top_steps_features, bayes_steps_features, tmp_retrain_id, val_error])
@@ -674,7 +676,7 @@ if __name__ == '__main__':
     # error tuple: [rmse, mae, mape, nnllk]
     # py_tuple
     
-    # -- one snapshot one retrain
+    # -- one snapshot from one retrain
     error_tuple, py_tuple = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][0][:1]],
                              retrain_ids = [ sort_retrain_hpara_steps[0][-2] ],
                              xts = src_ts_x, 
@@ -691,7 +693,7 @@ if __name__ == '__main__':
     # dump predictions
     pickle.dump(py_tuple, open(path_py + "_one_one" + ".p", "wb"))
     
-    # -- one snapshot multi retrain
+    # -- one snapshot from multi retrain
     error_tuple, py_tuple = testing(retrain_snapshots = [tmp_steps[0][:1] for tmp_steps in sort_retrain_hpara_steps], 
                                     retrain_ids = [i[-2] for i in sort_retrain_hpara_steps[:para_hpara_ensemble_num]],
                                     xts = src_ts_x,
@@ -708,17 +710,17 @@ if __name__ == '__main__':
     # dump predictions
     pickle.dump(py_tuple, open(path_py + "_one_multi" + ".p", "wb"))
     
-    # -- top snapshots one retrain
+    # -- top snapshots from one retrain
     error_tuple, py_tuple = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][0]], 
-                             retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
-                             xts = src_ts_x, 
-                             yts = ts_y, 
-                             file_path = path_model,
-                             bool_instance_eval = True, 
-                             loss_type = para_loss_type, 
-                             num_src = len(src_ts_x), 
-                             snapshot_features = [], 
-                             hpara_dict = best_hpara)
+                                    retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
+                                    xts = src_ts_x, 
+                                    yts = ts_y, 
+                                    file_path = path_model,
+                                    bool_instance_eval = True, 
+                                    loss_type = para_loss_type, 
+                                    num_src = len(src_ts_x), 
+                                    snapshot_features = [], 
+                                    hpara_dict = best_hpara)
     log_test_performance(path = path_log_error,
                          error_tuple = [error_tuple],
                          ensemble_str = "Top-shots-one-retrain")
@@ -727,15 +729,15 @@ if __name__ == '__main__':
     
     # -- top snapshots multi retrain
     error_tuple, py_tuple = testing(retrain_snapshots = [tmp_steps[0] for tmp_steps in sort_retrain_hpara_steps], 
-                             retrain_ids = [i[-2] for i in sort_retrain_hpara_steps[:para_hpara_ensemble_num]], 
-                             xts = src_ts_x,
-                             yts = ts_y,
-                             file_path = path_model,
-                             bool_instance_eval = True,
-                             loss_type = para_loss_type,
-                             num_src = len(src_ts_x), 
-                             snapshot_features = [], 
-                             hpara_dict = best_hpara)
+                                    retrain_ids = [i[-2] for i in sort_retrain_hpara_steps[:para_hpara_ensemble_num]], 
+                                    xts = src_ts_x,
+                                    yts = ts_y,
+                                    file_path = path_model,
+                                    bool_instance_eval = True,
+                                    loss_type = para_loss_type,
+                                    num_src = len(src_ts_x), 
+                                    snapshot_features = [], 
+                                    hpara_dict = best_hpara)
     log_test_performance(path = path_log_error, 
                          error_tuple = [error_tuple], 
                          ensemble_str = "Top-shots-multi-retrain")
@@ -744,15 +746,15 @@ if __name__ == '__main__':
     
     # -- bayesian snapshots one retrain
     error_tuple, py_tuple = testing(retrain_snapshots = [sort_retrain_hpara_steps[0][1]], 
-                             retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
-                             xts = src_ts_x, 
-                             yts = ts_y,
-                             file_path = path_model, 
-                             bool_instance_eval = True, 
-                             loss_type = para_loss_type, 
-                             num_src = len(src_ts_x), 
-                             snapshot_features = [], 
-                             hpara_dict = best_hpara)
+                                    retrain_ids = [ sort_retrain_hpara_steps[0][-2] ], 
+                                    xts = src_ts_x, 
+                                    yts = ts_y,
+                                    file_path = path_model, 
+                                    bool_instance_eval = True, 
+                                    loss_type = para_loss_type, 
+                                    num_src = len(src_ts_x), 
+                                    snapshot_features = [], 
+                                    hpara_dict = best_hpara)
     log_test_performance(path = path_log_error, 
                          error_tuple = [error_tuple], 
                          ensemble_str = "Bayesian-one-retrain")

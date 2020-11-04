@@ -35,30 +35,58 @@ def multi_src_predictor_linear(x,
     else:
         # [S [B T D]] -> [S B T D]
         x_src = tf.stack(x, 0)
-        n_src_indi = n_src
+    
+    n_src_indi = n_src
         
+#     #[S B]    [S]
+#     tmp_mean, regu_mean = multi_src_bilinear(x_src,
+#                                              [step_padding, dim_padding],
+#                                              str_scope + "mean",
+#                                              bool_bias = bool_bias[0],
+#                                              bool_scope_reuse = bool_scope_reuse[0], 
+#                                              num_src = n_src_indi)
+#     tmp_var, regu_var = multi_src_bilinear(x_src,
+#                                            [step_padding, dim_padding],
+#                                            str_scope + "var",
+#                                            bool_bias = bool_bias[1],
+#                                            bool_scope_reuse = bool_scope_reuse[1],
+#                                            num_src = n_src_indi)
+
+#     tmp_logit, regu_logit = multi_src_logit_bilinear(x_src,
+#                                                      [step_padding, dim_padding],
+#                                                      str_scope + 'gate_logit',
+#                                                      bool_bias = bool_bias[2],
+#                                                      bool_scope_reuse = bool_scope_reuse[2],
+#                                                      num_src = n_src_indi,
+#                                                      para_share_type = para_share_logit)
+
+    
+    x_flatten_src = tf.reshape(x_src, [n_src_indi, -1, step_padding*dim_padding])
+    
     #[S B]    [S]
-    tmp_mean, regu_mean = multi_src_bilinear(x_src,
-                                             [step_padding, dim_padding],
-                                             str_scope + "mean",
-                                             bool_bias = bool_bias[0],
-                                             bool_scope_reuse = bool_scope_reuse[0], 
-                                             num_src = n_src_indi)
-    tmp_var, regu_var = multi_src_bilinear(x_src,
-                                           [step_padding, dim_padding],
-                                           str_scope + "var",
-                                           bool_bias = bool_bias[1],
-                                           bool_scope_reuse = bool_scope_reuse[1],
+    tmp_mean, regu_mean = multi_src_linear(x = x_flatten_src,
+                                           dim_x = step_padding*dim_padding,
+                                           scope = str_scope + "mean", 
+                                           bool_bias = bool_bias[0],
+                                           bool_scope_reuse = bool_scope_reuse[0], 
                                            num_src = n_src_indi)
-    tmp_logit, regu_logit = multi_src_logit_bilinear(x_src,
-                                                     [step_padding, dim_padding],
-                                                     str_scope + 'gate_logit',
-                                                     bool_bias = bool_bias[2],
-                                                     bool_scope_reuse = bool_scope_reuse[2],
-                                                     num_src = n_src_indi,
-                                                     para_share_type = para_share_logit)
+    #[S B]    [S]
+    tmp_var, regu_var = multi_src_linear(x = x_flatten_src,
+                                           dim_x = step_padding*dim_padding,
+                                           scope = str_scope + "var", 
+                                           bool_bias = bool_bias[1],
+                                           bool_scope_reuse = bool_scope_reuse[1], 
+                                           num_src = n_src_indi)
+    #[S B]    [S]
+    tmp_logit, regu_logit = multi_src_linear(x = x_flatten_src,
+                                             dim_x = step_padding*dim_padding,
+                                             scope = str_scope + "gate_logit", 
+                                             bool_bias = bool_bias[2],
+                                             bool_scope_reuse = bool_scope_reuse[2], 
+                                             num_src = n_src_indi)
+    
+
     if bool_common_factor == True:
-        
         
         # [B 1]     
         facor_mean, regu_factor_mean = bilinear(x = x_common, 

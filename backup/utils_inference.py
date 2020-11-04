@@ -21,19 +21,13 @@ class ensemble_inference(object):
         
         self.py_lk_samples = []
         
-#         temporary
-        self.log_py_mean_samples = []
-        self.log_py_var_samples = []
-        
     def add_samples(self, 
                     py_mean, 
                     py_var,
                     py_mean_src,
                     py_var_src, 
                     py_gate_src, 
-                    py_lk, 
-                    log_py_mean,
-                    log_py_var):
+                    py_lk):
         # [A B S]         
         self.py_mean_src_samples.append(py_mean_src)
         self.py_var_src_samples.append(py_var_src)
@@ -43,10 +37,6 @@ class ensemble_inference(object):
         self.py_var_samples.append(py_var)
         # [A B]
         self.py_lk_samples.append(py_lk)
-        
-#         temporary
-        self.log_py_mean_samples.append(log_py_mean)
-        self.log_py_var_samples.append(log_py_var)
         
         return
     
@@ -239,7 +229,92 @@ class ensemble_inference(object):
         # -- mean of total variance
         std_total_mean = np.mean(np.sqrt(bayes_var_total))
         
+        '''
+        # -- total variance
+        # [B]
+        sq_mean = bayes_mean**2
+        # [A B S]
+        var_plus_sq_mean_src = v_src_sample + m_src_sample**2
+        # [B]
+        bayes_var_total = np.mean(np.sum(g_src_sample*var_plus_sq_mean_src, -1), 0) - sq_mean
+        
+        # -- data variance
+        # heteroskedasticity
+        # [B]                       [A B S]
+        bayes_var_data = np.mean(np.sum(g_src_sample*v_src_sample, -1), 0)
+        
+        # -- model variance
+        # without heteroskedasticity
+        # [B]                       [A B S]
+        bayes_var_model = np.mean(np.sum(g_src_sample*(m_src_sample**2), -1), 0) - sq_mean
+        '''
+        
+        '''
+        # -- nnllk
+        # normalized negative log-likelihood
+        # [1 B 1]
+        aug_y = np.expand_dims(y, axis=0)
+        # [A B S]
+        tmp_lk_src = np.exp(-0.5*(aug_y - m_src_sample)**2/(v_src_sample + 1e-5))/(np.sqrt(2.0*np.pi*v_src_sample) + 1e-5)
+        # [B]                   [A B S]
+        tmp_lk = np.mean(np.sum(g_src_sample*tmp_lk_src, -1), 0)
+        # normalized                                                                                         
+        nnllk = np.mean(-1.0*np.log(tmp_lk + 1e-5))
+        '''
+        
+        '''
+        # -- gate uncertainty 
+        # infer by truncated Gaussian [0.0, 1.0]
+        
+        print("-----------------  begin to infer gate uncertainty...\n")
+        
+        # [B S]
+        loc_ini = np.mean(g_src_sample, axis = 0) 
+        scale_ini = np.std(g_src_sample, axis = 0)
+        
+        real_left = 0.0
+        real_right = 1.0
+        
+        # [B S]
+        left_ini = 1.0*(real_left - loc_ini)/(scale_ini + 1e-5)
+        right_ini = 1.0*(real_right - loc_ini)/(scale_ini + 1e-5)
+        
+        # [A B S]
+        norm_g_src_sample = 1.0*(g_src_sample - loc_ini)/(scale_ini + 1e-5)
+        
+        def func(p, r, xa, xb):
+            return truncnorm.nnlf(p, r)
+        
+        def constraint(p, r, xa, xb):
+            a, b, loc, scale = p
+            return np.array([a*scale + loc - xa, b*scale + loc - xb])
+        
+        # [B S A]       
+        batch_src_sample = np.transpose(norm_g_src_sample, [1, 2, 0])
+        
+        num_batch = np.shape(batch_src_sample)[0]
+        num_src = np.shape(batch_src_sample)[1]
+        
+        # [B S 2]: [B S 0] mean, [B S 1] var
+        tr_gau_batch_src = []
+        
+        for tmp_ins in range(num_batch):
+            
+            tr_gau_batch_src.append([])
+            
+            for tmp_src in range(num_src):
+                
+                tmp_para = fmin_slsqp(func, 
+                                      [left_ini[tmp_ins][tmp_src], right_ini[tmp_ins][tmp_src], loc_ini[tmp_ins][tmp_src], scale_ini[tmp_ins][tmp_src]], 
+                                      f_eqcons = constraint, 
+                                      args = (batch_src_sample[tmp_ins][tmp_src], real_left, real_right),
+                                      iprint = False, 
+                                      iter = 1000)
+                
+                tr_gau_batch_src[-1].append([tmp_para[2], tmp_para[3]])
+        '''
         # -- output
+        
         # error tuple [], prediction tuple []
         y_low_model = bayes_mean - 2.0*np.sqrt(bayes_var_model)
         y_up_model = bayes_mean + 2.0*np.sqrt(bayes_var_model)
@@ -247,18 +322,8 @@ class ensemble_inference(object):
         y_low_total = bayes_mean - 2.0*np.sqrt(bayes_var_total)
         y_up_total  = bayes_mean + 2.0*np.sqrt(bayes_var_total)
         
-# temporary
-# [A B 1]
-        logpy_mean_sample = np.asarray(self.log_py_mean_samples)
-        logpy_var_sample =  np.asarray(self.log_py_var_samples)
+#         func_pearson(np.squeeze(y), bayes_mean),
         
-        logpy_mean = np.squeeze(np.mean(logpy_mean_sample, 0), -1)
-        logpy_var_plus_sq_mean = np.squeeze(logpy_var_sample + logpy_mean_sample**2, -1)
-        logpy_var = np.mean(logpy_var_plus_sq_mean, 0) - logpy_mean**2
-
-        tmpy_low = np.exp(logpy_mean - 2*np.sqrt(logpy_var))
-        tmpy_up =  np.exp(logpy_mean + 2*np.sqrt(logpy_var))
-                
         return [func_rmse(np.squeeze(y), bayes_mean),
                 func_mae(np.squeeze(y), bayes_mean),
                 func_mape(np.squeeze(y), bayes_mean),
@@ -266,18 +331,31 @@ class ensemble_inference(object):
                 func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = y_low_model, yhat_up = y_up_model),
                 func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = y_low_total, yhat_up = y_up_total),
                 func_pred_interval_width(np.squeeze(y), yhat_low = y_low_total, yhat_up = y_up_total), 
-                std_total_mean,
-                func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = tmpy_low, yhat_up = tmpy_up),
-                func_pred_interval_width(        np.squeeze(y), yhat_low = tmpy_low, yhat_up = tmpy_up), ],\
+                std_total_mean],\
                [bayes_mean,
                 bayes_var_total,
                 bayes_var_data,
                 bayes_var_model,
                 bayes_gate_src,
                 bayes_gate_src_var,
-                g_src_sample, 
-                m_src_sample, 
-                v_src_sample]
+                g_src_sample]
+        
+#         return [func_rmse(exp_y, exp_mean),
+#                 func_mae(exp_y, exp_mean),
+#                 func_mape(exp_y, exp_mean),
+#                 func_nnllk_lognormal(nnllk, tmpy),
+#                 func_pearson(exp_y, exp_mean),
+#                 func_pred_interval_coverage_prob(tmpy, yhat_low = y_low_unc,   yhat_up = y_up_unc),
+#                 func_pred_interval_coverage_prob(tmpy, yhat_low = y_low_total, yhat_up = y_up_total),
+#                 func_pred_interval_width(tmpy, yhat_low = y_low_total, yhat_up = y_up_total), 
+#                 std_mean],\
+#                [bayes_mean,
+#                 bayes_total_var,
+#                 bayes_vola,
+#                 bayes_unc,
+#                 bayes_gate_src,
+#                 bayes_gate_src_var,
+#                 g_src_sample]
     
 def global_top_steps_multi_retrain(retrain_step_error,
                                    num_step):

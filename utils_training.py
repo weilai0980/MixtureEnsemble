@@ -80,7 +80,15 @@ def data_padding_x(x,
     # [S N T D]
     return target_x
 
-# ----- for multi-tasks
+# ----- error metrics
+
+def func_rmse(y,
+              yhat):
+    return np.sqrt(np.mean( (np.asarray(y) - np.asarray(yhat))**2) )
+
+def func_mae(y, 
+             yhat):
+    return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
 
 def func_mape(y, 
               yhat):
@@ -91,14 +99,6 @@ def func_mape(y,
             tmp_list.append(abs(1.0*(yhat[idx]-val)/val))
     
     return np.mean(tmp_list)
-
-def func_mae(y, 
-             yhat):
-    return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
-    
-def func_rmse(y, 
-              yhat):
-    return np.sqrt(np.mean((np.asarray(y) - np.asarray(yhat))**2))
 
 def func_pearson(y, 
                  yhat):
@@ -125,7 +125,10 @@ def func_pred_interval_width(y,
             in_width_sum += (yhat_up[i]-yhat_low[i])
             
     return 1.0*in_width_sum/in_cnt
-            
+
+# def func_nnllk_lognormal(nnllk, y):
+#     return np.mean(y) + nnllk
+    
 # ----- logging
 
 def log_train_val_performance(path, 

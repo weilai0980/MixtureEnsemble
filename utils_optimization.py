@@ -1223,9 +1223,9 @@ class myRMSprop(optimizer.Optimizer):
 #import tensorflow.compat.v1 as tf1
 #import tensorflow.compat.v2 as tf
 
-from tensorflow_probability.python.internal import distribution_util
-from tensorflow_probability.python.internal import dtype_util
-from tensorflow_probability.python.math import diag_jacobian
+# from tensorflow_probability.python.internal import distribution_util
+# from tensorflow_probability.python.internal import dtype_util
+# from tensorflow_probability.python.math import diag_jacobian
 
 from tensorflow.python.training import training_ops
 
