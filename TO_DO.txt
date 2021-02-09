@@ -16,6 +16,7 @@ Bayesian regression
 
 server config 
 
+
 smoothing or adaptive 
 
 *speedup version 
