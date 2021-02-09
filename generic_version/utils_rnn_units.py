@@ -37,6 +37,7 @@ def multi_src_predictor_rnn(x,
     
     x_list = x
     
+    # --- data source specific RNN encoder
     h_list = []
     for i in range(n_src):
         h, _  = plain_rnn(x = x_list[i],

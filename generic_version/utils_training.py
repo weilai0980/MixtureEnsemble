@@ -10,10 +10,68 @@ from utils_libs import *
 def fix_randomness(seed):
     np.random.seed(seed)
     tf.set_random_seed(seed)
-
+    
+# ----- log
+def log_setup(path, 
+              para_train,
+              para_hpara_range):
+    
+    with open(path, "a") as text_file:
+        text_file.write("\n\n ------ Bayesian mixture : \n")
+        
+        text_file.write("data source padding : %s \n"%(para_train['para_x_src_padding']))
+        text_file.write("data path : %s \n"%(para_train['path_data']))
+        text_file.write("data source timesteps : %s \n"%(para_train['x_steps']))
+        text_file.write("data source feature dimensionality : %s \n"%(para_train['x_dims']))
+        text_file.write("data source number : %d \n"%(para_train['para_num_source']) )
+        text_file.write("data common factor : %s \n"%(para_train['para_add_common_factor']))
+        text_file.write("data common factor type : %s \n"%(para_train['para_common_factor_type']))
+        text_file.write("prediction path : %s \n"%(para_train['path_py']))
+        text_file.write("\n")
+        
+        text_file.write("model type : %s \n"%(para_train['para_model_type']))
+        text_file.write("target distribution type : %s \n"%(para_train['para_distr_type']))
+        text_file.write("target variable as a seperated data source : %s \n"%(para_train['para_bool_target_seperate']))
+        text_file.write("variance calculation type : %s \n"%(para_train['para_var_type']))
+        text_file.write("para. sharing in gate logit : %s \n"%(para_train['para_share_type_gate']))
+        text_file.write("\n")
+        
+        text_file.write("regularization on mean : %s \n"%(para_train['para_regu_mean']))
+        text_file.write("regularization on variance : %s \n"%(para_train['para_regu_var']))
+        text_file.write("regularization on mixture gates : %s \n"%(para_train['para_regu_gate']))
+        text_file.write("\n")
+        
+        text_file.write("adding bias terms in mean : %s \n"%(para_train['para_bool_bias_in_mean']))
+        text_file.write("adding bias terms in variance : %s \n"%(para_train['para_bool_bias_in_var']))
+        text_file.write("adding bias terms in gates : %s \n"%(para_train['para_bool_bias_in_gate']))
+        text_file.write("\n")
+        
+        text_file.write("optimizer : %s \n"%(para_train['para_optimizer']))
+        text_file.write("loss type : %s \n"%(para_train['para_loss_type']))
+        text_file.write("learning rate decay epoch : %s \n"%(str(para_train['para_optimizer_lr_decay_epoch'])))
+        text_file.write("learning rate warm-up epoch : %s \n"%(str(para_train['para_optimizer_lr_warmup_epoch'])))
+        text_file.write("\n")
+        
+        text_file.write("hyper-para search : %s \n"%(para_train['para_hpara_search']))
+        text_file.write("hyper-para range : %s \n"%(str(para_hpara_range[para_train['para_hpara_search']][para_train['para_model_type']])))
+        text_file.write("hyper-para training trial num : %s \n"%(str(para_train['para_hpara_train_trial_num'])))
+        text_file.write("hyper-para retraining num.: %s \n"%(str(para_train['para_hpara_retrain_num'])))
+        text_file.write("random seed ensemble num.: %s \n"%(str(para_train['para_hpara_ensemble_trial_num'])))
+        text_file.write("\n")
+        
+        text_file.write("epochs in total : %s \n"%(para_train['para_n_epoch']))
+        text_file.write("burn_in_epoch : %s \n"%(para_train['para_burn_in_epoch']))
+        text_file.write("num. snapshots in validating : %s \n"%(para_train['para_vali_snapshot_num']))
+        text_file.write("num. snapshots in testing : %s \n"%(para_train['para_test_snapshot_num']))
+        text_file.write("validation metric : %s \n"%(para_train['para_validation_metric']))
+        text_file.write("early-stoping : %s \n"%(para_train['para_early_stop_bool']))
+        text_file.write("early-stoping look-back window : %s \n"%(para_train['para_early_stop_window']))
+        
+        text_file.write("\n\n")
+        
 # ----- data preparation 
 
-def data_reshape(data, 
+def data_reshape(data,
                  bool_target_seperate):
     '''
     Argu.:
@@ -47,8 +105,11 @@ def data_reshape(data,
     
     tmpy = np.asarray([tmp[0] for tmp in data])
     
-    # output shape: x [S N T D],  y [N 1]
-    return tmpx, np.expand_dims(tmpy, -1)
+    if len(np.shape(tmpy)) == 1:
+        tmpy = np.expand_dims(tmpy, -1)
+        
+    # output shape: x [S N T D],  y [N M]
+    return tmpx, tmpy
 
 def data_padding_x(x, 
                    num_src):
@@ -79,55 +140,6 @@ def data_padding_x(x,
     
     # [S N T D]
     return target_x
-
-# ----- error metrics
-
-def func_rmse(y,
-              yhat):
-    return np.sqrt(np.mean( (np.asarray(y) - np.asarray(yhat))**2) )
-
-def func_mae(y, 
-             yhat):
-    return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
-
-def func_mape(y, 
-              yhat):
-    tmp_list = []
-    
-    for idx, val in enumerate(y):
-        if abs(val) > 1e-5:
-            tmp_list.append(abs(1.0*(yhat[idx]-val)/val))
-    
-    return np.mean(tmp_list)
-
-def func_pearson(y, 
-                 yhat):
-    import scipy as sp
-    return sp.stats.pearsonr(y, yhat)
-
-def func_pred_interval_coverage_prob(y,
-                                     yhat_low,
-                                     yhat_up):
-    in_cnt = 0
-    for i in range(len(y)):
-        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
-            in_cnt += 1
-    return 1.0*in_cnt/len(y)
-
-def func_pred_interval_width(y,
-                             yhat_low,
-                             yhat_up):
-    in_cnt = 0
-    in_width_sum = 0.0
-    for i in range(len(y)):
-        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
-            in_cnt += 1
-            in_width_sum += (yhat_up[i]-yhat_low[i])
-            
-    return 1.0*in_width_sum/in_cnt
-
-# def func_nnllk_lognormal(nnllk, y):
-#     return np.mean(y) + nnllk
     
 # ----- logging
 
@@ -166,17 +178,6 @@ def log_null_loss_exception(epoch_errors,
     return
 
 # ----- hyper-parameter searching 
-
-def training_para_gen(shape_x_dict, 
-                      hpara_dict):
-    tr_dict = {}
-    
-    ''' ? np.ceil ? '''
-    tr_dict["batch_per_epoch"] = int(np.ceil(1.0*shape_x_dict["N"]/int(hpara_dict["batch_size"])))
-    tr_dict["tr_idx"] = list(range(shape_x_dict["N"]))
-    tr_dict["tr_num_ins"] = shape_x_dict["N"]
-    
-    return tr_dict
 
 # hpara: hyper-parameter    
 class hyper_para_grid_search(object):
@@ -286,11 +287,10 @@ class hyper_para_random_search(object):
         
 def hyper_para_selection(hpara_log, 
                          val_snapshot_num, 
-                         test_snapshot_num,
                          metric_idx):
     '''
     Argu.:
-      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
+      hpara_log - [ dict{lr, batch, l2, ...}, [[step, tr_metric, val_metric, epoch]] ]
     '''
     hp_err = []
     
@@ -300,24 +300,9 @@ def hyper_para_selection(hpara_log,
     # sorted_hp[0]: hyper-para with the best validation performance
     sorted_hp = sorted(hp_err, key = lambda x:x[-1])
     
-    # -- bayes steps
-    full_steps = [k[0] for k in sorted_hp[0][1]]
-    
-    tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
-    bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
-    bayes_steps_features = [ [k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step ]
-    
-    # -- top steps
-    snapshot_steps = full_steps[:len(bayes_steps)]
-    snapshot_steps_features = [ [k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
-    
     best_hyper_para_dict = sorted_hp[0][0]
     # best hyper-para, top_steps, bayes_steps
-    return best_hyper_para_dict,\
-           snapshot_steps,\
-           bayes_steps,\
-           snapshot_steps_features,\
-           bayes_steps_features
+    return best_hyper_para_dict
 
 def snapshot_selection(train_log, 
                        snapshot_num,
@@ -352,63 +337,6 @@ def snapshot_selection(train_log,
            val_error,\
            step_error_pairs
 
-def hyper_para_select_top_steps(hpara_log, 
-                                val_snapshot_num, 
-                                test_snapshot_num,
-                                metric_idx):
-    '''
-    Argu.:
-      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
-    '''
-    hp_err = []
-    
-    for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_snapshot_num]])])
-    
-    # sorted_hp[0]: hyper-para with the best validation performance
-    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
-    
-    # -- top steps
-    snapshot_steps = full_steps[:len(test_snapshot_num)]
-    snapshot_steps_features = [ [k[1], k[2]] for k in sorted_hp[0][1][:len(bayes_steps)] ]
-    
-    best_hyper_para_dict = sorted_hp[0][0]
-    # best hp, snapshot_steps, bayes_steps
-    
-    return best_hyper_para_dict,\
-           snapshot_steps,\
-           snapshot_steps_features,\
-
-def hyper_para_select_bayeisan_steps(hpara_log, 
-                                     val_snapshot_num, 
-                                     test_snapshot_num,
-                                     metric_idx):
-    '''
-    Argu.:
-      hpara_log - [ dict{lr, batch, l2, ..., burn_in_steps}, [[step, tr_metric, val_metric, epoch]] ]
-    '''
-    hp_err = []
-    
-    for hp_epoch_err in hpara_log:
-        hp_err.append([hp_epoch_err[0], hp_epoch_err[1], np.mean([k[2][metric_idx] for k in hp_epoch_err[1][:val_snapshot_num]])])
-    
-    # sorted_hp[0]: hyper-para with the best validation performance
-    sorted_hp = sorted(hp_err, key = lambda x:x[-1])
-    
-    # -- bayes steps
-    full_steps = [k[0] for k in sorted_hp[0][1]]
-    
-    tmp_burn_in_step = sorted_hp[0][0]["burn_in_steps"]
-    bayes_steps = [i for i in full_steps if i >= tmp_burn_in_step]
-    bayes_steps_features = [[k[1], k[2]] for k in sorted_hp[0][1] if k[0] >= tmp_burn_in_step]
-        
-    best_hyper_para_dict = sorted_hp[0][0]
-    # best hp, snapshot_steps, bayes_steps
-    
-    return best_hyper_para_dict,\
-           bayes_steps,\
-           bayes_steps_features
-
 # ----- data loader
 
 class data_loader(object):
@@ -417,7 +345,6 @@ class data_loader(object):
                  x,
                  y,
                  batch_size,
-                 num_ins,
                  num_src):
         '''
         Argu.:
@@ -430,14 +357,13 @@ class data_loader(object):
         self.y = y
         self.batch_size = int(batch_size)
         self.num_src = num_src
-        
+        num_ins = len(x[0])
         self.num_batch = int(np.ceil(1.0*num_ins/int(batch_size)))
         
         self.ids = list(range(num_ins))
-        np.random.shuffle(self.ids)
         self.batch_cnt = 0
         self.bool_last_batch = False
-    
+        
     def re_shuffle(self):
         self.batch_cnt = 0
         np.random.shuffle(self.ids)

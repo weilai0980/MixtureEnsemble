@@ -2,8 +2,58 @@
 
 import numpy as np
 from sklearn.neighbors.kde import KernelDensity
+import tensorflow as tf
 
-from utils_training import *
+# from utils_training import *
+
+# ----- error metrics
+
+def func_rmse(y,
+              yhat):
+    return np.sqrt(np.mean( (np.asarray(y) - np.asarray(yhat))**2) )
+
+def func_mae(y, 
+             yhat):
+    return np.mean(np.abs(np.asarray(y) - np.asarray(yhat)))
+
+def func_mape(y, 
+              yhat):
+    tmp_list = []
+    
+    for idx, val in enumerate(y):
+        if abs(val) > 1e-5:
+            tmp_list.append(abs(1.0*(yhat[idx]-val)/val))
+    
+    return np.mean(tmp_list)
+
+def func_pearson(y, 
+                 yhat):
+    import scipy as sp
+    return sp.stats.pearsonr(y, yhat)
+
+def func_pred_interval_coverage_prob(y,
+                                     yhat_low,
+                                     yhat_up):
+    in_cnt = 0
+    for i in range(len(y)):
+        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
+            in_cnt += 1
+    return 1.0*in_cnt/len(y)
+
+def func_pred_interval_width(y,
+                             yhat_low,
+                             yhat_up):
+    in_cnt = 0
+    in_width_sum = 0.0
+    for i in range(len(y)):
+        if yhat_low[i] <= y[i] and y[i] <= yhat_up[i]:
+            in_cnt += 1
+            in_width_sum += (yhat_up[i]-yhat_low[i])
+            
+    return 1.0*in_width_sum/in_cnt
+
+# def func_nnllk_lognormal(nnllk, y):
+#     return np.mean(y) + nnllk
 
 class ensemble_inference(object):
 
@@ -21,19 +71,13 @@ class ensemble_inference(object):
         
         self.py_lk_samples = []
         
-#         temporary
-        self.log_py_mean_samples = []
-        self.log_py_var_samples = []
-        
     def add_samples(self, 
                     py_mean, 
                     py_var,
                     py_mean_src,
                     py_var_src, 
                     py_gate_src, 
-                    py_lk, 
-                    log_py_mean,
-                    log_py_var):
+                    py_lk):
         # [A B S]         
         self.py_mean_src_samples.append(py_mean_src)
         self.py_var_src_samples.append(py_var_src)
@@ -43,10 +87,6 @@ class ensemble_inference(object):
         self.py_var_samples.append(py_var)
         # [A B]
         self.py_lk_samples.append(py_lk)
-        
-#         temporary
-        self.log_py_mean_samples.append(log_py_mean)
-        self.log_py_var_samples.append(log_py_var)
         
         return
     
@@ -92,9 +132,9 @@ class ensemble_inference(object):
         p = y / ax_sum
 
         # flatten if X was 1D
-        if len(X.shape) == 1: 
+        if len(X.shape) == 1:
             p = p.flatten()
-        
+            
         return p
     
 #     def importance_inference(self,
@@ -206,6 +246,12 @@ class ensemble_inference(object):
         # [A B]
         lk_sample = np.asarray(self.py_lk_samples)
         
+        # -- temporary
+        # [B]
+        y_ori = np.asarray([tmp[0] for tmp in y])
+        y_z   = np.asarray([tmp[1] for tmp in y])
+        y_dese = np.asarray([tmp[2] for tmp in y])
+        
         # -- mean
         # [B]
         #bayes_mean = np.mean(np.sum(m_src_sample*g_src_sample, axis = 2), axis = 0)
@@ -243,41 +289,30 @@ class ensemble_inference(object):
         # error tuple [], prediction tuple []
         y_low_model = bayes_mean - 2.0*np.sqrt(bayes_var_model)
         y_up_model = bayes_mean + 2.0*np.sqrt(bayes_var_model)
-        
         y_low_total = bayes_mean - 2.0*np.sqrt(bayes_var_total)
         y_up_total  = bayes_mean + 2.0*np.sqrt(bayes_var_total)
+        func_pred_interval_coverage_prob(y_ori, yhat_low = y_low_model, yhat_up = y_up_model),
+        func_pred_interval_coverage_prob(y_ori, yhat_low = y_low_total, yhat_up = y_up_total),
+        func_pred_interval_width(y_ori, yhat_low = y_low_total, yhat_up = y_up_total), 
         
-# temporary
-# [A B 1]
-        logpy_mean_sample = np.asarray(self.log_py_mean_samples)
-        logpy_var_sample =  np.asarray(self.log_py_var_samples)
-        
-        logpy_mean = np.squeeze(np.mean(logpy_mean_sample, 0), -1)
-        logpy_var_plus_sq_mean = np.squeeze(logpy_var_sample + logpy_mean_sample**2, -1)
-        logpy_var = np.mean(logpy_var_plus_sq_mean, 0) - logpy_mean**2
-
-        tmpy_low = np.exp(logpy_mean - 2*np.sqrt(logpy_var))
-        tmpy_up =  np.exp(logpy_mean + 2*np.sqrt(logpy_var))
-                
-        return [func_rmse(np.squeeze(y), bayes_mean),
-                func_mae(np.squeeze(y), bayes_mean),
-                func_mape(np.squeeze(y), bayes_mean),
-                nnllk,
-                func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = y_low_model, yhat_up = y_up_model),
-                func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = y_low_total, yhat_up = y_up_total),
-                func_pred_interval_width(np.squeeze(y), yhat_low = y_low_total, yhat_up = y_up_total), 
-                std_total_mean,
-                func_pred_interval_coverage_prob(np.squeeze(y), yhat_low = tmpy_low, yhat_up = tmpy_up),
-                func_pred_interval_width(        np.squeeze(y), yhat_low = tmpy_low, yhat_up = tmpy_up), ],\
-               [bayes_mean,
-                bayes_var_total,
-                bayes_var_data,
-                bayes_var_model,
-                bayes_gate_src,
-                bayes_gate_src_var,
-                g_src_sample, 
-                m_src_sample, 
-                v_src_sample]
+        return [
+            func_rmse(y_ori, bayes_mean),
+            func_mae(y_ori, bayes_mean),
+            func_mape(y_ori, bayes_mean),
+            nnllk,
+            std_total_mean
+        ],\
+              [
+            bayes_mean,
+            bayes_var_total,
+            bayes_var_data,
+            bayes_var_model,
+            bayes_gate_src,
+            bayes_gate_src_var,
+            g_src_sample, 
+            m_src_sample, 
+            v_src_sample
+        ]
     
 def global_top_steps_multi_retrain(retrain_step_error,
                                    num_step):
@@ -314,4 +349,3 @@ def global_top_steps_multi_retrain(retrain_step_error,
         retrain_id_steps = [id_steps[tmp_id] for tmp_id in id_steps]
         
         return retrain_ids, retrain_id_steps
-    

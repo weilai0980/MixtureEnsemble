@@ -6,7 +6,7 @@ from scipy.optimize import fmin_slsqp
 from scipy.stats import norm
 
 import tensorflow as tf
-# import tensorflow_probability as tfp
+# import tensorflow_probability as tf
 
 from sklearn.neighbors.kde import KernelDensity
 
@@ -53,6 +53,7 @@ class mixture_statistic():
                     x_dim,
                     x_steps,
                     x_bool_common_factor,
+                    y_dim,
                     model_type,
                     model_distr_type,
                     model_distr_para,
@@ -130,8 +131,17 @@ class mixture_statistic():
         # initialize placeholders
         # y: [B 1]
         self.y = tf.placeholder(tf.float32, 
-                                [None, 1], 
+                                [None, y_dim], 
                                 name = 'y')
+
+# ---------- temp
+        self.y_normalizer = tf.slice(self.y, [0, 1,], [-1, 1])
+        self.y_ori        = tf.slice(self.y, [0, 0,], [-1, 1])
+        # !!! by default, the last element is the target
+        self.y = tf.slice(self.y, [0, 2,], [-1, -1])
+        
+        
+        
         # x: [S, [B T D]]
         self.x = []
         for i in range(self.num_src):
@@ -139,7 +149,7 @@ class mixture_statistic():
                                          [None, x_steps[i], x_dim[i]], 
                                          name = 'x' + str(i)))
         if model_type == "rnn":
-            self.keep_prob = tf.placeholder(tf.float32, 
+            self.keep_prob = tf.placeholder(tf.float32,
                                             shape = (), 
                                             name = 'keep_prob')
         # -- hyper-parameters
@@ -208,7 +218,7 @@ class mixture_statistic():
         # [B S]
         gate_logits = tf.transpose(tmp_logit, [1, 0])
         # obtain the gate values
-        self.gates = tf.nn.softmax(gate_logits, axis = -1)
+        self.gate_src = tf.nn.softmax(gate_logits, axis = -1)
         
         # ----- mixture mean, variance and nllk
         
@@ -220,7 +230,7 @@ class mixture_statistic():
             self.py_mean_src = mean_stack
             # mixture mean
             # [B 1]                      [B S]        [B S]
-            self.py_mean = tf.reduce_sum(mean_stack * self.gates, 1, keepdims = True)
+            self.py_mean = tf.reduce_sum(mean_stack * self.gate_src, 1, keepdims = True)
             
             # --
             if self.loss_type == 'heter_lk':
@@ -229,7 +239,7 @@ class mixture_statistic():
                 # negative log likelihood
                 # [B S]
                 lk_src = tf.exp(-0.5*tf.square(self.y-mean_stack)/(var_stack+1e-5))/(tf.sqrt(2.0*np.pi*var_stack)+1e-5)
-                lk = tf.reduce_sum(tf.multiply(lk_src, self.gates), axis = -1) 
+                lk = tf.reduce_sum(tf.multiply(lk_src, self.gate_src), axis = -1) 
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(lk + 1e-5))
                 
                 # --- evaluation
@@ -241,7 +251,7 @@ class mixture_statistic():
                 # variance
                 var_plus_sq_mean_src = self.py_var_src + tf.square(self.py_mean_src)
                 # [B 1]                                 [B S]          [B S]
-                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(self.py_mean)
+                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gate_src), 1, keepdims = True) - tf.square(self.py_mean)
                 
             elif self.loss_type == 'heter_lk_inv':
                 
@@ -249,7 +259,7 @@ class mixture_statistic():
                 # negative log likelihood
                 # [B S]
                 lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
-                lk = tf.reduce_sum(tf.multiply(lk_src, self.gates) , axis = -1) 
+                lk = tf.reduce_sum(tf.multiply(lk_src, self.gate_src) , axis = -1) 
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(lk+ 1e-5))
                 
                 # --- evaluation
@@ -261,7 +271,7 @@ class mixture_statistic():
                 # variance
                 var_plus_sq_mean_src = self.py_var_src + tf.square(self.py_mean_src)
                 # [B 1]
-                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(self.py_mean)
+                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gate_src), 1, keepdims = True) - tf.square(self.py_mean)
                 
             # elbo: evidence lower bound optimization    
             elif self.loss_type == 'heter_elbo':
@@ -271,22 +281,22 @@ class mixture_statistic():
                 
                 # variance
                 sq_mean_stack = 1.0/(inv_var_stack + 1e-5) + tf.square(mean_stack)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gate_src), 1, keepdims = True)
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
                 # negative log likelihood
                 # based on lk_inv
                 # [B S]
-                lk_src = tf.exp(-0.5*tf.square(self.y-mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
+                lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
             
-                lk = tf.multiply(lk_src, self.gates) 
+                lk = tf.multiply(lk_src, self.gate_src) 
                 self.nllk = tf.reduce_mean(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 # [B 1] - [B S]
                 tmp_nllk_bound = .5*tf.square(self.y - mean_stack)*inv_var_stack - 0.5*tf.log(inv_var_stack + 1e-5) + 0.5*tf.log(2*np.pi)
         
-                self.nllk_bound = tf.reduce_sum(tf.reduce_sum(self.gates*tmp_nllk_bound, -1)) 
+                self.nllk_bound = tf.reduce_sum(tf.reduce_sum(self.gate_src*tmp_nllk_bound, -1)) 
             
             elif self.loss_type == 'mse':
                 
@@ -296,7 +306,7 @@ class mixture_statistic():
                 # variance
                 sq_mean_stack = 1.0 + tf.square(mean_stack)
                 # [B 1]
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gate_src), 1, keepdims = True)
                 # [B 1]
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
@@ -305,7 +315,7 @@ class mixture_statistic():
                 # ? variance of constant 1 
                 lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack))/(2.0*np.pi)**0.5
             
-                lk = tf.multiply(lk_src, self.gates) 
+                lk = tf.multiply(lk_src, self.gate_src) 
                 self.nllk = tf.reduce_sum(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
         elif model_distr_type == 'log_normal_logOpt_linearComb':
@@ -319,7 +329,7 @@ class mixture_statistic():
                 # [B S]
                 # in the log scale
                 lk_src = tf.exp(-0.5*tf.square(self.log_y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
-                lk = tf.multiply(lk_src, self.gates) 
+                lk = tf.multiply(lk_src, self.gate_src) 
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 # --- evaluation
@@ -332,7 +342,7 @@ class mixture_statistic():
                 self.py_mean_src = tf.exp(log_py_mean_src + log_py_var_src/2.0)
                 # mixture mean
                 # [B 1]                      [B S]        [B S]
-                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gates, 1, keepdims = True)
+                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gate_src, 1, keepdims = True)
                 
                 # component variance
                 # [B S]
@@ -340,28 +350,15 @@ class mixture_statistic():
                 # mixture variance
                 # [B 1]
                 var_plus_sq_mean_src = self.py_var_src + tf.square(self.py_mean_src)
-                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(self.py_mean)
+                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gate_src), 1, keepdims = True) - tf.square(self.py_mean)
                 
                 # lk: likelihood
                 # in the linear scale
                 tmp_lk_src = tf.exp(-0.5*tf.square(self.log_y - log_py_mean_src)*log_py_var_src_inv)*tf.sqrt(0.5/np.pi*log_py_var_src_inv)/(1.0*self.y+1e-5)
                 # [B]
-                self.lk = tf.reduce_sum(tf.multiply(tmp_lk_src, self.gates), axis = -1)
+                self.lk = tf.reduce_sum(tf.multiply(tmp_lk_src, self.gate_src), axis = -1)
                 self.nnllk = tf.reduce_mean(-1.0*tf.log(self.lk + 1e-5))
                 
-                # --- temporary
-                
-                # mixture mean of log_y
-                # [B 1]                      [B S]        [B S]
-                self.log_py_mean = tf.reduce_sum(log_py_mean_src*self.gates, 1, keepdims = True)
-                
-                # mixture variance of log_y
-                # [B 1]
-                var_plus_sq_mean_src = log_py_var_src + tf.square(log_py_mean_src)
-                self.log_py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(self.log_py_mean)
-                
-                self.log_py_mean_src = log_py_mean_src
-                self.log_py_var_src  = log_py_var_src
                 
         elif model_distr_type == 'log_normal_linearOpt_linearComb':
             
@@ -374,7 +371,7 @@ class mixture_statistic():
                 # [B S]
                 # in the log scale 
                 lk_src = tf.exp(-0.5*tf.square(self.log_y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)/(1.0*self.y+1e-5)
-                lk = tf.multiply(lk_src, self.gates) 
+                lk = tf.multiply(lk_src, self.gate_src) 
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 # --- evaluation
@@ -387,7 +384,7 @@ class mixture_statistic():
                 self.py_mean_src = tf.exp(log_py_mean_src + log_py_var_src/2.0)
                 # mixture mean
                 # [B 1]                      [B S]        [B S]
-                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gates, 1, keepdims = True)
+                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gate_src, 1, keepdims = True)
                 
                 # component variance
                 # [B S]
@@ -395,13 +392,13 @@ class mixture_statistic():
                 # mixture variance
                 # [B 1]
                 var_plus_sq_mean_src = self.py_var_src + tf.square(self.py_mean_src)
-                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(self.py_mean)
+                self.py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gate_src), 1, keepdims = True) - tf.square(self.py_mean)
                 
                 # lk: likelihood
                 # in the linear scale
                 tmp_lk_src = tf.exp(-0.5*tf.square(self.log_y - log_py_mean_src)*log_py_var_src_inv)*tf.sqrt(0.5/np.pi*log_py_var_src_inv)/(1.0*self.y+1e-5)
                 # [B]
-                self.lk = tf.reduce_sum(tf.multiply(tmp_lk_src, self.gates), axis = -1)
+                self.lk = tf.reduce_sum(tf.multiply(tmp_lk_src, self.gate_src), axis = -1)
                 self.nnllk = tf.reduce_mean(-1.0*tf.log(self.lk + 1e-5))
                 
         elif model_distr_type == 'log_normal_logOpt_logComb':
@@ -414,7 +411,7 @@ class mixture_statistic():
                 # nnllk: normalized negative log likelihood
                 # [B S]
                 lk_src = tf.exp(-0.5*tf.square(self.log_y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
-                lk = tf.multiply(lk_src, self.gates) 
+                lk = tf.multiply(lk_src, self.gate_src) 
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(tf.reduce_sum(lk, axis = -1) + 1e-5))
                 
                 # --- evaluation
@@ -424,12 +421,12 @@ class mixture_statistic():
                 
                 # mixture mean of log_y
                 # [B 1]                      [B S]        [B S]
-                log_py_mean = tf.reduce_sum(log_py_mean_src*self.gates, 1, keepdims = True)
+                log_py_mean = tf.reduce_sum(log_py_mean_src*self.gate_src, 1, keepdims = True)
                 
                 # mixture variance of log_y
                 # [B 1]
                 var_plus_sq_mean_src = log_py_var_src + tf.square(log_py_mean_src)
-                log_py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gates), 1, keepdims = True) - tf.square(log_py_mean)
+                log_py_var = tf.reduce_sum(tf.multiply(var_plus_sq_mean_src, self.gate_src), 1, keepdims = True) - tf.square(log_py_mean)
                 
                 self.py_mean_src = tf.exp(log_py_mean_src + log_py_var_src/2.0)
                 self.py_mean = tf.exp(log_py_mean + log_py_var/2.0)
@@ -454,7 +451,7 @@ class mixture_statistic():
                 # in the original scale of y
                 # [B S]
                 lk_src = tf.exp(-0.5*tf.square(self.y - mean_stack)*inv_var_stack)*tf.sqrt(0.5/np.pi*inv_var_stack)
-                lk = tf.reduce_sum(tf.multiply(lk_src, self.gates), axis = -1)  
+                lk = tf.reduce_sum(tf.multiply(lk_src, self.gate_src), axis = -1)  
                 self.nnllk_loss = tf.reduce_mean(-1.0*tf.log(lk + 1e-5))
                 
                 # --- evaluation
@@ -476,7 +473,7 @@ class mixture_statistic():
                 
                 # mixture mean
                 # [B 1]                      [B S]        [B S]
-                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gates, 1, keepdims = True)
+                self.py_mean = tf.reduce_sum(self.py_mean_src*self.gate_src, 1, keepdims = True)
                 
                 # component variance
                 # [B S]
@@ -485,7 +482,7 @@ class mixture_statistic():
                 # mixture variance
                 # [B 1]
                 sq_mean_stack = self.py_var_src + tf.square(self.py_mean_src)
-                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gates), 1, keepdims = True)
+                mix_sq_mean = tf.reduce_sum(tf.multiply(sq_mean_stack, self.gate_src), 1, keepdims = True)
                 self.py_var = mix_sq_mean - tf.square(self.py_mean)
                 
         # ----- regularization
@@ -523,7 +520,7 @@ class mixture_statistic():
                 self.monitor.append((self.hyper_para_dict["l2_gate"]*self.regu_gate))
                 
         # self.gates [B S]
-        self.monitor.append(tf.slice(self.gates, [0, 0], [3, -1]))
+        self.monitor.append(tf.slice(self.gate_src, [0, 0], [3, -1]))
         
         # ----- learning rate set-up
         tf_learning_rate = tf.constant(value = self.lr, 
@@ -642,14 +639,29 @@ class mixture_statistic():
         
         # --- inference output and error metric
         
+#         # RMSE
+#         self.rmse = tf.sqrt(tf.losses.mean_squared_error(self.y, self.py_mean))
+#         # MAE
+#         self.mae = tf.reduce_mean(tf.abs(self.y - self.py_mean))
+#         # MAPE: based on ground-truth y
+#         mask = tf.greater(tf.abs(self.y), 1e-5)
+#         y_mask = tf.boolean_mask(self.y, mask)
+#         y_hat_mask = tf.boolean_mask(self.py_mean, mask)
+#         self.mape = tf.reduce_mean(tf.abs((y_mask - y_hat_mask)/(y_mask + 1e-5)))
+        
+#  ---     temporary
+
+        py_ori = tf.reshape(self.py_mean, [-1,1])*tf.reshape(self.y_normalizer, [-1,1])
+        y_ori  = tf.reshape(self.y_ori, [-1,1])
+        
         # RMSE
-        self.rmse = tf.sqrt(tf.losses.mean_squared_error(self.y, self.py_mean))
+        self.rmse = tf.sqrt(tf.losses.mean_squared_error(y_ori, py_ori))
         # MAE
-        self.mae = tf.reduce_mean(tf.abs(self.y - self.py_mean))
+        self.mae = tf.reduce_mean(tf.abs(y_ori - py_ori))
         # MAPE: based on ground-truth y
-        mask = tf.greater(tf.abs(self.y), 1e-5)
-        y_mask = tf.boolean_mask(self.y, mask)
-        y_hat_mask = tf.boolean_mask(self.py_mean, mask)
+        mask = tf.greater(tf.abs(self.y_ori), 1e-5)
+        y_mask = tf.boolean_mask(self.y_ori, mask)
+        y_hat_mask = tf.boolean_mask(py_ori, mask)
         self.mape = tf.reduce_mean(tf.abs((y_mask - y_hat_mask)/(y_mask + 1e-5)))
         
         # --- for model restore and inference
@@ -667,16 +679,11 @@ class mixture_statistic():
         # prediction
         tf.add_to_collection("py_mean", self.py_mean)
         tf.add_to_collection("py_var", self.py_var)
-        tf.add_to_collection("py_gate", self.gates)
+        tf.add_to_collection("py_gate_src", self.gate_src)
         tf.add_to_collection("py_mean_src", self.py_mean_src)
         tf.add_to_collection("py_var_src", self.py_var_src)
         tf.add_to_collection("py_lk", self.lk)
         
-        # temporary
-        tf.add_to_collection("log_py_mean", self.log_py_mean)
-        tf.add_to_collection("log_py_var",  self.log_py_var)
-                
-    # step-wise
     def validation(self,
                    x,
                    y,
@@ -703,7 +710,8 @@ class mixture_statistic():
             rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
                                                     tf.get_collection('mae')[0],
                                                     tf.get_collection('mape')[0],
-                                                    tf.get_collection('nnllk')[0]],
+                                                    tf.get_collection('nnllk')[0]
+                                                   ],
                                                    feed_dict = data_dict)
             # monitor metric
             monitor_metric = self.sess.run([tf.get_collection(str(tmp_idx))[0] for tmp_idx in range(len(self.monitor))],
@@ -738,18 +746,17 @@ class mixture_statistic():
         rmse, mae, mape, nnllk = self.sess.run([tf.get_collection('rmse')[0],
                                                 tf.get_collection('mae')[0],
                                                 tf.get_collection('mape')[0],
-                                                tf.get_collection('nnllk')[0]],
+                                                tf.get_collection('nnllk')[0]
+                                               ],
                                                feed_dict = data_dict)
         if bool_py_eval == True:
             # [B 1]  [B 1]   [B S]
-            py_mean, py_var, py_gate_src, py_mean_src, py_var_src, py_lk, log_py_mean, log_py_var = self.sess.run([tf.get_collection('py_mean')[0],
+            py_mean, py_var, py_gate_src, py_mean_src, py_var_src, py_lk = self.sess.run([tf.get_collection('py_mean')[0],
                                                                                           tf.get_collection('py_var')[0],
-                                                                                          tf.get_collection('py_gate')[0],
+                                                                                          tf.get_collection('py_gate_src')[0],
                                                                                           tf.get_collection('py_mean_src')[0],
                                                                                           tf.get_collection('py_var_src')[0], 
                                                                                           tf.get_collection('py_lk')[0],
-                                                                                          tf.get_collection('log_py_mean')[0],
-                                                                                          tf.get_collection('log_py_var')[0],
                                                                                          ],
                                                                                          feed_dict = data_dict)
         else:
@@ -759,11 +766,9 @@ class mixture_statistic():
             py_mean_src = None
             py_var_src = None
             py_lk = None
-            log_py_mean = None 
-            log_py_var = None
         
         # error metric tuple [rmse, mae, mape, nnllk], py tuple []
-        return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src, py_lk, log_py_mean, log_py_var]
+        return [rmse, mae, mape, nnllk], [py_mean, py_var, py_mean_src, py_var_src, py_gate_src, py_lk]
     
     def model_stored_id(self):
         return self.stored_step_id
@@ -870,8 +875,10 @@ def testing(retrain_snapshots,
                                       py_var_src = py_tuple[3],
                                       py_gate_src = py_tuple[4], 
                                       py_lk = py_tuple[5],
-                                      log_py_mean = py_tuple[6],
-                                      log_py_var = py_tuple[7])
+                                     )
+                    
+#                      log_py_mean = py_tuple[6],
+#                                       log_py_var = py_tuple[7]
     
     num_snapshots = sum([len(i) for i in retrain_snapshots])
     
