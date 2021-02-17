@@ -53,9 +53,8 @@ class mixture_statistic():
            D: data dimensionality at each time step
         '''
         # ----- fix the random seed to reproduce the results
-        #np.random.seed(1)
-        #tf.set_random_seed(1)
-        
+        # np.random.seed(1)
+        # tf.set_random_seed(1)
         self.hyper_para = hyper_para
         
         # ----- ini
